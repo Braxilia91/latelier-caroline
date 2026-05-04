@@ -100,6 +100,7 @@ const styles = {
     color: '#2A1A0E',
     border: 'none', outline: 'none', background: 'transparent',
     caretColor: '#8B6445',
+    cursor: 'text',
     marginBottom: 8,
   },
   intentInput: {
@@ -108,7 +109,7 @@ const styles = {
     fontSize: '.82rem', color: '#9C8878',
     border: 'none', outline: 'none', background: 'transparent',
     borderBottom: '1px dashed transparent',
-    paddingBottom: 10, caretColor: '#8B6445',
+    paddingBottom: 10, caretColor: '#8B6445', cursor: 'text',
     transition: 'border-color .2s',
   },
   ta: {
@@ -120,6 +121,7 @@ const styles = {
     background: '#FAF7F2',
     border: 'none', resize: 'none', outline: 'none',
     caretColor: '#8B6445',
+    cursor: 'text',
   },
   footer: {
     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
