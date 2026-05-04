@@ -128,3 +128,7 @@ export async function resetAllData() {
     req.onerror   = (e) => reject(e.target.error)
   })
 }
+
+// ─── PIN ────────────────────────────────────────────────────────
+export async function getPinHash() { return getKV('pin_hash', null) }
+export async function setPinHash(hash) { return setKV('pin_hash', hash) }
