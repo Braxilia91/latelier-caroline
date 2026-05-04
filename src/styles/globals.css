@@ -1,0 +1,229 @@
+/* ─── Palette & Variables ─────────────────────────────────── */
+:root {
+  --cream:    #FAF7F2;
+  --paper:    #FFFEFB;
+  --paper-2:  #F5F0E8;
+  --brown:    #8B6445;
+  --brown-d:  #5C3D1E;
+  --gold:     #C4956A;
+  --gold-l:   #E8D5B8;
+  --gold-ll:  #F7EFE3;
+  --sage:     #6B8F71;
+  --sage-l:   #D4E8D6;
+  --ink:      #2A1A0E;
+  --ink-l:    #6B5A4E;
+  --ink-ll:   #9C8878;
+  --border:   #DDD5C8;
+  --border-l: #EDE7DE;
+  --red:      #C0392B;
+  --blue:     #2980B9;
+  --blue-l:   #D6EAF8;
+
+  --fd: 'Cormorant Garamond', Georgia, serif;
+  --fb: 'Lora', Georgia, serif;
+  --fu: 'Nunito', sans-serif;
+
+  --fs: 1.05rem;
+  --lh: 1.95;
+
+  --radius: 12px;
+  --radius-s: 8px;
+  --shadow: 0 2px 12px rgba(42,26,14,.08);
+  --shadow-l: 0 4px 24px rgba(42,26,14,.14);
+
+  --header-h: 52px;
+  --sidebar-w: 220px;
+  --coach-w: 270px;
+
+  --z-modal: 100;
+  --z-toast: 200;
+  --z-header: 50;
+}
+
+/* ─── Reset ──────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body, #root { height: 100%; overflow: hidden; }
+body {
+  font-family: var(--fu);
+  background: var(--cream);
+  color: var(--ink);
+  font-size: 15px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+button { font-family: var(--fu); cursor: pointer; border: none; background: none; }
+input, textarea { font-family: var(--fu); }
+a { color: var(--brown); }
+
+/* ─── Scrollbars ──────────────────────────────────────────── */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+/* ─── Utility classes ─────────────────────────────────────── */
+.serif { font-family: var(--fd); }
+.lora  { font-family: var(--fb); }
+.nunito{ font-family: var(--fu); }
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 18px;
+  border-radius: var(--radius-s);
+  font-size: .85rem;
+  font-weight: 700;
+  font-family: var(--fu);
+  transition: all .18s;
+  cursor: pointer;
+}
+.btn-primary {
+  background: linear-gradient(135deg, var(--brown), var(--gold));
+  color: #fff;
+  border: none;
+}
+.btn-primary:hover { filter: brightness(1.08); transform: translateY(-1px); }
+.btn-primary:active { transform: translateY(0); }
+
+.btn-ghost {
+  background: transparent;
+  color: var(--ink-l);
+  border: 1.5px solid var(--border);
+}
+.btn-ghost:hover { background: var(--gold-ll); border-color: var(--gold); color: var(--brown); }
+
+.btn-icon {
+  width: 36px; height: 36px;
+  border-radius: var(--radius-s);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  color: var(--ink-l);
+  border: 1.5px solid transparent;
+  transition: all .18s;
+}
+.btn-icon:hover { background: var(--gold-ll); border-color: var(--gold-l); color: var(--brown); }
+.btn-icon.active { background: var(--gold-ll); color: var(--brown); border-color: var(--gold); }
+
+/* ─── Modal backdrop ──────────────────────────────────────── */
+.modal-bg {
+  position: fixed; inset: 0;
+  background: rgba(42,26,14,.45);
+  backdrop-filter: blur(3px);
+  z-index: var(--z-modal);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  animation: fadeIn .18s ease;
+}
+.modal-box {
+  background: var(--paper);
+  border-radius: 18px;
+  padding: 24px;
+  width: 100%;
+  max-width: 420px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: var(--shadow-l);
+  animation: slideUp .22s ease;
+  position: relative;
+}
+.modal-box.wide { max-width: 560px; }
+.modal-title {
+  font-family: var(--fd);
+  font-size: 1.3rem;
+  font-weight: 600;
+  color: var(--brown);
+  margin-bottom: 16px;
+}
+.modal-close {
+  position: absolute;
+  top: 14px; right: 14px;
+  width: 30px; height: 30px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--paper-2);
+  color: var(--ink-l);
+  font-size: 1rem;
+  cursor: pointer;
+  border: none;
+  transition: all .15s;
+}
+.modal-close:hover { background: var(--gold-ll); color: var(--brown); }
+
+/* ─── Form fields ─────────────────────────────────────────── */
+.fg { margin-bottom: 14px; }
+.fg label {
+  display: block;
+  font-size: .72rem;
+  font-weight: 700;
+  color: var(--ink-l);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 5px;
+}
+.fg input, .fg textarea {
+  width: 100%;
+  padding: 10px 13px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-s);
+  font-size: .9rem;
+  background: var(--cream);
+  color: var(--ink);
+  outline: none;
+  transition: border-color .18s;
+}
+.fg input:focus, .fg textarea:focus { border-color: var(--gold); }
+.fg .hint { font-size: .74rem; color: var(--ink-ll); margin-top: 4px; line-height: 1.5; }
+
+/* ─── Toast ───────────────────────────────────────────────── */
+.toast-container {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: var(--z-toast);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+}
+.toast {
+  background: var(--ink);
+  color: #fff;
+  padding: 10px 20px;
+  border-radius: 24px;
+  font-size: .85rem;
+  font-weight: 600;
+  box-shadow: var(--shadow-l);
+  animation: slideUp .22s ease, fadeOut .3s ease 2.7s forwards;
+  white-space: nowrap;
+}
+.toast.success { background: var(--sage); }
+.toast.error   { background: var(--red); }
+
+/* ─── Animations ──────────────────────────────────────────── */
+@keyframes fadeIn   { from { opacity: 0; }            to { opacity: 1; } }
+@keyframes slideUp  { from { transform: translateY(16px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+@keyframes fadeOut  { from { opacity: 1; } to { opacity: 0; } }
+@keyframes bounce   { 0%,80%,100% { transform: scale(0); } 40% { transform: scale(1); } }
+@keyframes pulse-dot{ 0%,100% { opacity:.4; transform: scale(.8); } 50% { opacity:1; transform: scale(1); } }
+@keyframes spin     { to { transform: rotate(360deg); } }
+
+/* ─── Typing indicator ───────────────────────────────────── */
+.typing { display: flex; gap: 5px; align-items: center; padding: 4px 0; }
+.typing span {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--gold);
+  animation: bounce 1.3s infinite;
+}
+.typing span:nth-child(2) { animation-delay: .2s; }
+.typing span:nth-child(3) { animation-delay: .4s; }
+
+/* ─── Responsive ─────────────────────────────────────────── */
+@media (max-width: 768px) {
+  :root { --sidebar-w: 0px; --coach-w: 0px; }
+}
