@@ -7,6 +7,7 @@ import { ToastProvider, useToast } from './components/ui/Toast'
 import { getPinHash }              from './lib/db'
 
 import LockScreen       from './components/auth/LockScreen'
+import AdminPanel       from './components/auth/AdminPanel'
 import Onboarding       from './components/onboarding/Onboarding'
 import Header           from './components/layout/Header'
 import Sidebar          from './components/layout/Sidebar'
@@ -24,24 +25,18 @@ function AppInner() {
   const [modal,    setModal]    = useState(null)
   const [moodOpen, setMoodOpen] = useState(false)
 
-  // ── Sécurité PIN ──────────────────────────────────────────────
-  const [lockMode,  setLockMode]  = useState(null)  // null | 'setup' | 'unlock' | 'change'
-  const [lockReady, setLockReady] = useState(false)
+  // ── Sécurité PIN + Admin ──────────────────────────────────────
+  const [lockMode,   setLockMode]   = useState(null)   // null | 'setup' | 'unlock' | 'change'
+  const [adminMode,  setAdminMode]  = useState(false)
+  const [lockReady,  setLockReady]  = useState(false)
 
   useEffect(() => {
     if (!db.ready) return
     async function checkPin() {
       const hash = await getPinHash()
-      if (!db.isSetup) {
-        // Pas encore configuré → onboarding d'abord, pas de PIN encore
-        setLockMode(null)
-      } else if (!hash) {
-        // App configurée mais pas de PIN → forcer la création
-        setLockMode('setup')
-      } else {
-        // PIN existant → verrouiller
-        setLockMode('unlock')
-      }
+      if (!db.isSetup)       setLockMode(null)
+      else if (!hash)        setLockMode('setup')
+      else                   setLockMode('unlock')
       setLockReady(true)
     }
     checkPin()
@@ -52,16 +47,18 @@ function AppInner() {
     const onVisibility = async () => {
       if (document.hidden) {
         const hash = await getPinHash()
-        if (hash) setLockMode('unlock')
+        if (hash) { setLockMode('unlock'); setAdminMode(false) }
       }
     }
     document.addEventListener('visibilitychange', onVisibility)
     return () => document.removeEventListener('visibilitychange', onVisibility)
   }, [])
 
-  const handleUnlock = () => setLockMode(null)
-
-  const openPinChange = () => { setModal(null); setLockMode('change') }
+  const handleUnlock      = () => { setLockMode(null); setAdminMode(false) }
+  const handleAdminUnlock = () => { setLockMode(null); setAdminMode(true) }
+  const handleAdminClose  = () => setAdminMode(false)
+  const handleResetDone   = () => { setAdminMode(false); window.location.reload() }
+  const openPinChange     = () => { setModal(null); setLockMode('change') }
 
   // ── Coach ─────────────────────────────────────────────────────
   const coach = useCoach({
@@ -73,16 +70,16 @@ function AppInner() {
 
   const handleSetupComplete = async ({ name, password }) => {
     await db.setName(name)
-    if (apiKey) await db.setPassword(password)
+    if (password) await db.setPassword(password)
     await db.createChapter()
     toast(`Bienvenue ${name} ! Ton atelier est prêt 🌿`, 'success')
-    // Après onboarding → forcer création du PIN
     setLockMode('setup')
   }
 
   const handleSaveSettings = async ({ name, openAiKey, leaVoice }) => {
-    await db.setName(name); await db.setPassword(password)
-    await db.setOaiKey(openAiKey); await db.setVoice(leaVoice)
+    await db.setName(name)
+    await db.setOaiKey(openAiKey)
+    await db.setVoice(leaVoice)
     toast('Réglages sauvegardés ✓', 'success')
   }
 
@@ -100,10 +97,14 @@ function AppInner() {
     </div>
   )
 
-  // Écran de verrouillage (setup / unlock / change)
-  if (lockMode) return <LockScreen mode={lockMode} onUnlock={handleUnlock} />
+  if (lockMode) return (
+    <LockScreen mode={lockMode} onUnlock={handleUnlock} onAdminUnlock={handleAdminUnlock} />
+  )
 
-  // Onboarding
+  if (adminMode) return (
+    <AdminPanel onClose={handleAdminClose} onResetDone={handleResetDone} />
+  )
+
   if (!db.isSetup) return <Onboarding onComplete={handleSetupComplete} />
 
   return (
@@ -134,7 +135,7 @@ function AppInner() {
       </div>
 
       {modal === 'dictation' && <DictationModal onClose={() => setModal(null)} onInsert={handleInsertDictation} />}
-      {modal === 'settings'  && <SettingsModal  state={{ name:db.name, apiKey:db.password, openAiKey:db.openAiKey, leaVoice:db.leaVoice }} onClose={() => setModal(null)} onSave={handleSaveSettings} onReset={db.resetAllData} onChangePin={openPinChange} />}
+      {modal === 'settings'  && <SettingsModal  state={{ name:db.name, openAiKey:db.openAiKey, leaVoice:db.leaVoice }} onClose={() => setModal(null)} onSave={handleSaveSettings} onReset={db.resetAllData} onChangePin={openPinChange} />}
       {modal === 'inspir'    && <InspirationModal onClose={() => setModal(null)} onSendToCoach={coach.sendMessage} hasKey={!!db.password} />}
       {modal === 'export'    && <ExportModal chapters={db.chapters} name={db.name} onClose={() => setModal(null)} />}
     </div>
