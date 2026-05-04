@@ -135,6 +135,7 @@ function AppInner() {
           hasKey={!!db.password}
           currentChapter={db.currentChapter}
           chatHistory={db.chatHistory}
+          password={db.password}
         />
       </div>
 
