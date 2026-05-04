@@ -42,16 +42,10 @@ function AppInner() {
     checkPin()
   }, [db.ready, db.isSetup])
 
-  // Verrouiller quand l'app passe en arrière-plan
-  useEffect(() => {
-    const onVisibility = async () => {
-      if (document.hidden) {
-        const hash = await getPinHash()
-        if (hash) { setLockMode('unlock'); setAdminMode(false) }
-      }
-    }
-    document.addEventListener('visibilitychange', onVisibility)
-    return () => document.removeEventListener('visibilitychange', onVisibility)
+  // Verrou manuel — déclenché par le bouton "Fermer la session"
+  const handleLock = useCallback(async () => {
+    const hash = await getPinHash()
+    if (hash) { setLockMode('unlock'); setAdminMode(false) }
   }, [])
 
   const handleUnlock      = () => { setLockMode(null); setAdminMode(false) }
@@ -115,6 +109,7 @@ function AppInner() {
         onDictate={() => setModal('dictation')} onPlan={() => setModal('plan')}
         onExport={() => setModal('export')}     onSettings={() => setModal('settings')}
         onInspir={() => setModal('inspir')}     onVocab={() => setModal('vocab')}
+        onLock={handleLock}
       />
       <div style={{ flex:1,display:'flex',overflow:'hidden' }}>
         <Sidebar

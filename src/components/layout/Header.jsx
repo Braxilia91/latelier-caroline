@@ -1,4 +1,4 @@
-import { Feather, Mic, BookOpen, Download, Settings, Lightbulb, Search } from 'lucide-react'
+import { Feather, Mic, BookOpen, Download, Settings, Lightbulb, Search, LogOut } from 'lucide-react'
 
 const MOODS = [
   { value: 'joyeuse',     emoji: '☀️', label: 'Belle humeur' },
@@ -9,7 +9,7 @@ const MOODS = [
   { value: 'créative',    emoji: '✨', label: 'Créative' },
 ]
 
-export default function Header({ name, moodToday, setMood, streak, onDictate, onPlan, onExport, onSettings, onInspir, onVocab, moodOpen, setMoodOpen }) {
+export default function Header({ name, moodToday, setMood, streak, onDictate, onPlan, onExport, onSettings, onInspir, onVocab, moodOpen, setMoodOpen, onLock }) {
 
   const currentMood = MOODS.find(m => m.value === moodToday)
 
@@ -68,15 +68,16 @@ export default function Header({ name, moodToday, setMood, streak, onDictate, on
         <BtnH icon={<BookOpen size={16} />}   label="Plan"        onClick={onPlan} />
         <BtnH icon={<Download size={16} />}   label="Exporter"    onClick={onExport} />
         <BtnH icon={<Settings size={16} />}   label="Réglages"    onClick={onSettings} />
+        {onLock && <BtnH icon={<LogOut size={16} />} label="Fermer la session" onClick={onLock} danger />}
       </div>
     </header>
   )
 }
 
-function BtnH({ icon, label, onClick }) {
+function BtnH({ icon, label, onClick, danger }) {
   return (
     <button
-      style={styles.hdrBtn}
+      style={{ ...styles.hdrBtn, ...(danger ? styles.hdrBtnDanger : {}) }}
       onClick={onClick}
       title={label}
       aria-label={label}
@@ -169,4 +170,5 @@ const styles = {
     whiteSpace: 'nowrap',
   },
   hdrBtnLbl: { '@media(maxWidth:1024px)': { display: 'none' } },
+  hdrBtnDanger: { color: '#9C5A4E' },
 }
