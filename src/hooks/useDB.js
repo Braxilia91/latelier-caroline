@@ -9,7 +9,7 @@ import {
 export function useAppState() {
   const [ready,       setReady]       = useState(false)
   const [name,        setNameState]   = useState('')
-  const [apiKey,      setApiKeyState] = useState('')
+  const [password,      setPasswordState] = useState('')
   const [openAiKey,   setOAIKey]      = useState('')
   const [leaVoice,    setLeaVoice]    = useState('nova')
   const [streak,      setStreakState]  = useState(0)
@@ -25,7 +25,7 @@ export function useAppState() {
     ;(async () => {
       const [n, k, oai, lv, st, sess, last, mood, chs, chat] = await Promise.all([
         getKV('name', ''),
-        getKV('apiKey', ''),
+        getKV('password', ''),
         getKV('openAiKey', ''),
         getKV('leaVoice', 'nova'),
         getKV('streak', 0),
@@ -35,7 +35,7 @@ export function useAppState() {
         getChapters(),
         getChatHistory(),
       ])
-      setNameState(n); setApiKeyState(k); setOAIKey(oai); setLeaVoice(lv)
+      setNameState(n); setPasswordState(k); setOAIKey(oai); setLeaVoice(lv)
       setStreakState(st); setSessionsState(sess); setLastSession(last)
       const today = new Date().toDateString()
       setMoodTodayState(mood === today ? await getKV('moodValue', '') : '')
@@ -48,7 +48,7 @@ export function useAppState() {
 
   // ─── Persist helpers ─────────────────────────────────────────
   const setName    = useCallback(async (v) => { setNameState(v);   await setKV('name', v) }, [])
-  const setApiKey  = useCallback(async (v) => { setApiKeyState(v); await setKV('apiKey', v) }, [])
+  const setPassword  = useCallback(async (v) => { setPasswordState(v); await setKV('password', v) }, [])
   const setOaiKey  = useCallback(async (v) => { setOAIKey(v);      await setKV('openAiKey', v) }, [])
   const setVoice   = useCallback(async (v) => { setLeaVoice(v);    await setKV('leaVoice', v) }, [])
 
@@ -123,7 +123,7 @@ export function useAppState() {
   return {
     ready, isSetup,
     name, setName,
-    apiKey, setApiKey,
+    password, setPassword,
     openAiKey, setOaiKey,
     leaVoice, setVoice,
     streak, sessions, recordSession,

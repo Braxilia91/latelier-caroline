@@ -65,23 +65,23 @@ function AppInner() {
 
   // ── Coach ─────────────────────────────────────────────────────
   const coach = useCoach({
-    apiKey: db.apiKey, openAiKey: db.openAiKey,
+    password: db.password, openAiKey: db.openAiKey,
     name: db.name, moodToday: db.moodToday,
     currentChapter: db.currentChapter, leaVoice: db.leaVoice,
     addMessage: db.addMessage, chatHistory: db.chatHistory,
   })
 
-  const handleSetupComplete = async ({ name, apiKey }) => {
+  const handleSetupComplete = async ({ name, password }) => {
     await db.setName(name)
-    if (apiKey) await db.setApiKey(apiKey)
+    if (apiKey) await db.setPassword(password)
     await db.createChapter()
     toast(`Bienvenue ${name} ! Ton atelier est prêt 🌿`, 'success')
     // Après onboarding → forcer création du PIN
     setLockMode('setup')
   }
 
-  const handleSaveSettings = async ({ name, apiKey, openAiKey, leaVoice }) => {
-    await db.setName(name); await db.setApiKey(apiKey)
+  const handleSaveSettings = async ({ name, openAiKey, leaVoice }) => {
+    await db.setName(name); await db.setPassword(password)
     await db.setOaiKey(openAiKey); await db.setVoice(leaVoice)
     toast('Réglages sauvegardés ✓', 'success')
   }
@@ -127,15 +127,15 @@ function AppInner() {
         />
         <CoachPanel
           coach={{ ...coach, clearChat: db.clearChat }}
-          hasKey={!!db.apiKey}
+          hasKey={!!db.password}
           currentChapter={db.currentChapter}
           chatHistory={db.chatHistory}
         />
       </div>
 
       {modal === 'dictation' && <DictationModal onClose={() => setModal(null)} onInsert={handleInsertDictation} />}
-      {modal === 'settings'  && <SettingsModal  state={{ name:db.name, apiKey:db.apiKey, openAiKey:db.openAiKey, leaVoice:db.leaVoice }} onClose={() => setModal(null)} onSave={handleSaveSettings} onReset={db.resetAllData} onChangePin={openPinChange} />}
-      {modal === 'inspir'    && <InspirationModal onClose={() => setModal(null)} onSendToCoach={coach.sendMessage} hasKey={!!db.apiKey} />}
+      {modal === 'settings'  && <SettingsModal  state={{ name:db.name, apiKey:db.password, openAiKey:db.openAiKey, leaVoice:db.leaVoice }} onClose={() => setModal(null)} onSave={handleSaveSettings} onReset={db.resetAllData} onChangePin={openPinChange} />}
+      {modal === 'inspir'    && <InspirationModal onClose={() => setModal(null)} onSendToCoach={coach.sendMessage} hasKey={!!db.password} />}
       {modal === 'export'    && <ExportModal chapters={db.chapters} name={db.name} onClose={() => setModal(null)} />}
     </div>
   )

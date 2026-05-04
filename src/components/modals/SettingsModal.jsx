@@ -10,13 +10,11 @@ const VOICES = [
 
 export default function SettingsModal({ state, onClose, onSave, onReset, onChangePin }) {
   const [name,         setName]         = useState(state.name)
-  const [apiKey,       setApiKey]       = useState(state.apiKey)
   const [openAiKey,    setOpenAiKey]    = useState(state.openAiKey)
   const [voice,        setVoice]        = useState(state.leaVoice)
   const [confirmReset, setConfirmReset] = useState(false)
 
-  const handleSave = () => { onSave({ name, apiKey, openAiKey, leaVoice: voice }); onClose() }
-
+  const handleSave = () => { onSave({ name, openAiKey, leaVoice: voice }); onClose() }
   const handleReset = async () => {
     if (confirmReset) { await onReset(); window.location.reload() }
     else { setConfirmReset(true); setTimeout(() => setConfirmReset(false), 5000) }
@@ -34,15 +32,9 @@ export default function SettingsModal({ state, onClose, onSave, onReset, onChang
         </div>
 
         <div className="fg">
-          <label>Clé API Anthropic (Coach Léa)</label>
-          <input type="password" value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder="sk-ant-api03-…" />
-          <p className="hint">🔒 Stockée sur ton appareil uniquement. Obtiens-la sur console.anthropic.com → API Keys</p>
-        </div>
-
-        <div className="fg">
           <label>Clé API OpenAI <span style={{ fontWeight:400,opacity:.7 }}>(optionnel — voix naturelle)</span></label>
           <input type="password" value={openAiKey} onChange={e => setOpenAiKey(e.target.value)} placeholder="sk-…" />
-          <p className="hint">Pour les voix IA naturelles (nova, shimmer…). Sans cette clé, la voix du navigateur est utilisée.</p>
+          <p className="hint">Pour les voix IA naturelles. Sans cette clé, la voix du navigateur est utilisée.</p>
         </div>
 
         {openAiKey && (
@@ -58,12 +50,10 @@ export default function SettingsModal({ state, onClose, onSave, onReset, onChang
           <Save size={15} /> Enregistrer
         </button>
 
-        {/* Changer le PIN */}
         <button style={pinBtn} onClick={onChangePin}>
           <Lock size={13} /> Changer le code PIN
         </button>
 
-        {/* Zone danger */}
         <div style={D.zone}>
           <div style={D.hdr}><AlertTriangle size={14} color="#C0392B" /><span style={D.ttl}>Zone dangereuse</span></div>
           <p style={D.txt}>Supprimer toutes les données efface définitivement tous tes chapitres et paramètres.</p>
@@ -76,17 +66,8 @@ export default function SettingsModal({ state, onClose, onSave, onReset, onChang
   )
 }
 
-const selStyle = {
-  width:'100%',padding:'10px 13px',border:'1.5px solid #DDD5C8',borderRadius:8,
-  fontFamily:"'Nunito',sans-serif",fontSize:'.9rem',background:'#FAF7F2',color:'#2A1A0E',outline:'none',
-}
-const pinBtn = {
-  display:'flex',alignItems:'center',justifyContent:'center',gap:6,
-  width:'100%',marginBottom:12,padding:'10px',
-  background:'#F0EBE3',border:'1.5px solid #DDD5C8',borderRadius:10,
-  color:'#6B5A4E',fontSize:'.85rem',fontWeight:700,
-  fontFamily:"'Nunito',sans-serif",cursor:'pointer',
-}
+const selStyle = { width:'100%',padding:'10px 13px',border:'1.5px solid #DDD5C8',borderRadius:8,fontFamily:"'Nunito',sans-serif",fontSize:'.9rem',background:'#FAF7F2',color:'#2A1A0E',outline:'none' }
+const pinBtn   = { display:'flex',alignItems:'center',justifyContent:'center',gap:6,width:'100%',marginBottom:12,padding:'10px',background:'#F0EBE3',border:'1.5px solid #DDD5C8',borderRadius:10,color:'#6B5A4E',fontSize:'.85rem',fontWeight:700,fontFamily:"'Nunito',sans-serif",cursor:'pointer' }
 const D = {
   zone: {background:'#FFF5F5',border:'1.5px solid #FECACA',borderRadius:12,padding:'14px 16px',marginTop:4},
   hdr:  {display:'flex',alignItems:'center',gap:6,marginBottom:6},

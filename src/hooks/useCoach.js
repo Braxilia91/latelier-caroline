@@ -5,7 +5,7 @@ import {
   buildVocabPrompt, buildThreadPrompt,
 } from '../lib/prompts'
 
-export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, leaVoice, addMessage, chatHistory }) {
+export function useCoach({ password, openAiKey, name, moodToday, currentChapter, leaVoice, addMessage, chatHistory }) {
   const [loading,    setLoading]    = useState(false)
   const [streaming,  setStreaming]  = useState('')
   const [voiceOn,    setVoiceOn]    = useState(false)
@@ -20,7 +20,7 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
 
   // ─── Envoyer un message à Léa ──────────────────────────────
   const sendMessage = useCallback(async (userText, { type = 'chat', extraSystem } = {}) => {
-    if (!apiKey) return null
+    if (!password) return null
     setLoading(true); setStreaming('')
 
     const userMsg = { role: 'user', content: userText }
@@ -35,7 +35,7 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
     let full = ''
     try {
       full = await askClaude({
-        apiKey,
+        password,
         systemPrompt: extraSystem || systemPrompt,
         messages: history,
         maxTokens: 600,
@@ -63,7 +63,7 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
       setLoading(false); setStreaming('')
     }
     return full
-  }, [apiKey, openAiKey, systemPrompt, chatHistory, voiceOn, leaVoice, addMessage])
+  }, [password, openAiKey, systemPrompt, chatHistory, voiceOn, leaVoice, addMessage])
 
   // ─── Correction rapide ─────────────────────────────────────
   const correctText = useCallback(async (text) => {

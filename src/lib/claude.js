@@ -1,49 +1,45 @@
-// ─── Client Claude (Anthropic API) ────────────────────────────
-const API_URL = 'https://api.anthropic.com/v1/messages'
-const MODEL   = 'claude-sonnet-4-20250514'
+// ─── Client Claude via Worker proxy ───────────────────────────
+const WORKER_URL = import.meta.env.VITE_WORKER_URL || 'https://latelier-api.atome-tdah-cloud.workers.dev'
 
-export async function askClaude({ apiKey, systemPrompt, messages, maxTokens = 600, onChunk }) {
-  if (!apiKey) throw new Error('Clé API manquante')
+export async function askClaude({ password, systemPrompt, messages, maxTokens = 600, onChunk }) {
+  if (!password) throw new Error('Mot de passe manquant')
 
-  const response = await fetch(API_URL, {
+  const response = await fetch(`${WORKER_URL}/claude`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
+      'x-atelier-password': password,
     },
     body: JSON.stringify({
-      model: MODEL,
-      max_tokens: maxTokens,
       system: systemPrompt,
       messages,
+      max_tokens: maxTokens,
       stream: !!onChunk,
     }),
   })
 
+  if (response.status === 401) throw new Error('Mot de passe incorrect')
   if (!response.ok) {
     const err = await response.json().catch(() => ({}))
-    throw new Error(err.error?.message || `Erreur API ${response.status}`)
+    throw new Error(err.error?.message || `Erreur ${response.status}`)
   }
 
   // Streaming
   if (onChunk) {
-    const reader = response.body.getReader()
+    const reader  = response.body.getReader()
     const decoder = new TextDecoder()
     let full = ''
     while (true) {
       const { done, value } = await reader.read()
       if (done) break
-      const chunk = decoder.decode(value)
-      const lines  = chunk.split('\n').filter(l => l.startsWith('data: '))
+      const lines = decoder.decode(value).split('\n').filter(l => l.startsWith('data: '))
       for (const line of lines) {
         const data = line.slice(6).trim()
         if (data === '[DONE]') break
         try {
-          const parsed = JSON.parse(data)
-          const text = parsed?.delta?.text || ''
+          const text = JSON.parse(data)?.delta?.text || ''
           if (text) { full += text; onChunk(full) }
-        } catch (_) { /* skip */ }
+        } catch (_) {}
       }
     }
     return full
@@ -59,16 +55,11 @@ export async function speakWithOpenAI({ openAiKey, text, voice = 'nova' }) {
   if (!openAiKey) throw new Error('Clé OpenAI manquante')
   const res = await fetch('https://api.openai.com/v1/audio/speech', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${openAiKey}`,
-    },
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${openAiKey}` },
     body: JSON.stringify({ model: 'tts-1', voice, input: text.slice(0, 4096) }),
   })
   if (!res.ok) throw new Error('TTS échoué')
-  const blob = await res.blob()
-  const url = URL.createObjectURL(blob)
-  const audio = new Audio(url)
+  const audio = new Audio(URL.createObjectURL(await res.blob()))
   audio.play()
   return audio
 }
@@ -86,6 +77,5 @@ export async function transcribeAudio({ openAiKey, audioBlob }) {
     body: form,
   })
   if (!res.ok) throw new Error('Transcription échouée')
-  const data = await res.json()
-  return data.text || ''
+  return (await res.json()).text || ''
 }
