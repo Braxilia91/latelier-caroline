@@ -184,16 +184,18 @@ export default function LockScreen({ mode, onUnlock, onAdminUnlock }) {
                 <RotateCcw size={13}/> Recommencer
               </button>
             )}
-            {mode === 'unlock' && (
-              <div style={S.footerLinks}>
+            {mode === 'unlock' && (<>
+              <div style={{textAlign:'center', marginTop:18}}>
                 <button style={S.linkBtn} onClick={() => { setScreen('reset_req'); setError('') }}>
                   <KeyRound size={12}/> Code oublié ?
                 </button>
-                <button style={S.linkBtn} onClick={() => { setScreen('admin'); setError('') }}>
-                  <Shield size={12}/> Admin
+              </div>
+              <div style={{textAlign:'center', marginTop:4}}>
+                <button style={S.adminLink} onClick={() => { setScreen('admin'); setError('') }}>
+                  ···
                 </button>
               </div>
-            )}
+            </>)}
           </>)}
 
           {/* ── Écran admin ── */}
@@ -284,6 +286,7 @@ const S = {
   key:   { width:68,height:52,borderRadius:12,background:'#FAF7F2',border:'1.5px solid #DDD5C8',fontSize:'1.3rem',fontWeight:700,color:'#2A1A0E',fontFamily:"'Nunito',sans-serif",cursor:'pointer' },
   footerLinks: { display:'flex',justifyContent:'space-between',marginTop:16 },
   linkBtn: { display:'inline-flex',alignItems:'center',gap:5,padding:'6px 10px',background:'transparent',border:'none',color:'#8B6445',fontSize:'.75rem',fontWeight:700,fontFamily:"'Nunito',sans-serif",cursor:'pointer' },
+  adminLink: { padding:'4px 12px',background:'transparent',border:'none',color:'#C8BDB5',fontSize:'.7rem',letterSpacing:4,fontFamily:"'Nunito',sans-serif",cursor:'pointer' },
   form:  { display:'flex',flexDirection:'column',gap:8,marginTop:4 },
   input: { width:'100%',padding:'11px 14px',border:'1.5px solid #DDD5C8',borderRadius:10,fontSize:'.95rem',fontFamily:"'Nunito',sans-serif",background:'#FAF7F2',color:'#2A1A0E',outline:'none',boxSizing:'border-box' },
   bigBtn: { padding:'12px 20px',background:'linear-gradient(135deg,#8B6445,#C4956A)',color:'#fff',border:'none',borderRadius:12,fontSize:'.9rem',fontWeight:700,fontFamily:"'Nunito',sans-serif",cursor:'pointer' },
