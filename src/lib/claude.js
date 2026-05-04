@@ -50,14 +50,15 @@ export async function askClaude({ password, systemPrompt, messages, maxTokens = 
   return data.content?.[0]?.text || ''
 }
 
-// ─── TTS (voix de Léa via OpenAI) ─────────────────────────────
-export async function speakWithOpenAI({ openAiKey, text, voice = 'nova' }) {
-  if (!openAiKey) throw new Error('Clé OpenAI manquante')
-  const res = await fetch('https://api.openai.com/v1/audio/speech', {
+// ─── TTS (voix de Léa via Worker proxy) ───────────────────────
+export async function speakWithOpenAI({ password, text, voice = 'nova' }) {
+  if (!password) throw new Error('Mot de passe manquant')
+  const res = await fetch(`${WORKER_URL}/tts`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${openAiKey}` },
-    body: JSON.stringify({ model: 'tts-1', voice, input: text.slice(0, 4096) }),
+    headers: { 'Content-Type': 'application/json', 'x-atelier-password': password },
+    body: JSON.stringify({ text, voice }),
   })
+  if (res.status === 401) throw new Error('Mot de passe incorrect')
   if (!res.ok) throw new Error('TTS échoué')
   const audio = new Audio(URL.createObjectURL(await res.blob()))
   audio.play()

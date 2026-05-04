@@ -56,7 +56,7 @@ function AppInner() {
 
   // ── Coach ─────────────────────────────────────────────────────
   const coach = useCoach({
-    password: db.password, openAiKey: db.openAiKey,
+    password: db.password,
     name: db.name, moodToday: db.moodToday,
     currentChapter: db.currentChapter, leaVoice: db.leaVoice,
     addMessage: db.addMessage, chatHistory: db.chatHistory,

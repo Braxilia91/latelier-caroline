@@ -5,7 +5,7 @@ import {
   buildVocabPrompt, buildThreadPrompt,
 } from '../lib/prompts'
 
-export function useCoach({ password, openAiKey, name, moodToday, currentChapter, leaVoice, addMessage, chatHistory }) {
+export function useCoach({ password, name, moodToday, currentChapter, leaVoice, addMessage, chatHistory }) {
   const [loading,    setLoading]    = useState(false)
   const [streaming,  setStreaming]  = useState('')
   const [voiceOn,    setVoiceOn]    = useState(false)
@@ -46,14 +46,11 @@ export function useCoach({ password, openAiKey, name, moodToday, currentChapter,
       // TTS si voix activée
       if (voiceOn && full) {
         if (audioRef.current) audioRef.current.pause()
-        if (openAiKey) {
-          try {
-            audioRef.current = await speakWithOpenAI({ openAiKey, text: full, voice: leaVoice })
-          } catch (_) {
-            // Fallback voix navigateur
-            speakBrowser(full)
-          }
-        } else {
+        try {
+          // TTS via Worker proxy — pas besoin de clé OpenAI côté client
+          audioRef.current = await speakWithOpenAI({ password, text: full, voice: leaVoice })
+        } catch (_) {
+          // Fallback navigateur si proxy indisponible
           speakBrowser(full)
         }
       }
@@ -63,7 +60,7 @@ export function useCoach({ password, openAiKey, name, moodToday, currentChapter,
       setLoading(false); setStreaming('')
     }
     return full
-  }, [password, openAiKey, systemPrompt, chatHistory, voiceOn, leaVoice, addMessage])
+  }, [password, systemPrompt, chatHistory, voiceOn, leaVoice, addMessage])
 
   // ─── Correction rapide ─────────────────────────────────────
   const correctText = useCallback(async (text) => {
