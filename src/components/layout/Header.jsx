@@ -1,4 +1,4 @@
-import { Feather, Mic, BookOpen, Download, Settings, Lightbulb, Search, LogOut } from 'lucide-react'
+import { Feather, Mic, BookOpen, Download, Settings, Lightbulb, Search, LogOut, Radio } from 'lucide-react'
 
 const MOODS = [
   { value: 'joyeuse',     emoji: '☀️', label: 'Belle humeur' },
@@ -9,7 +9,7 @@ const MOODS = [
   { value: 'créative',    emoji: '✨', label: 'Créative' },
 ]
 
-export default function Header({ name, moodToday, setMood, streak, onDictate, onPlan, onExport, onSettings, onInspir, onVocab, moodOpen, setMoodOpen, onLock }) {
+export default function Header({ name, moodToday, setMood, streak, onDictate, onRecit, onPlan, onExport, onSettings, onInspir, onVocab, moodOpen, setMoodOpen, onLock }) {
 
   const currentMood = MOODS.find(m => m.value === moodToday)
 
@@ -64,7 +64,8 @@ export default function Header({ name, moodToday, setMood, streak, onDictate, on
       <div style={styles.actions}>
         <BtnH icon={<Lightbulb size={16} />} label="Inspiration" onClick={onInspir} />
         <BtnH icon={<Search size={16} />}     label="Vocabulaire" onClick={onVocab} />
-        <BtnH icon={<Mic size={16} />}        label="Dicter"      onClick={onDictate} />
+        <BtnH icon={<Mic size={16} />}        label="Dicter vite" onClick={onDictate} />
+        <BtnH icon={<Radio size={16} />}       label="Raconter"    onClick={onRecit} />
         <BtnH icon={<BookOpen size={16} />}   label="Plan"        onClick={onPlan} />
         <BtnH icon={<Download size={16} />}   label="Exporter"    onClick={onExport} />
         <BtnH icon={<Settings size={16} />}   label="Réglages"    onClick={onSettings} />

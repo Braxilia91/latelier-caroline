@@ -14,6 +14,7 @@ import Sidebar          from './components/layout/Sidebar'
 import WritingArea      from './components/writing/WritingArea'
 import CoachPanel       from './components/layout/CoachPanel'
 import DictationModal   from './components/modals/DictationModal'
+import RecitLongModal   from './components/modals/RecitLongModal'
 import SettingsModal    from './components/modals/SettingsModal'
 import InspirationModal from './components/modals/InspirationModal'
 import ExportModal      from './components/modals/ExportModal'
@@ -84,6 +85,14 @@ function AppInner() {
     toast('Texte inséré ✓', 'success')
   }, [db])
 
+  const handleInsertRecit = useCallback((text, mode) => {
+    if (!db.currentChapter) return
+    const sep = db.currentChapter.content ? '\n\n' : ''
+    const prefix = mode === 'draft' ? '[Brouillon vocal]\n' : ''
+    db.updateChapter(db.currentId, { content: (db.currentChapter.content || '') + sep + prefix + text })
+    toast(mode === 'draft' ? 'Brouillon ajouté ✓' : 'Récit inséré ✓', 'success')
+  }, [db])
+
   // ── Rendu ─────────────────────────────────────────────────────
   if (!db.ready || !lockReady) return (
     <div style={{ height:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:'#FAF7F2' }}>
@@ -106,7 +115,7 @@ function AppInner() {
       <Header
         name={db.name} moodToday={db.moodToday} setMood={db.setMood}
         streak={db.streak} moodOpen={moodOpen} setMoodOpen={setMoodOpen}
-        onDictate={() => setModal('dictation')} onPlan={() => setModal('plan')}
+        onDictate={() => setModal('dictation')} onRecit={() => setModal('recit')} onPlan={() => setModal('plan')}
         onExport={() => setModal('export')}     onSettings={() => setModal('settings')}
         onInspir={() => setModal('inspir')}     onVocab={() => setModal('vocab')}
         onLock={handleLock}
@@ -130,6 +139,7 @@ function AppInner() {
       </div>
 
       {modal === 'dictation' && <DictationModal onClose={() => setModal(null)} onInsert={handleInsertDictation} />}
+      {modal === 'recit'     && <RecitLongModal  onClose={() => setModal(null)} onInsert={handleInsertRecit} password={db.password} />}
       {modal === 'settings'  && <SettingsModal  state={{ name:db.name, openAiKey:db.openAiKey, leaVoice:db.leaVoice }} onClose={() => setModal(null)} onSave={handleSaveSettings} onReset={db.resetAllData} onChangePin={openPinChange} />}
       {modal === 'inspir'    && <InspirationModal onClose={() => setModal(null)} onSendToCoach={coach.sendMessage} hasKey={!!db.password} />}
       {modal === 'export'    && <ExportModal chapters={db.chapters} name={db.name} onClose={() => setModal(null)} />}

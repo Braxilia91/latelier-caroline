@@ -80,3 +80,24 @@ export async function transcribeAudio({ openAiKey, audioBlob }) {
   if (!res.ok) throw new Error('Transcription échouée')
   return (await res.json()).text || ''
 }
+
+// ─── Transcription Whisper via Worker ─────────────────────────
+export async function transcribeWhisper({ password, blob, mimeType }) {
+  if (!password) throw new Error('Mot de passe manquant')
+  const res = await fetch(`${WORKER_URL}/whisper`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': mimeType || 'audio/webm',
+      'x-atelier-password': password,
+      'x-audio-type': mimeType || 'audio/webm',
+    },
+    body: blob,
+  })
+  if (res.status === 401) throw new Error('Mot de passe incorrect')
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.detail || 'Transcription échouée')
+  }
+  const data = await res.json()
+  return data.text || ''
+}
