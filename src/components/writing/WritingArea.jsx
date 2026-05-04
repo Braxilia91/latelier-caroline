@@ -2,16 +2,6 @@ import { useRef, useCallback } from 'react'
 import { useAutoSave } from '../../hooks/useAutoSave'
 import { Save } from 'lucide-react'
 
-// ── Curseur plume SVG ─────────────────────────────────────────────
-// Plume orientée diagonal haut-droite → bas-gauche, pointe = hotspot (3, 27)
-const _quillSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
-  <path d="M28 2 C26 4 22 8 16 16 C12 22 8 26 4 30" stroke="#C4956A" stroke-width="3.5" stroke-linecap="round" fill="none"/>
-  <path d="M28 2 C30 6 28 12 22 18 C17 23 11 27 5 30" stroke="#E8D5B8" stroke-width="2" stroke-linecap="round" fill="none" opacity="0.8"/>
-  <line x1="28" y1="2" x2="4" y2="30" stroke="#8B6445" stroke-width="1.2"/>
-  <path d="M4 30 L1 33 L6 29 Z" fill="#2A1A0E"/>
-  <circle cx="2.5" cy="31.5" r="1.2" fill="#2A1A0E"/>
-</svg>`
-const QUILL_CURSOR = `url("data:image/svg+xml,${encodeURIComponent(_quillSvg)}") 3 30, text`
 
 export default function WritingArea({ chapter, updateChapter, recordSession, onDictateInline }) {
 
@@ -45,7 +35,7 @@ export default function WritingArea({ chapter, updateChapter, recordSession, onD
   return (
     <div style={styles.wrap}>
       {/* Titre du chapitre */}
-      <div style={styles.titleWrap}>
+      <div className="quill-cursor" style={styles.titleWrap}>
         <input
           style={styles.titleInput}
           value={chapter.title}
@@ -62,7 +52,7 @@ export default function WritingArea({ chapter, updateChapter, recordSession, onD
       </div>
 
       {/* Zone d'écriture — curseur plume sur toute la zone */}
-      <div style={styles.taWrap}>
+      <div className="quill-cursor" style={styles.taWrap}>
         <textarea
           style={styles.ta}
           value={chapter.content || ''}
@@ -103,7 +93,6 @@ const styles = {
     padding: '20px 32px 0',
     borderBottom: '1px dashed #E8D5B8',
     background: '#FFFEFB',
-    cursor: QUILL_CURSOR,
   },
   titleInput: {
     width: '100%',
@@ -112,7 +101,6 @@ const styles = {
     color: '#2A1A0E',
     border: 'none', outline: 'none', background: 'transparent',
     caretColor: '#8B6445',
-    cursor: QUILL_CURSOR,
     marginBottom: 8,
   },
   intentInput: {
@@ -122,13 +110,11 @@ const styles = {
     border: 'none', outline: 'none', background: 'transparent',
     borderBottom: '1px dashed transparent',
     paddingBottom: 10, caretColor: '#8B6445',
-    cursor: QUILL_CURSOR,
     transition: 'border-color .2s',
   },
   // wrapper qui force le curseur sur toute la surface
   taWrap: {
     flex: 1, display: 'flex', flexDirection: 'column',
-    cursor: QUILL_CURSOR,
     overflow: 'hidden',
   },
   ta: {
@@ -140,7 +126,6 @@ const styles = {
     background: 'transparent',
     border: 'none', resize: 'none', outline: 'none',
     caretColor: '#8B6445',
-    cursor: QUILL_CURSOR,
   },
   footer: {
     display: 'flex', alignItems: 'center', justifyContent: 'space-between',

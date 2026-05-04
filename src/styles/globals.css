@@ -227,3 +227,10 @@ a { color: var(--brown); }
 @media (max-width: 768px) {
   :root { --sidebar-w: 0px; --coach-w: 0px; }
 }
+
+/* ─── Curseur plume (zone d'écriture) ────────────────────── */
+/* Via classe CSS pour contourner la sanitisation React des url() inline */
+.quill-cursor,
+.quill-cursor * {
+  cursor: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%2232%22%20height%3D%2232%22%20viewBox%3D%220%200%2032%2032%22%3E%3Cpath%20d%3D%22M28%202%20C26%204%2022%208%2016%2016%20C12%2022%208%2026%204%2030%22%20stroke%3D%22%23C4956A%22%20stroke-width%3D%223.5%22%20stroke-linecap%3D%22round%22%20fill%3D%22none%22/%3E%3Cpath%20d%3D%22M28%202%20C30%206%2028%2012%2022%2018%20C17%2023%2011%2027%205%2030%22%20stroke%3D%22%23E8D5B8%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20fill%3D%22none%22%20opacity%3D%220.8%22/%3E%3Cline%20x1%3D%2228%22%20y1%3D%222%22%20x2%3D%224%22%20y2%3D%2230%22%20stroke%3D%22%238B6445%22%20stroke-width%3D%221.2%22/%3E%3Cpath%20d%3D%22M4%2030%20L1%2033%20L6%2029%20Z%22%20fill%3D%22%232A1A0E%22/%3E%3Ccircle%20cx%3D%222.5%22%20cy%3D%2231.5%22%20r%3D%221.2%22%20fill%3D%22%232A1A0E%22/%3E%3C/svg%3E") 3 30, text !important;
+}
