@@ -1,4 +1,4 @@
-⌫import { useState } from 'react'
+import { useState } from 'react'
 import { Feather, ShieldCheck, RotateCcw, Shield, KeyRound } from 'lucide-react'
 import { hashPin, verifyPin } from '../../utils/pin'
 import { getPinHash, setPinHash } from '../../lib/db'
