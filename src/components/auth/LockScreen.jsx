@@ -1,4 +1,4 @@
-import { useState } from 'react'
+⌫import { useState } from 'react'
 import { Feather, ShieldCheck, RotateCcw, Shield, KeyRound } from 'lucide-react'
 import { hashPin, verifyPin } from '../../utils/pin'
 import { getPinHash, setPinHash } from '../../lib/db'
@@ -15,7 +15,7 @@ async function hashAdmin(pwd) {
   return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('')
 }
 
-export default function LockScreen({ mode, onUnlock, onAdminUnlock }) {
+export default function LockScreen({ mode, onUnlock, onAdminUnlock, onCancel }) {
   // mode = 'setup' | 'unlock' | 'change'
 
   const [screen, setScreen]   = useState('main')    // 'main' | 'admin' | 'reset_req' | 'reset_verify'
