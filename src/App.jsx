@@ -157,5 +157,5 @@ function AppInner() {
 }
 
 export default function App() {
-    return <ToastProvider><AppInner /></ToastProvider>ToastProvider>
-      }</ToastProvider>
+    return <ToastProvider><AppInner /></ToastProvider>
+}
