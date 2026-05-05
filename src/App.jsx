@@ -65,7 +65,7 @@ function AppInner() {
         await db.setName(name)
         if (password) await db.setPassword(password)
         await db.createChapter()
-        toast(`Bienvenue ${name} ! Ton atelier est pret`, 'success')
+        toast(`Bienvenue ${name} ! Ton atelier est prêt 🌿`, 'success')
         const hash = await getPinHash()
         setLockMode(hash ? 'unlock' : 'setup')
   }
@@ -74,7 +74,7 @@ function AppInner() {
         await db.setName(name)
         await db.setOaiKey(openAiKey)
         await db.setVoice(leaVoice)
-        toast('Reglages sauvegardes', 'success')
+        toast('Réglages sauvegardés ✓', 'success')
   }
 
   const handleInsertDictation = useCallback((text) => {
@@ -82,7 +82,7 @@ function AppInner() {
         const newContent = (db.currentChapter.content || '') +
                 (db.currentChapter.content ? ' ' : '') + text
         db.updateChapter(db.currentId, { content: newContent })
-        toast('Texte insere', 'success')
+        toast('Texte inséré ✓', 'success')
   }, [db.currentChapter, db.currentId, db.updateChapter, toast])
 
   const handleInsertRecit = useCallback((text, mode) => {
@@ -92,7 +92,7 @@ function AppInner() {
         db.updateChapter(db.currentId, {
                 content: (db.currentChapter.content || '') + sep + prefix + text,
         })
-        toast(mode === 'draft' ? 'Brouillon ajoute' : 'Recit insere', 'success')
+        toast(mode === 'draft' ? 'Brouillon ajouté ✓' : 'Récit inséré ✓', 'success')
   }, [db.currentChapter, db.currentId, db.updateChapter, toast])
 
   if (!db.ready || !lockReady) return (
