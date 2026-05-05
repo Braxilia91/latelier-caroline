@@ -101,7 +101,7 @@ function AppInner() {
                 <div style={{ width:36,height:36,border:'3px solid #EDE7DE',
                                      borderTopColor:'#8B6445',borderRadius:'50%',
                                      animation:'spin 0.8s linear infinite' }} />
-        </div>div>
+        </div>
       )
 
   if (lockMode) return (
@@ -146,13 +146,13 @@ function AppInner() {
                                       chatHistory={db.chatHistory}
                                       password={db.password}
                                     />
-                </div>div>
+                </div>
           {modal === 'dictation' && <DictationModal onClose={() => setModal(null)} onInsert={handleInsertDictation} />}
           {modal === 'recit'     && <RecitLongModal  onClose={() => setModal(null)} onInsert={handleInsertRecit} password={db.password} />}
           {modal === 'settings'  && <SettingsModal   state={{ name:db.name, openAiKey:db.openAiKey, leaVoice:db.leaVoice }} onClose={() => setModal(null)} onSave={handleSaveSettings} onReset={db.resetAllData} onChangePin={openPinChange} />}
           {modal === 'inspir'    && <InspirationModal onClose={() => setModal(null)} onSendToCoach={coach.sendMessage} hasKey={!!db.password} />}
           {modal === 'export'    && <ExportModal chapters={db.chapters} name={db.name} onClose={() => setModal(null)} />}
-        </div>div>
+        </div>
       )
 }
 
