@@ -19,7 +19,7 @@ export default function LockScreen({ mode, onUnlock, onAdminUnlock }) {
   // mode = 'setup' | 'unlock' | 'change'
 
   const [screen, setScreen]   = useState('main')    // 'main' | 'admin' | 'reset_req' | 'reset_verify'
-  const [step,   setStep]     = useState('enter')   // 'enter' | 'confirm'
+  const [step,   setStep]     = useState('enter')   // 'enter' | 'confirm'h
   const [pin,    setPin]      = useState('')
   const [conf,   setConf]     = useState('')
   const [admin,  setAdmin]    = useState('')
@@ -131,7 +131,7 @@ export default function LockScreen({ mode, onUnlock, onAdminUnlock }) {
       ? (step === 'enter' ? 'Ce code protège votre atelier' : 'Saisissez à nouveau le même code')
       : 'Votre atelier est verrouillé',
     admin: 'Réservé à l\'administrateur',
-    reset_req: 'Un code sera envoyé à l\'administrateur qui vous le communiquera',
+    reset_req: 'Un code sera envoyé à l\'ton adresse email',
     reset_verify: 'Saisissez le code à 6 chiffres reçu par l\'administrateur',
   }
 
