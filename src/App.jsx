@@ -47,6 +47,7 @@ function AppInner() {
   const handleLock = useCallback(async () => {
     const hash = await getPinHash()
     if (hash) { setLockMode('unlock'); setAdminMode(false) }
+        else { setLockMode('setup'); setAdminMode(false) }
   }, [])
 
   const handleUnlock      = () => { setLockMode(null); setAdminMode(false) }
