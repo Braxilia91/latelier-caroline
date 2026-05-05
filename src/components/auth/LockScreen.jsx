@@ -6,7 +6,7 @@ import { getPinHash, setPinHash } from '../../lib/db'
 const WORKER_URL = import.meta.env.VITE_WORKER_URL || 'https://latelier-api.atome-tdah-cloud.workers.dev'
 const ADMIN_HASH = import.meta.env.VITE_ADMIN_HASH || ''
 const NUMPAD     = [['1','2','3'],['4','5','6'],['7','8','9'],['','0','⌫']]
-const MAX_PIN    = 6
+const MAX_PIN    = 4
 
 // ── Hachage admin (même logique que pin.js mais salt différent) ──
 async function hashAdmin(pwd) {
