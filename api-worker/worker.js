@@ -1,5 +1,5 @@
 /**
- * latelier-api — v4.2.0
+ * latelier-api — v4.1.0
  * Cloudflare Worker
  *
  * Routes :
@@ -18,13 +18,10 @@
  *
  * Secrets requis :
  *   CAROLINE_PASSWORD, CLAUDE_API_KEY, OPENAI_API_KEY,
- *   RESEND_API_KEY, SYNC_SECRET, CAROLINE_EMAIL
- *
- * CAROLINE_EMAIL : adresse email destinataire pour la reinitialisation PIN.
- * Ne jamais ecrire cet email dans le code — injecter via :
- *   wrangler secret put CAROLINE_EMAIL
+ *   RESEND_API_KEY, SYNC_SECRET
  */
 
+const ADMIN_EMAIL  = 'mourad.maziere@gmail.com'
 const OTP_TTL_SEC  = 600
 const OTP_ATTEMPTS = 5
 const CLAUDE_URL   = 'https://api.anthropic.com/v1/messages'
@@ -67,29 +64,33 @@ function safeEqual(a, b) {
   return diff === 0
 }
 
-async function sendOtpEmail(resendKey, toEmail, otp) {
+async function sendEmail(resendKey, otp) {
   const r = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${resendKey}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       from: 'onboarding@resend.dev',
-      to: [toEmail],
+      to: [ADMIN_EMAIL],
       subject: '🔐 L\'Atelier — Code de réinitialisation PIN',
       html: `<div style="font-family:sans-serif;max-width:480px;margin:auto;padding:32px">
         <h2 style="color:#8B6445">🪶 L'Atelier de Caroline</h2>
-        <p>Tu as demandé à réinitialiser ton code PIN.</p>
+        <p>Demande de réinitialisation du code PIN.</p>
         <div style="background:#FAF7F2;border:2px solid #C4956A;border-radius:12px;padding:24px;text-align:center;margin:24px 0">
-          <p style="margin:0;font-size:14px;color:#6B5A4E">Ton code de réinitialisation :</p>
+          <p style="margin:0;font-size:14px;color:#6B5A4E">Code à transmettre à Caroline :</p>
           <p style="margin:8px 0 0;font-size:36px;font-weight:900;letter-spacing:12px;color:#2D1B0E">${otp}</p>
         </div>
         <p style="color:#9C8878;font-size:13px">⏱ Valide 10 minutes · usage unique</p>
-        <p style="color:#9C8878;font-size:13px">Si tu n'as pas demandé cette réinitialisation, ignore ce message.</p>
       </div>`,
     }),
   })
   return r.ok
 }
 
+/**
+ * HMAC-SHA256 — derive une cle KV a partir du token utilisateur.
+ * Resiste aux attaques par dictionnaire meme sur tokens courts.
+ * SYNC_SECRET est stocke en secret Cloudflare (jamais dans le code).
+ */
 async function hmacSha256(message, secret) {
   const enc = new TextEncoder()
   const key = await crypto.subtle.importKey(
@@ -111,7 +112,7 @@ export default {
 
     // ── Sante ──────────────────────────────────────────────────
     if (url.pathname === '/health')
-      return json({ ok: true, service: 'latelier-api', version: '4.2.0' }, 200, headers)
+      return json({ ok: true, service: 'latelier-api', version: '4.1.0' }, 200, headers)
 
     // ── Proxy Claude ───────────────────────────────────────────
     if (url.pathname === '/claude' && request.method === 'POST') {
@@ -187,13 +188,12 @@ export default {
 
     // ── OTP reset PIN ──────────────────────────────────────────
     if (url.pathname === '/request-otp' && request.method === 'POST') {
-      if (!env.CAROLINE_EMAIL) return json({ error: 'caroline_email_not_configured' }, 500, headers)
       const rl = await env.LATELIER_OTP.get('rate_limit')
       if (rl) return json({ error: 'too_many_requests', retry_after: 120 }, 429, headers)
       const otp = genOTP()
       await env.LATELIER_OTP.put('current_otp', JSON.stringify({ otp, attempts: 0, created: Date.now() }), { expirationTtl: OTP_TTL_SEC })
       await env.LATELIER_OTP.put('rate_limit', '1', { expirationTtl: 120 })
-      const sent = await sendOtpEmail(env.RESEND_API_KEY, env.CAROLINE_EMAIL, otp)
+      const sent = await sendEmail(env.RESEND_API_KEY, otp)
       if (!sent) return json({ error: 'email_failed' }, 500, headers)
       return json({ ok: true, message: 'Code envoyé' }, 200, headers)
     }
@@ -229,6 +229,7 @@ export default {
       const secret = env.SYNC_SECRET || 'atelier-caroline-default-salt-change-me'
       const kvKey  = `snapshot_${await hmacSha256(token, secret)}`
 
+      // GET — pull snapshot distant
       if (request.method === 'GET') {
         const raw = await env.ATELIER_KV.get(kvKey)
         if (!raw) return json({ empty: true, syncedAt: null }, 200, headers)
@@ -238,17 +239,23 @@ export default {
         })
       }
 
+      // POST — push snapshot local
       if (request.method === 'POST') {
         const body = await request.text()
+
         if (body.length > MAX_SYNC_BYTES) {
           return json({ error: `Snapshot trop volumineux (${(body.length / 1024).toFixed(0)} KB > 10 MB)` }, 413, headers)
         }
+
         let parsed
         try { parsed = JSON.parse(body) }
         catch { return json({ error: 'JSON invalide' }, 400, headers) }
+
         if (!parsed.syncedAt) {
           return json({ error: 'Champ syncedAt manquant' }, 400, headers)
         }
+
+        // Conflit : le distant est plus recent — le client doit pull d'abord
         const existing = await env.ATELIER_KV.get(kvKey)
         if (existing) {
           const remote = JSON.parse(existing)
@@ -260,6 +267,7 @@ export default {
             }, 409, headers)
           }
         }
+
         await env.ATELIER_KV.put(kvKey, body, { expirationTtl: 60 * 60 * 24 * 365 })
         return json({ ok: true, savedAt: parsed.syncedAt }, 200, headers)
       }

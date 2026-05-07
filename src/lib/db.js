@@ -1,6 +1,6 @@
-// ─── Minimal IndexedDB wrapper ────────────────────────────────
-const DB_NAME = 'atelier_v3'
-const DB_VERSION = 1
+// ─── IndexedDB wrapper v2 ──────────────────────────────────────
+const DB_NAME    = 'atelier_v3'
+const DB_VERSION = 2          // v2 : ajout store 'vrac'
 
 let _db = null
 
@@ -8,15 +8,24 @@ async function openDB() {
   if (_db) return _db
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VERSION)
+
     req.onupgradeneeded = (e) => {
-      const db = e.target.result
-      if (!db.objectStoreNames.contains('kv'))
-        db.createObjectStore('kv', { keyPath: 'key' })
-      if (!db.objectStoreNames.contains('chapters'))
-        db.createObjectStore('chapters', { keyPath: 'id' })
-      if (!db.objectStoreNames.contains('chat'))
-        db.createObjectStore('chat', { keyPath: 'id', autoIncrement: true })
+      const db  = e.target.result
+      const old = e.oldVersion
+
+      // ── Installation fraîche ──────────────────────────────
+      if (old < 1) {
+        db.createObjectStore('kv',       { keyPath: 'key' })
+        db.createObjectStore('chapters', { keyPath: 'id'  })
+        db.createObjectStore('chat',     { keyPath: 'id', autoIncrement: true })
+      }
+      // ── Migration v1 → v2 ────────────────────────────────
+      if (old < 2) {
+        if (!db.objectStoreNames.contains('vrac'))
+          db.createObjectStore('vrac', { keyPath: 'id' })
+      }
     }
+
     req.onsuccess  = (e) => { _db = e.target.result; resolve(_db) }
     req.onerror    = (e) => reject(e.target.error)
     req.onblocked  = ()  => reject(new Error('DB blocked'))
@@ -27,7 +36,7 @@ function tx(storeName, mode = 'readonly') {
   return _db.transaction([storeName], mode).objectStore(storeName)
 }
 
-// ─── KV store (settings, preferences) ─────────────────────────
+// ─── KV store ─────────────────────────────────────────────────
 export async function getKV(key, fallback = null) {
   await openDB()
   return new Promise((resolve) => {
@@ -54,7 +63,7 @@ export async function getChapters() {
     req.onsuccess = () => resolve(
       (req.result || []).sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
     )
-    req.onerror   = () => resolve([])
+    req.onerror = () => resolve([])
   })
 }
 
@@ -63,7 +72,7 @@ export async function saveChapter(chapter) {
   return new Promise((resolve, reject) => {
     const req = tx('chapters', 'readwrite').put({
       ...chapter,
-      updatedAt: new Date().toISOString()
+      updatedAt: new Date().toISOString(),
     })
     req.onsuccess = () => resolve()
     req.onerror   = (e) => reject(e.target.error)
@@ -89,12 +98,31 @@ export async function getChatHistory() {
   })
 }
 
+/** Charge uniquement les N derniers messages (curseur inverse — O(limit) not O(n)) */
+export async function getChatHistoryRecent(limit = 50) {
+  await openDB()
+  return new Promise((resolve) => {
+    const results = []
+    const req     = tx('chat').openCursor(null, 'prev')
+    req.onsuccess = (e) => {
+      const cursor = e.target.result
+      if (cursor && results.length < limit) {
+        results.unshift(cursor.value)   // unshift → ordre chronologique
+        cursor.continue()
+      } else {
+        resolve(results)
+      }
+    }
+    req.onerror = () => resolve([])
+  })
+}
+
 export async function addChatMessage(msg) {
   await openDB()
   return new Promise((resolve, reject) => {
     const req = tx('chat', 'readwrite').add({
       ...msg,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     })
     req.onsuccess = () => resolve()
     req.onerror   = (e) => reject(e.target.error)
@@ -110,16 +138,144 @@ export async function clearChatHistory() {
   })
 }
 
-// ─── Export all data ────────────────────────────────────────────
-export async function exportAllData() {
-  const chapters = await getChapters()
-  const name     = await getKV('name', '')
-  const streak   = await getKV('streak', 0)
-  const sessions = await getKV('sessions', 0)
-  return { name, chapters, streak, sessions, exportedAt: new Date().toISOString() }
+// ─── Vrac — boîte à idées pêle-mêle ───────────────────────────
+export async function getVrac() {
+  await openDB()
+  return new Promise((resolve) => {
+    const req = tx('vrac').getAll()
+    req.onsuccess = () => resolve(
+      (req.result || []).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+    )
+    req.onerror = () => resolve([])
+  })
 }
 
-// ─── Reset ─────────────────────────────────────────────────────
+export async function addVrac(idea) {
+  await openDB()
+  const item = {
+    id:        `vrac_${Date.now()}`,
+    text:      idea.text      || '',
+    tag:       idea.tag       || 'idée',   // idée | scène | souvenir | émotion | dialogue | titre
+    chapterId: idea.chapterId || null,
+    used:      false,
+    createdAt: new Date().toISOString(),
+  }
+  return new Promise((resolve, reject) => {
+    const req = tx('vrac', 'readwrite').add(item)
+    req.onsuccess = () => resolve(item)
+    req.onerror   = (e) => reject(e.target.error)
+  })
+}
+
+export async function updateVrac(id, fields) {
+  await openDB()
+  return new Promise((resolve, reject) => {
+    const getReq = tx('vrac').get(id)
+    getReq.onsuccess = () => {
+      const item = getReq.result
+      if (!item) return reject(new Error('Vrac item not found'))
+      const putReq = tx('vrac', 'readwrite').put({ ...item, ...fields })
+      putReq.onsuccess = () => resolve()
+      putReq.onerror   = (e) => reject(e.target.error)
+    }
+    getReq.onerror = (e) => reject(e.target.error)
+  })
+}
+
+export async function deleteVrac(id) {
+  await openDB()
+  return new Promise((resolve, reject) => {
+    const req = tx('vrac', 'readwrite').delete(id)
+    req.onsuccess = () => resolve()
+    req.onerror   = (e) => reject(e.target.error)
+  })
+}
+
+// ─── Import snapshot (sync inter-appareils) ───────────────────────
+const KV_KEYS_SYNC = ['name','leaVoice','streak','sessions','lastSession','moodToday','moodValue','caroline_profile','lea_memory']
+
+/**
+ * Valide la structure minimale d'un snapshot avant import.
+ * Protège contre la corruption KV ou les migrations ratées.
+ */
+export function isValidSnapshot(data) {
+  if (!data || typeof data !== 'object')              return false
+  if (typeof data.version !== 'number')               return false
+  if (!Array.isArray(data.chapters))                  return false
+  if (!Array.isArray(data.vrac))                      return false
+  if (typeof data.kv !== 'object' || !data.kv)        return false
+  // Guard syncedAt — doit être une date ISO 8601 parseable (rejette '' et les strings invalides)
+  if (data.syncedAt != null && (!data.syncedAt || isNaN(Date.parse(data.syncedAt)))) return false
+  // Chaque chapitre doit avoir un id string non vide
+  for (const ch of data.chapters) {
+    if (typeof ch.id !== 'string' || !ch.id)          return false
+  }
+  return true
+}
+
+/**
+ * Écrase les données locales avec un snapshot distant.
+ * Retourne false si le snapshot est invalide — jamais de corruption silencieuse.
+ * Les clés sensibles (apiKey, openAiKey) ne sont jamais remplacées.
+ */
+export async function importSnapshot(snapshot) {
+  if (!isValidSnapshot(snapshot)) {
+    console.error('[Sync] Snapshot invalide — import annulé', snapshot)
+    return false
+  }
+  await openDB()
+
+  // ── Chapitres ────────────────────────────────────────────────
+  await new Promise((resolve, reject) => {
+    const req = tx('chapters', 'readwrite').clear()
+    req.onsuccess = () => resolve()
+    req.onerror   = (e) => reject(e.target.error)
+  })
+  for (const ch of (snapshot.chapters || [])) {
+    await saveChapter(ch)
+  }
+
+  // ── Vrac ─────────────────────────────────────────────────────
+  await new Promise((resolve, reject) => {
+    const req = tx('vrac', 'readwrite').clear()
+    req.onsuccess = () => resolve()
+    req.onerror   = (e) => reject(e.target.error)
+  })
+  const kv = snapshot.kv || {}
+  for (const [key, value] of Object.entries(kv)) {
+    if (KV_KEYS_SYNC.includes(key) && value !== undefined) {
+      await setKV(key, value)
+    }
+  }
+
+  // ── Vrac items ───────────────────────────────────────────────
+  for (const idea of (snapshot.vrac || [])) {
+    await new Promise((resolve, reject) => {
+      const req = tx('vrac', 'readwrite').put(idea)
+      req.onsuccess = () => resolve()
+      req.onerror   = (e) => reject(e.target.error)
+    })
+  }
+
+  // Marquer le moment du dernier import
+  await setKV('lastSyncedAt', snapshot.syncedAt || new Date().toISOString())
+  return true
+}
+
+// ─── Export complet ─────────────────────────────────────────────
+export async function exportAllData() {
+  const [chapters, name, streak, sessions, profile, vrac] = await Promise.all([
+    getChapters(),
+    getKV('name',             ''),
+    getKV('streak',           0),
+    getKV('sessions',         0),
+    getKV('caroline_profile', null),
+    getVrac(),
+  ])
+  return { name, chapters, streak, sessions, profile, vrac, exportedAt: new Date().toISOString() }
+}
+
+// ─── Reset total ────────────────────────────────────────────────
 export async function resetAllData() {
   if (_db) { _db.close(); _db = null }
   await new Promise((resolve, reject) => {
@@ -128,7 +284,3 @@ export async function resetAllData() {
     req.onerror   = (e) => reject(e.target.error)
   })
 }
-
-// ─── PIN ────────────────────────────────────────────────────────
-export async function getPinHash() { return getKV('pin_hash', null) }
-export async function setPinHash(hash) { return setKV('pin_hash', hash) }

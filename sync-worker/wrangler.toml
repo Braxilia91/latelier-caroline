@@ -1,0 +1,14 @@
+name            = "atelier-sync"
+main            = "worker.js"
+compatibility_date = "2024-11-01"
+
+# ── KV Namespace ──────────────────────────────────────────────────
+# Après "wrangler kv namespace create ATELIER_KV" → coller l'id ci-dessous
+[[kv_namespaces]]
+binding = "ATELIER_KV"
+id      = "cc76ad424d974bfc8371e705a6509085"
+
+# ── Routes (optionnel — si domaine custom) ────────────────────────
+# [[routes]]
+# pattern = "sync.latelier-caroline.com/*"
+# zone_name = "latelier-caroline.com"

@@ -1,26 +1,31 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useMemo } from 'react'
 import { askClaude, speakWithOpenAI } from '../lib/claude'
 import {
   buildSystemPrompt, buildCorrectionPrompt,
   buildVocabPrompt, buildThreadPrompt,
+  buildDoubtPrompt, buildVracInjectPrompt,
+  buildDiscoveryPrompt, buildSynonymPrompt,
+  buildWordSearchPrompt,
 } from '../lib/prompts'
 
-export function useCoach({ password, name, moodToday, currentChapter, leaVoice, addMessage, chatHistory }) {
+export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, leaVoice, addMessage, chatHistory, carolineProfile, leaMemory, updateLeaMemory }) {
   const [loading,    setLoading]    = useState(false)
   const [streaming,  setStreaming]  = useState('')
   const [voiceOn,    setVoiceOn]    = useState(false)
   const audioRef = useRef(null)
 
-  const systemPrompt = buildSystemPrompt({
+  const systemPrompt = useMemo(() => buildSystemPrompt({
     name,
     mood: moodToday,
     currentChapter,
     intention: currentChapter?.intention,
-  })
+    profile: carolineProfile,
+    leaMemory,
+  }), [name, moodToday, currentChapter, carolineProfile, leaMemory])
 
   // ─── Envoyer un message à Léa ──────────────────────────────
   const sendMessage = useCallback(async (userText, { type = 'chat', extraSystem } = {}) => {
-    if (!password) return null
+    if (!apiKey) return null
     setLoading(true); setStreaming('')
 
     const userMsg = { role: 'user', content: userText }
@@ -35,7 +40,7 @@ export function useCoach({ password, name, moodToday, currentChapter, leaVoice, 
     let full = ''
     try {
       full = await askClaude({
-        password,
+        apiKey,
         systemPrompt: extraSystem || systemPrompt,
         messages: history,
         maxTokens: 600,
@@ -43,14 +48,25 @@ export function useCoach({ password, name, moodToday, currentChapter, leaVoice, 
       })
       addMessage({ role: 'assistant', content: full })
 
+      // ─── Mise à jour mémoire Léa ──────────────────────────
+      if (updateLeaMemory && full && type === 'chat') {
+        updateLeaMemory({
+          lastSession: new Date().toISOString(),
+          lastChapter: currentChapter?.title || null,
+        })
+      }
+
       // TTS si voix activée
       if (voiceOn && full) {
         if (audioRef.current) audioRef.current.pause()
-        try {
-          // TTS via Worker proxy — pas besoin de clé OpenAI côté client
-          audioRef.current = await speakWithOpenAI({ password, text: full, voice: leaVoice })
-        } catch (_) {
-          // Fallback navigateur si proxy indisponible
+        if (openAiKey) {
+          try {
+            audioRef.current = await speakWithOpenAI({ openAiKey, text: full, voice: leaVoice })
+          } catch (_) {
+            // Fallback voix navigateur
+            speakBrowser(full)
+          }
+        } else {
           speakBrowser(full)
         }
       }
@@ -60,7 +76,7 @@ export function useCoach({ password, name, moodToday, currentChapter, leaVoice, 
       setLoading(false); setStreaming('')
     }
     return full
-  }, [password, systemPrompt, chatHistory, voiceOn, leaVoice, addMessage])
+  }, [apiKey, openAiKey, systemPrompt, chatHistory, voiceOn, leaVoice, addMessage, updateLeaMemory, currentChapter])
 
   // ─── Correction rapide ─────────────────────────────────────
   const correctText = useCallback(async (text) => {
@@ -77,6 +93,48 @@ export function useCoach({ password, name, moodToday, currentChapter, leaVoice, 
     return sendMessage(buildThreadPrompt(chapterText), { type: 'thread' })
   }, [sendMessage])
 
+  // ─── Mode "Je doute" ───────────────────────────────────────
+  const expressDoubt = useCallback(async (text) => {
+    return sendMessage(buildDoubtPrompt(text), { type: 'doubt' })
+  }, [sendMessage])
+
+  // ─── Injecter une idée du vrac ─────────────────────────────
+  const injectVrac = useCallback(async (idea) => {
+    return sendMessage(
+      buildVracInjectPrompt({ idea, chapterTitle: currentChapter?.title }),
+      { type: 'vrac' }
+    )
+  }, [sendMessage, currentChapter])
+
+  // ─── Découverte du jour ────────────────────────────────────
+  const getDiscovery = useCallback(async () => {
+    const recentText = currentChapter?.content || ''
+    return sendMessage(buildDiscoveryPrompt(recentText), { type: 'discovery' })
+  }, [sendMessage, currentChapter])
+
+  // ─── DicoCaro — Synonymes ──────────────────────────────────
+  const getSynonyms = useCallback(async ({ word, sentence, level }) => {
+    if (!word?.trim()) return null
+    return sendMessage(
+      buildSynonymPrompt({ word: word.trim(), sentence: sentence?.trim() || '', level: level || 'mixte' }),
+      { type: 'synonyms' }
+    )
+  }, [sendMessage])
+
+  // ─── DicoCaro — Je cherche mes mots ───────────────────────
+  const searchWord = useCallback(async (description) => {
+    if (!description?.trim()) return null
+    return sendMessage(buildWordSearchPrompt(description.trim()), { type: 'wordSearch' })
+  }, [sendMessage])
+
+  // ─── DicoCaro — Akinator littéraire ───────────────────────
+  const startAkinator = useCallback(async () => {
+    return sendMessage(
+      "Je cherche un mot précis mais je n'arrive pas à le formuler. Aide-moi à le trouver en me posant des questions une à une — sur l'émotion, la sensation, le contexte ou la nuance que je veux exprimer. Commence par ta première question.",
+      { type: 'akinator' }
+    )
+  }, [sendMessage])
+
   // ─── Toggle voix ───────────────────────────────────────────
   const toggleVoice = useCallback(() => {
     if (voiceOn && audioRef.current) {
@@ -86,7 +144,7 @@ export function useCoach({ password, name, moodToday, currentChapter, leaVoice, 
     setVoiceOn(v => !v)
   }, [voiceOn])
 
-  return { loading, streaming, voiceOn, toggleVoice, sendMessage, correctText, defineWord, findThread }
+  return { loading, streaming, voiceOn, toggleVoice, sendMessage, correctText, defineWord, findThread, expressDoubt, injectVrac, getDiscovery, getSynonyms, searchWord, startAkinator }
 }
 
 // ─── Voix navigateur fallback ─────────────────────────────────
