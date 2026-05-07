@@ -2,15 +2,26 @@ import { useRef, useCallback } from 'react'
 import { useAutoSave } from '../../hooks/useAutoSave'
 import { Save } from 'lucide-react'
 
+// ── Thèmes visuels ───────────────────────────────────────────────
+const THEMES = {
+  jour:   { bg: '#FAF7F2', areaBg: '#FAF7F2', text: '#2A1A0E', caret: '#8B6445' },
+  soir:   { bg: '#F5EDD8', areaBg: '#EFE4C8', text: '#2A1A0E', caret: '#A0793D' },
+  bougie: { bg: '#1C1208', areaBg: '#140D04', text: '#E8D5B8', caret: '#C4956A' },
+}
+const FONT_SIZES = { s: '0.9rem', m: '1.05rem', l: '1.25rem' }
+const WIDTHS     = { confort: '680px', full: '100%' }
 
-export default function WritingArea({ chapter, updateChapter, recordSession, onDictateInline }) {
+export default function WritingArea({ chapter, updateChapter, recordSession, onDictateInline,
+                                       editorFont = 'm', editorTheme = 'jour', editorWidth = 'confort' }) {
 
   const savedRef = useRef(null)
 
+  // Auto-save content
   const saveContent = useCallback((val) => {
     if (chapter) {
       updateChapter(chapter.id, { content: val })
       recordSession()
+      // Flash saved indicator
       if (savedRef.current) {
         savedRef.current.style.opacity = '1'
         setTimeout(() => { if (savedRef.current) savedRef.current.style.opacity = '0' }, 1800)
@@ -32,46 +43,53 @@ export default function WritingArea({ chapter, updateChapter, recordSession, onD
   const wordCount = chapter.content?.split(/\s+/).filter(Boolean).length ?? 0
   const charCount = chapter.content?.length ?? 0
 
+  const theme  = THEMES[editorTheme] || THEMES.jour
+  const fSize  = FONT_SIZES[editorFont] || FONT_SIZES.m
+  const maxW   = WIDTHS[editorWidth]    || WIDTHS.confort
+
   return (
-    <div style={styles.wrap}>
+    <div style={{ ...styles.wrap, background: theme.bg }}>
+      {/* Zone centrée selon largeur */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', maxWidth: maxW, width: '100%', margin: '0 auto' }}>
+
       {/* Titre du chapitre */}
-      <div className="quill-cursor" style={styles.titleWrap}>
+      <div style={{ ...styles.titleWrap, background: theme.bg, borderBottomColor: editorTheme === 'bougie' ? '#3A2A14' : '#E8D5B8' }}>
         <input
-          style={styles.titleInput}
+          style={{ ...styles.titleInput, color: theme.text, caretColor: theme.caret }}
           value={chapter.title}
           onChange={e => updateChapter(chapter.id, { title: e.target.value })}
           placeholder="Titre du chapitre…"
           maxLength={100}
         />
         <input
-          style={styles.intentInput}
+          style={{ ...styles.intentInput, color: editorTheme === 'bougie' ? '#8B7355' : '#9C8878', caretColor: theme.caret }}
           value={chapter.intention || ''}
           onChange={e => updateChapter(chapter.id, { intention: e.target.value })}
           placeholder="Mon intention pour ce chapitre… (aide Léa à te guider)"
         />
       </div>
 
-      {/* Zone d'écriture — curseur plume sur toute la zone */}
-      <div className="quill-cursor" style={styles.taWrap}>
-        <textarea
-          style={styles.ta}
-          value={chapter.content || ''}
-          onChange={e => updateChapter(chapter.id, { content: e.target.value })}
-          placeholder="Commence à écrire ici… Prends ton temps. Tes mots comptent."
-          spellCheck
-          lang="fr"
-        />
-      </div>
+      {/* Zone d'écriture */}
+      <textarea
+        style={{ ...styles.ta, background: theme.areaBg, color: theme.text, caretColor: theme.caret, fontSize: fSize }}
+        value={chapter.content || ''}
+        onChange={e => updateChapter(chapter.id, { content: e.target.value })}
+        placeholder="Commence à écrire ici… Prends ton temps. Tes mots comptent."
+        spellCheck
+        lang="fr"
+      />
 
       {/* Footer */}
-      <div style={styles.footer}>
-        <span style={styles.counts}>
+      <div style={{ ...styles.footer, background: theme.bg, borderTopColor: editorTheme === 'bougie' ? '#3A2A14' : '#EDE7DE' }}>
+        <span style={{ ...styles.counts, color: editorTheme === 'bougie' ? '#6B5A3E' : '#9C8878' }}>
           {wordCount.toLocaleString('fr')} mots · {charCount.toLocaleString('fr')} caractères
         </span>
         <span ref={savedRef} style={styles.saved}>
           <Save size={12} /> Sauvegardé
         </span>
       </div>
+
+      </div>{/* /maxW container */}
     </div>
   )
 }
@@ -112,18 +130,13 @@ const styles = {
     paddingBottom: 10, caretColor: '#8B6445',
     transition: 'border-color .2s',
   },
-  // wrapper qui force le curseur sur toute la surface
-  taWrap: {
-    flex: 1, display: 'flex', flexDirection: 'column',
-    overflow: 'hidden',
-  },
   ta: {
     flex: 1,
     padding: '24px 32px',
     fontFamily: "'Lora', serif",
     fontSize: '1.05rem', lineHeight: 1.95,
     color: '#2A1A0E',
-    background: 'transparent',
+    background: '#FAF7F2',
     border: 'none', resize: 'none', outline: 'none',
     caretColor: '#8B6445',
   },
@@ -134,7 +147,7 @@ const styles = {
     background: '#FFFEFB',
   },
   counts: { fontSize: '.72rem', color: '#9C8878', fontFamily: "'Nunito', sans-serif" },
-  saved: {
+  saved:  {
     display: 'flex', alignItems: 'center', gap: 5,
     fontSize: '.72rem', color: '#6B8F71',
     fontFamily: "'Nunito', sans-serif",
