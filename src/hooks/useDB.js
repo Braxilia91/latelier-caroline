@@ -36,6 +36,9 @@ export function useAppState() {
   const [editorTheme,    setEditorThemeState] = useState('jour')     // jour | soir | bougie
   const [editorWidth,    setEditorWidthState] = useState('confort')  // confort | full
   const [firstLaunch,    setFirstLaunchState] = useState(false)      // true = scène pack opening à afficher
+  // ── Ambiance sonore ─────────────────────────────────────────
+  const [ambientSound,   setAmbientSoundState]  = useState(null)    // null | 'pluie'|'cafe'|'feu'|'foret'
+  const [ambientVolume,  setAmbientVolumeState] = useState(0.28)    // 0–1
 
   // ─── Chargement initial ──────────────────────────────────────
   useEffect(() => {
@@ -44,7 +47,7 @@ export function useAppState() {
       navigator.storage.persist().catch(() => {/* silencieux si refusé */})
     }
     ;(async () => {
-      const [n, k, oai, lv, st, sess, last, mood, chs, chat, prof, mem, vrac, stok, lsa, ef, et, ew, fls] = await Promise.all([
+      const [n, k, oai, lv, st, sess, last, mood, chs, chat, prof, mem, vrac, stok, lsa, ef, et, ew, fls, snd, vol] = await Promise.all([
         getKV('name',             ''),
         getKV('apiKey',           ''),
         getKV('openAiKey',        ''),
@@ -64,6 +67,8 @@ export function useAppState() {
         getKV('editorTheme',      'jour'),
         getKV('editorWidth',      'confort'),
         getKV('firstLaunchSeen',  false),
+        getKV('ambientSound',     null),
+        getKV('ambientVolume',    0.28),
       ])
 
       setNameState(n); setApiKeyState(k); setOAIKey(oai); setLeaVoice(lv)
@@ -84,6 +89,8 @@ export function useAppState() {
       setEditorThemeState(et)
       setEditorWidthState(ew)
       setFirstLaunchState(!fls)   // firstLaunch = true si jamais vu
+      setAmbientSoundState(snd)
+      setAmbientVolumeState(vol)
       setReady(true)
     })()
   }, [])
@@ -102,6 +109,10 @@ export function useAppState() {
   const setEditorFont  = useCallback(async (v) => { setEditorFontState(v);  await setKV('editorFont',  v) }, [])
   const setEditorTheme = useCallback(async (v) => { setEditorThemeState(v); await setKV('editorTheme', v) }, [])
   const setEditorWidth = useCallback(async (v) => { setEditorWidthState(v); await setKV('editorWidth', v) }, [])
+
+  // ── Ambiance sonore ──────────────────────────────────────────
+  const setAmbientSound  = useCallback(async (v) => { setAmbientSoundState(v);  await setKV('ambientSound',  v) }, [])
+  const setAmbientVolume = useCallback(async (v) => { setAmbientVolumeState(v); await setKV('ambientVolume', v) }, [])
   const markFirstLaunchSeen = useCallback(async () => {
     setFirstLaunchState(false)
     await setKV('firstLaunchSeen', true)
@@ -297,6 +308,7 @@ export function useAppState() {
     syncToken, setSyncToken, syncStatus, syncMessage, lastSyncedAt, syncNow,
     editorFont, setEditorFont, editorTheme, setEditorTheme, editorWidth, setEditorWidth,
     firstLaunch, markFirstLaunchSeen,
+    ambientSound, setAmbientSound, ambientVolume, setAmbientVolume,
     exportAllData, resetAllData,
   }
 }

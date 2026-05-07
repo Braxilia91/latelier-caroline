@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import './styles/globals.css'
 
 import { useAppState }           from './hooks/useDB'
@@ -24,10 +24,57 @@ import PackOpeningModal   from './components/modals/PackOpeningModal'
 function AppInner() {
   const toast = useToast()
   const db    = useAppState()
-  const [modal,     setModal]    = useState(null)
-  const [moodOpen,  setMoodOpen] = useState(false)
-  const [showPack,  setShowPack] = useState(false)
-  const [isOnline,  setIsOnline] = useState(navigator.onLine)
+  const [modal,        setModal]       = useState(null)
+  const [moodOpen,     setMoodOpen]    = useState(false)
+  const [ambientOpen,  setAmbientOpen] = useState(false)
+  const [showPack,     setShowPack]    = useState(false)
+  const [isOnline,     setIsOnline]    = useState(navigator.onLine)
+
+  // ── Ambiance sonore ─────────────────────────────────────────────
+  const audioRef        = useRef(null)
+  const [ambientPlaying, setAmbientPlaying] = useState(false)
+
+  // Lance / change le son en cours
+  const startAmbient = useCallback((sound, volume) => {
+    if (audioRef.current) {
+      audioRef.current.pause()
+      audioRef.current.src = ''
+      audioRef.current = null
+    }
+    if (!sound) return
+    const audio      = new Audio(`/sounds/${sound}.mp3`)
+    audio.loop       = true
+    audio.volume     = Math.max(0, Math.min(1, volume ?? 0.28))
+    audio.play().catch(e => console.warn('[Ambiance] lecture bloquée:', e))
+    audioRef.current = audio
+  }, [])
+
+  // Sélection d'un son : null = Silence (arrêt)
+  const handleAmbientChange = useCallback((sound) => {
+    db.setAmbientSound(sound)
+    if (sound === null) {
+      audioRef.current?.pause()
+      if (audioRef.current) { audioRef.current.src = ''; audioRef.current = null }
+      setAmbientPlaying(false)
+    } else {
+      startAmbient(sound, db.ambientVolume)
+      setAmbientPlaying(true)
+    }
+  }, [db.setAmbientSound, db.ambientVolume, startAmbient])
+
+  // Changement de volume (temps réel, persiste dans IndexedDB)
+  const handleVolumeChange = useCallback((v) => {
+    db.setAmbientVolume(v)
+    if (audioRef.current) audioRef.current.volume = Math.max(0, Math.min(1, v))
+  }, [db.setAmbientVolume])
+
+  // Nettoyage à l'unmount
+  useEffect(() => {
+    return () => {
+      audioRef.current?.pause()
+      if (audioRef.current) audioRef.current.src = ''
+    }
+  }, [])
 
   // ── Pack opening : déclenché une seule fois après setup ─────────
   useEffect(() => {
@@ -108,6 +155,13 @@ function AppInner() {
         onDictate={() => setModal('dictation')} onPlan={() => setModal('plan')}
         onExport={() => setModal('export')}     onSettings={() => setModal('settings')}
         onInspir={() => setModal('inspir')}     onVocab={() => setModal('vocab')}
+        ambientSound={db.ambientSound}
+        ambientPlaying={ambientPlaying}
+        onAmbientChange={handleAmbientChange}
+        ambientVolume={db.ambientVolume}
+        onVolumeChange={handleVolumeChange}
+        ambientOpen={ambientOpen}
+        setAmbientOpen={setAmbientOpen}
       />
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
         <Sidebar

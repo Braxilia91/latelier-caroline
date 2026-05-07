@@ -3,6 +3,18 @@ import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
+  // ── define racine : hérité par Vitest ET par le build Vite ────
+  define: {
+    // ⚠️ Ne PAS fournir de fallback en dur : une URL de test en prod = bug silencieux
+    // Déclarer VITE_SYNC_WORKER_URL dans Cloudflare Pages → Settings → Env vars
+    'import.meta.env.VITE_SYNC_WORKER_URL': JSON.stringify(
+      process.env.VITE_SYNC_WORKER_URL || ''
+    ),
+  },
+  test: {
+    environment: 'jsdom',
+    include: ['tests/**/*.test.js'],
+  },
   plugins: [
     react(),
     VitePWA({
@@ -22,7 +34,8 @@ export default defineConfig({
         ]
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        // mp3 inclus → sons ambiance disponibles hors-ligne
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2,mp3}'],
         runtimeCaching: [{
           urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
           handler: 'CacheFirst',

@@ -1,4 +1,4 @@
-import { Feather, Mic, BookOpen, Download, Settings, Lightbulb, Search } from 'lucide-react'
+import { Feather, Mic, BookOpen, Download, Settings, Lightbulb, Search, Music } from 'lucide-react'
 
 const MOODS = [
   { value: 'joyeuse',     emoji: '☀️', label: 'Belle humeur' },
@@ -9,8 +9,23 @@ const MOODS = [
   { value: 'créative',    emoji: '✨', label: 'Créative' },
 ]
 
-export default function Header({ name, moodToday, setMood, streak, onDictate, onPlan, onExport, onSettings, onInspir, onVocab, moodOpen, setMoodOpen }) {
+const SOUNDS = [
+  { value: null,    emoji: '🔇', label: 'Silence' },
+  { value: 'pluie', emoji: '🌧', label: 'Pluie douce' },
+  { value: 'cafe',  emoji: '☕', label: 'Café feutré' },
+  { value: 'feu',   emoji: '🔥', label: 'Feu calme' },
+  { value: 'foret', emoji: '🌿', label: 'Forêt légère' },
+]
 
+export default function Header({
+  name, moodToday, setMood, streak,
+  onDictate, onPlan, onExport, onSettings, onInspir, onVocab,
+  moodOpen, setMoodOpen,
+  // ── Ambiance ──
+  ambientSound, ambientPlaying, onAmbientChange,
+  ambientVolume, onVolumeChange,
+  ambientOpen, setAmbientOpen,
+}) {
   const currentMood = MOODS.find(m => m.value === moodToday)
 
   return (
@@ -26,7 +41,7 @@ export default function Header({ name, moodToday, setMood, streak, onDictate, on
         <div style={{ position: 'relative' }}>
           <button
             style={styles.moodBtn}
-            onClick={() => setMoodOpen(o => !o)}
+            onClick={() => { setMoodOpen(o => !o); setAmbientOpen(false) }}
             title="Mon humeur du jour"
           >
             {currentMood
@@ -68,6 +83,61 @@ export default function Header({ name, moodToday, setMood, streak, onDictate, on
         <BtnH icon={<BookOpen size={16} />}   label="Plan"        onClick={onPlan} />
         <BtnH icon={<Download size={16} />}   label="Exporter"    onClick={onExport} />
         <BtnH icon={<Settings size={16} />}   label="Réglages"    onClick={onSettings} />
+
+        {/* ── Ambiance sonore ── */}
+        <div style={{ position: 'relative' }}>
+          <button
+            style={{
+              ...styles.hdrBtn,
+              ...(ambientPlaying ? styles.hdrBtnPlaying : {}),
+            }}
+            onClick={() => { setAmbientOpen(o => !o); setMoodOpen(false) }}
+            title="Ambiance sonore"
+            aria-label="Ambiance sonore"
+          >
+            <Music size={16} />
+            <span style={styles.hdrBtnLbl}>Ambiance</span>
+            {ambientPlaying && <span style={styles.playDot} aria-hidden="true" />}
+          </button>
+
+          {ambientOpen && (
+            <div style={styles.ambientDrop}>
+              <div style={styles.ambientTitle}>Ambiance d'écriture</div>
+
+              <div style={styles.soundList}>
+                {SOUNDS.map(s => (
+                  <button
+                    key={String(s.value)}
+                    style={{
+                      ...styles.soundBtn,
+                      ...(ambientSound === s.value ? styles.soundBtnAct : {}),
+                    }}
+                    onClick={() => onAmbientChange(s.value)}
+                  >
+                    <span style={styles.soundEmoji}>{s.emoji}</span>
+                    <span style={styles.soundLabel}>{s.label}</span>
+                    {ambientSound === s.value && ambientPlaying && s.value !== null && (
+                      <span style={styles.soundPlaying}>▶</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+
+              <div style={styles.volRow}>
+                <span style={styles.volLbl}>Volume</span>
+                <input
+                  type="range"
+                  min={0} max={1} step={0.01}
+                  value={ambientVolume}
+                  onChange={e => onVolumeChange(parseFloat(e.target.value))}
+                  style={styles.volSlider}
+                  aria-label="Volume de l'ambiance"
+                />
+                <span style={styles.volVal}>{Math.round(ambientVolume * 100)}%</span>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </header>
   )
@@ -155,7 +225,7 @@ const styles = {
     fontSize: '.78rem', fontWeight: 700,
     color: '#E65100',
   },
-  actions: { display: 'flex', gap: 4, flexShrink: 0 },
+  actions: { display: 'flex', gap: 4, flexShrink: 0, alignItems: 'center' },
   hdrBtn: {
     display: 'flex', alignItems: 'center', gap: 4,
     padding: '5px 10px',
@@ -167,6 +237,86 @@ const styles = {
     color: 'var(--ink-l)', cursor: 'pointer',
     transition: 'all .15s',
     whiteSpace: 'nowrap',
+    position: 'relative',
   },
-  hdrBtnLbl: { '@media(maxWidth:1024px)': { display: 'none' } },
+  hdrBtnPlaying: {
+    background: 'var(--gold-ll)',
+    borderColor: 'var(--gold-l)',
+    color: 'var(--brown)',
+  },
+  hdrBtnLbl: {},
+  playDot: {
+    position: 'absolute',
+    top: 3, right: 3,
+    width: 6, height: 6,
+    borderRadius: '50%',
+    background: '#6B8F71',
+    display: 'inline-block',
+  },
+  // ── Ambient dropdown ────────────────────────────────────────
+  ambientDrop: {
+    position: 'absolute', top: '110%', right: 0,
+    background: 'var(--paper)',
+    border: '1px solid var(--border-l)',
+    borderRadius: 14,
+    boxShadow: '0 8px 28px rgba(42,26,14,.16)',
+    padding: '10px',
+    zIndex: 50,
+    width: 210,
+    animation: 'slideUp .18s ease',
+  },
+  ambientTitle: {
+    fontFamily: "'Cormorant Garamond', serif",
+    fontSize: '.82rem', fontWeight: 600,
+    color: 'var(--brown)',
+    marginBottom: 8,
+    paddingBottom: 6,
+    borderBottom: '1px solid var(--border-l)',
+  },
+  soundList: {
+    display: 'flex', flexDirection: 'column', gap: 2,
+    marginBottom: 10,
+  },
+  soundBtn: {
+    display: 'flex', alignItems: 'center', gap: 8,
+    padding: '7px 9px',
+    background: 'transparent',
+    border: '1.5px solid transparent',
+    borderRadius: 9,
+    fontSize: '.78rem', fontWeight: 600,
+    fontFamily: "'Nunito', sans-serif",
+    color: 'var(--ink)', cursor: 'pointer',
+    transition: 'all .13s',
+    textAlign: 'left', width: '100%',
+  },
+  soundBtnAct: {
+    background: 'var(--gold-ll)',
+    borderColor: 'var(--gold-l)',
+    color: 'var(--brown)',
+  },
+  soundEmoji: { fontSize: '.95rem', width: 20, textAlign: 'center', flexShrink: 0 },
+  soundLabel: { flex: 1 },
+  soundPlaying: { fontSize: '.6rem', color: '#6B8F71', fontWeight: 800 },
+  volRow: {
+    display: 'flex', alignItems: 'center', gap: 8,
+    padding: '8px 0 0',
+    borderTop: '1px solid var(--border-l)',
+  },
+  volLbl: {
+    fontSize: '.68rem', fontWeight: 700,
+    color: 'var(--ink-ll)',
+    fontFamily: "'Nunito', sans-serif",
+    flexShrink: 0,
+  },
+  volSlider: {
+    flex: 1,
+    accentColor: 'var(--brown)',
+    cursor: 'pointer',
+  },
+  volVal: {
+    fontSize: '.68rem', fontWeight: 700,
+    color: 'var(--ink-ll)',
+    fontFamily: "'Nunito', sans-serif",
+    flexShrink: 0, width: 30, textAlign: 'right',
+  },
 }
