@@ -48,7 +48,7 @@ function AppInner() {
         else { setLockMode('setup'); setAdminMode(false) }
   }, [])
 
-  const handleUnlock      = () => { setLockMode(null); setAdminMode(false) }
+  const handleUnlock      = useCallback(async () => { const hash = await getPinHash(); if (!hash) { setLockMode('setup') } else { setLockMode(null); setAdminMode(false) } }, [])
     const handleAdminUnlock = () => { setLockMode(null); setAdminMode(true) }
     const handleAdminClose  = () => setAdminMode(false)
     const handleResetDone   = () => { setAdminMode(false); window.location.reload() }
