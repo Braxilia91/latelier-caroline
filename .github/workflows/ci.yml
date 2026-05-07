@@ -31,5 +31,7 @@ jobs:
 
       - name: Run tests
         run: npm test
+        env:
+          VITE_SYNC_WORKER_URL: https://fake-worker-ci.example.com
         # Si les 5 tests échouent → le job fail → Cloudflare Pages voit le commit
         # mais le dev sait qu'il y a un problème avant que Caroline reçoive un build cassé
