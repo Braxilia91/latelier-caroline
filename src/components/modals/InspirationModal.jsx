@@ -1,13 +1,29 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { X, RefreshCw, ArrowRight } from 'lucide-react'
 import { INSPIRATION_PROMPTS } from '../../lib/prompts'
 
-export default function InspirationModal({ onClose, onSendToCoach, hasKey }) {
-  const [idx, setIdx] = useState(() => Math.floor(Math.random() * INSPIRATION_PROMPTS.length))
+const ALL_CATS = ['Toutes', ...Array.from(new Set(INSPIRATION_PROMPTS.map(p => p.cat)))]
 
-  const prompt = INSPIRATION_PROMPTS[idx]
-  const next = () => setIdx(i => (i + 1) % INSPIRATION_PROMPTS.length)
-  const rand = () => setIdx(Math.floor(Math.random() * INSPIRATION_PROMPTS.length))
+export default function InspirationModal({ onClose, onSendToCoach, hasKey }) {
+  const [cat,  setCat]  = useState('Toutes')
+  const [idx,  setIdx]  = useState(() => Math.floor(Math.random() * INSPIRATION_PROMPTS.length))
+
+  const pool = useMemo(
+    () => cat === 'Toutes' ? INSPIRATION_PROMPTS : INSPIRATION_PROMPTS.filter(p => p.cat === cat),
+    [cat]
+  )
+
+  // keep idx in bounds when pool shrinks
+  const safeIdx = idx % pool.length
+  const prompt  = pool[safeIdx]
+
+  const next = () => setIdx(i => (i + 1) % pool.length)
+  const rand = () => setIdx(Math.floor(Math.random() * pool.length))
+
+  const handleCat = (c) => {
+    setCat(c)
+    setIdx(Math.floor(Math.random() * (c === 'Toutes' ? INSPIRATION_PROMPTS.length : INSPIRATION_PROMPTS.filter(p => p.cat === c).length)))
+  }
 
   return (
     <div className="modal-bg" onClick={e => e.target === e.currentTarget && onClose()}>
@@ -15,8 +31,21 @@ export default function InspirationModal({ onClose, onSendToCoach, hasKey }) {
         <button className="modal-close" onClick={onClose}><X size={16} /></button>
         <h2 className="modal-title">💡 Inspiration du moment</h2>
 
+        {/* Filtre catégories */}
+        <div style={styles.catRow}>
+          {ALL_CATS.map(c => (
+            <button
+              key={c}
+              style={{ ...styles.catPill, ...(cat === c ? styles.catPillActive : {}) }}
+              onClick={() => handleCat(c)}
+            >
+              {c}
+            </button>
+          ))}
+        </div>
+
         <div style={styles.card}>
-          <span style={styles.cat}>{prompt.cat}</span>
+          <span style={styles.catBadge}>{prompt.cat}</span>
           <p style={styles.question}>{prompt.q}</p>
         </div>
 
@@ -42,7 +71,7 @@ export default function InspirationModal({ onClose, onSendToCoach, hasKey }) {
         )}
 
         <div style={styles.hint}>
-          {INSPIRATION_PROMPTS.length} questions · {idx + 1}/{INSPIRATION_PROMPTS.length}
+          {pool.length} question{pool.length > 1 ? 's' : ''}{cat !== 'Toutes' ? ` · ${cat}` : ''} · {safeIdx + 1}/{pool.length}
         </div>
       </div>
     </div>
@@ -50,12 +79,27 @@ export default function InspirationModal({ onClose, onSendToCoach, hasKey }) {
 }
 
 const styles = {
+  catRow: {
+    display: 'flex', gap: 6, flexWrap: 'wrap',
+    marginBottom: 14,
+  },
+  catPill: {
+    padding: '4px 12px',
+    border: '1.5px solid #DDD5C8', borderRadius: 20,
+    background: 'transparent',
+    fontSize: '.72rem', fontWeight: 600,
+    fontFamily: "'Nunito', sans-serif", color: '#9C8878',
+    cursor: 'pointer', transition: 'all .15s',
+  },
+  catPillActive: {
+    background: '#F7EFE3', border: '1.5px solid #C4956A', color: '#8B6445',
+  },
   card: {
     background: 'linear-gradient(135deg, #2D1B0E, #8B6445)',
     borderRadius: 16, padding: '24px',
     marginBottom: 16, textAlign: 'center',
   },
-  cat: {
+  catBadge: {
     display: 'inline-block',
     background: 'rgba(255,255,255,.15)',
     color: '#E8D5B8',
