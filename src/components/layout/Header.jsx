@@ -1,4 +1,4 @@
-import { Feather, Mic, BookOpen, Download, Settings, Lightbulb, Search, LogOut, Radio } from 'lucide-react'
+import { Feather, Mic, BookOpen, Download, Settings, Lightbulb, Search } from 'lucide-react'
 
 const MOODS = [
   { value: 'joyeuse',     emoji: '☀️', label: 'Belle humeur' },
@@ -9,7 +9,7 @@ const MOODS = [
   { value: 'créative',    emoji: '✨', label: 'Créative' },
 ]
 
-export default function Header({ name, moodToday, setMood, streak, onDictate, onRecit, onPlan, onExport, onSettings, onInspir, onVocab, moodOpen, setMoodOpen, onLock }) {
+export default function Header({ name, moodToday, setMood, streak, onDictate, onPlan, onExport, onSettings, onInspir, onVocab, moodOpen, setMoodOpen }) {
 
   const currentMood = MOODS.find(m => m.value === moodToday)
 
@@ -17,7 +17,7 @@ export default function Header({ name, moodToday, setMood, streak, onDictate, on
     <header style={styles.hdr}>
       {/* Logo */}
       <div style={styles.logo}>
-        <Feather size={18} color="#C4956A" />
+        <Feather size={18} color="var(--gold)" />
         <span style={styles.logoText}>L'Atelier</span>
       </div>
 
@@ -64,21 +64,19 @@ export default function Header({ name, moodToday, setMood, streak, onDictate, on
       <div style={styles.actions}>
         <BtnH icon={<Lightbulb size={16} />} label="Inspiration" onClick={onInspir} />
         <BtnH icon={<Search size={16} />}     label="Vocabulaire" onClick={onVocab} />
-        <BtnH icon={<Mic size={16} />}        label="Dicter vite" onClick={onDictate} />
-        <BtnH icon={<Radio size={16} />}       label="Raconter"    onClick={onRecit} />
+        <BtnH icon={<Mic size={16} />}        label="Dicter"      onClick={onDictate} />
         <BtnH icon={<BookOpen size={16} />}   label="Plan"        onClick={onPlan} />
         <BtnH icon={<Download size={16} />}   label="Exporter"    onClick={onExport} />
         <BtnH icon={<Settings size={16} />}   label="Réglages"    onClick={onSettings} />
-        {onLock && <BtnH icon={<LogOut size={16} />} label="Fermer la session" onClick={onLock} danger />}
       </div>
     </header>
   )
 }
 
-function BtnH({ icon, label, onClick, danger }) {
+function BtnH({ icon, label, onClick }) {
   return (
     <button
-      style={{ ...styles.hdrBtn, ...(danger ? styles.hdrBtnDanger : {}) }}
+      style={styles.hdrBtn}
       onClick={onClick}
       title={label}
       aria-label={label}
@@ -94,8 +92,8 @@ const styles = {
     height: 52,
     display: 'flex', alignItems: 'center',
     padding: '0 14px',
-    background: '#FFFEFB',
-    borderBottom: '1px solid #EDE7DE',
+    background: 'var(--paper)',
+    borderBottom: '1px solid var(--border-l)',
     gap: 12, flexShrink: 0,
     position: 'relative', zIndex: 10,
   },
@@ -103,27 +101,27 @@ const styles = {
   logoText: {
     fontFamily: "'Cormorant Garamond', serif",
     fontSize: '1.1rem', fontWeight: 600,
-    color: '#8B6445',
+    color: 'var(--brown)',
     letterSpacing: '.04em',
   },
   center: { flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 },
   moodBtn: {
     display: 'flex', alignItems: 'center', gap: 6,
     padding: '5px 14px',
-    background: '#FAF7F2',
-    border: '1.5px solid #EDE7DE',
+    background: 'var(--cream)',
+    border: '1.5px solid var(--border-l)',
     borderRadius: 20,
     fontSize: '.8rem', fontWeight: 600,
     fontFamily: "'Nunito', sans-serif",
-    color: '#2A1A0E', cursor: 'pointer',
+    color: 'var(--ink)', cursor: 'pointer',
     transition: 'all .18s',
   },
   moodLabel: { fontSize: '.78rem' },
   moodDrop: {
     position: 'absolute', top: '110%', left: '50%',
     transform: 'translateX(-50%)',
-    background: '#FFFEFB',
-    border: '1px solid #EDE7DE',
+    background: 'var(--paper)',
+    border: '1px solid var(--border-l)',
     borderRadius: 14,
     boxShadow: '0 8px 28px rgba(42,26,14,.14)',
     padding: '6px',
@@ -143,12 +141,12 @@ const styles = {
     fontFamily: "'Nunito', sans-serif",
     cursor: 'pointer',
     transition: 'all .15s',
-    color: '#2A1A0E',
+    color: 'var(--ink)',
   },
   moodOptAct: {
-    background: '#F7EFE3',
-    borderColor: '#E8D5B8',
-    color: '#8B6445',
+    background: 'var(--gold-ll)',
+    borderColor: 'var(--gold-l)',
+    color: 'var(--brown)',
   },
   streak: {
     padding: '4px 10px',
@@ -166,10 +164,9 @@ const styles = {
     borderRadius: 8,
     fontSize: '.75rem', fontWeight: 600,
     fontFamily: "'Nunito', sans-serif",
-    color: '#6B5A4E', cursor: 'pointer',
+    color: 'var(--ink-l)', cursor: 'pointer',
     transition: 'all .15s',
     whiteSpace: 'nowrap',
   },
   hdrBtnLbl: { '@media(maxWidth:1024px)': { display: 'none' } },
-  hdrBtnDanger: { color: '#9C5A4E' },
 }

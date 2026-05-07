@@ -49,7 +49,7 @@ export default function Sidebar({ chapters, currentId, setCurrentId, createChapt
       <div style={styles.list}>
         {chapters.length === 0 && (
           <div style={styles.empty}>
-            <BookOpen size={28} color="#DDD5C8" />
+            <BookOpen size={28} color="var(--border)" />
             <p>Commence ton premier chapitre</p>
             <button style={styles.firstBtn} onClick={createChapter}>
               + Nouveau chapitre
@@ -66,7 +66,7 @@ export default function Sidebar({ chapters, currentId, setCurrentId, createChapt
             }}
             onClick={() => setCurrentId(ch.id)}
           >
-            <GripVertical size={14} color="#DDD5C8" style={{ flexShrink: 0 }} />
+            <GripVertical size={14} color="var(--border)" style={{ flexShrink: 0 }} />
             <div style={styles.itemBody}>
               <div style={styles.itemTitle}>{ch.title || 'Sans titre'}</div>
               <div style={styles.itemMeta}>
@@ -95,8 +95,8 @@ const styles = {
   sb: {
     width: 220,
     flexShrink: 0,
-    background: '#FFFEFB',
-    borderRight: '1px solid #EDE7DE',
+    background: 'var(--paper)',
+    borderRight: '1px solid var(--border-l)',
     display: 'flex',
     flexDirection: 'column',
     overflow: 'hidden',
@@ -106,23 +106,23 @@ const styles = {
     alignItems: 'center',
     justifyContent: 'space-around',
     padding: '12px 8px',
-    borderBottom: '1px solid #EDE7DE',
-    background: '#FAF7F2',
+    borderBottom: '1px solid var(--border-l)',
+    background: 'var(--cream)',
   },
   stat:    { textAlign: 'center' },
-  statNum: { display: 'block', fontFamily: "'Cormorant Garamond', serif", fontSize: '1.15rem', fontWeight: 600, color: '#8B6445' },
-  statLbl: { fontSize: '.65rem', color: '#9C8878', textTransform: 'uppercase', letterSpacing: '.5px' },
-  statDiv: { width: 1, height: 28, background: '#EDE7DE' },
+  statNum: { display: 'block', fontFamily: "'Cormorant Garamond', serif", fontSize: '1.15rem', fontWeight: 600, color: 'var(--brown)' },
+  statLbl: { fontSize: '.65rem', color: 'var(--ink-ll)', textTransform: 'uppercase', letterSpacing: '.5px' },
+  statDiv: { width: 1, height: 28, background: 'var(--border-l)' },
   hdr: {
     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
     padding: '10px 12px 6px',
   },
-  hdrTitle: { fontSize: '.72rem', fontWeight: 800, color: '#9C8878', textTransform: 'uppercase', letterSpacing: '1px' },
+  hdrTitle: { fontSize: '.72rem', fontWeight: 800, color: 'var(--ink-ll)', textTransform: 'uppercase', letterSpacing: '1px' },
   addBtn: {
     width: 28, height: 28,
     borderRadius: 8,
     display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-    background: 'linear-gradient(135deg, #8B6445, #C4956A)',
+    background: 'linear-gradient(135deg, var(--brown), var(--gold))',
     color: '#fff',
     border: 'none', cursor: 'pointer',
     transition: 'filter .15s',
@@ -131,11 +131,11 @@ const styles = {
   empty: {
     display: 'flex', flexDirection: 'column', alignItems: 'center',
     gap: 10, padding: '32px 16px', textAlign: 'center',
-    color: '#9C8878', fontSize: '.82rem',
+    color: 'var(--ink-ll)', fontSize: '.82rem',
   },
   firstBtn: {
     padding: '8px 16px',
-    background: 'linear-gradient(135deg, #8B6445, #C4956A)',
+    background: 'linear-gradient(135deg, var(--brown), var(--gold))',
     color: '#fff',
     border: 'none', borderRadius: 10,
     fontSize: '.8rem', fontWeight: 700,
@@ -152,20 +152,20 @@ const styles = {
     marginBottom: 2,
   },
   itemActive: {
-    background: '#F7EFE3',
-    outline: '1.5px solid #E8D5B8',
+    background: 'var(--gold-ll)',
+    outline: '1.5px solid var(--gold-l)',
   },
   itemBody: { flex: 1, minWidth: 0 },
   itemTitle: {
     fontFamily: "'Lora', serif",
     fontSize: '.85rem', fontWeight: 500,
-    color: '#2A1A0E',
+    color: 'var(--ink)',
     whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
   },
-  itemMeta: { fontSize: '.67rem', color: '#9C8878', marginTop: 2 },
+  itemMeta: { fontSize: '.67rem', color: 'var(--ink-ll)', marginTop: 2 },
   delBtn: {
     background: 'none', border: 'none', cursor: 'pointer',
-    color: '#DDD5C8', padding: 3,
+    color: 'var(--border)', padding: 3,
     transition: 'color .15s',
     flexShrink: 0,
   },
