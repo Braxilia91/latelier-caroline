@@ -71,7 +71,7 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
         }
       }
     } catch (err) {
-      addMessage({ role: 'assistant', content: `❌ ${err.message}` })
+      addMessage({ role: 'assistant', content: mapCoachError(err) })
     } finally {
       setLoading(false); setStreaming('')
     }
@@ -145,6 +145,24 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
   }, [voiceOn])
 
   return { loading, streaming, voiceOn, toggleVoice, sendMessage, correctText, defineWord, findThread, expressDoubt, injectVrac, getDiscovery, getSynonyms, searchWord, startAkinator }
+}
+
+// ─── Humanisation des erreurs Léa ────────────────────────────
+function mapCoachError(err) {
+  const msg = (err?.message || '').toLowerCase()
+  if (!navigator.onLine || msg.includes('failed to fetch') || msg.includes('networkerror') || msg.includes('load failed')) {
+    return "Léa est hors ligne — tu peux continuer à écrire, elle reviendra bientôt 🌿"
+  }
+  if (msg.includes('401') || msg.includes('invalid') || msg.includes('authentication') || msg.includes('unauthorized') || msg.includes('x-api-key')) {
+    return "La clé API semble incorrecte — vérifie tes réglages ⚙️"
+  }
+  if (msg.includes('429') || msg.includes('rate_limit') || msg.includes('quota') || msg.includes('too many')) {
+    return "Léa a besoin d'un petit souffle — réessaie dans quelques instants ⏳"
+  }
+  if (msg.includes('500') || msg.includes('overloaded') || msg.includes('503') || msg.includes('service unavailable')) {
+    return "Le service est momentanément surchargé — réessaie dans un moment 🌿"
+  }
+  return "Léa n'a pas pu répondre — tu peux continuer à écrire, on réessaiera 🌿"
 }
 
 // ─── Voix navigateur fallback ─────────────────────────────────

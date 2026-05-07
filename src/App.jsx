@@ -177,6 +177,7 @@ function AppInner() {
         <CoachPanel
           coach={{ ...coach, clearChat: db.clearChat }}
           hasKey={!!db.apiKey}
+          isOnline={isOnline}
           currentChapter={db.currentChapter}
           chatHistory={db.chatHistory}
           welcomeMsg={buildWelcomeMessage({ name: db.name, leaMemory: db.leaMemory, currentChapter: db.currentChapter })}

@@ -22,8 +22,10 @@ export async function askClaude({ apiKey, systemPrompt, messages, maxTokens = 60
   })
 
   if (!response.ok) {
-    const err = await response.json().catch(() => ({}))
-    throw new Error(err.error?.message || `Erreur API ${response.status}`)
+    const err  = await response.json().catch(() => ({}))
+    const type = err.error?.type    || ''  // ex: "authentication_error", "overloaded_error"
+    const msg  = err.error?.message || ''  // ex: "invalid x-api-key"
+    throw new Error([type, msg].filter(Boolean).join(' ') || `Erreur API ${response.status}`)
   }
 
   // Streaming

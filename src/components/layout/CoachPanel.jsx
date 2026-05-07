@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { Send, Volume2, VolumeX, Trash2, Scissors, BookOpen, AlertCircle, Lightbulb } from 'lucide-react'
 import { LEA_COMMANDS } from '../../lib/commands'
 
-export default function CoachPanel({ coach, hasKey, currentChapter, chatHistory, welcomeMsg, onOpenVrac }) {
+export default function CoachPanel({ coach, hasKey, currentChapter, chatHistory, welcomeMsg, onOpenVrac, isOnline = true }) {
   const [input, setInput]       = useState('')
   const bottomRef               = useRef(null)
   const inputRef                = useRef(null)
@@ -119,7 +119,15 @@ export default function CoachPanel({ coach, hasKey, currentChapter, chatHistory,
       </div>
 
       {/* Input */}
-      {hasKey ? (
+      {!hasKey ? (
+        <div style={styles.noKey}>
+          <p>Ajoute ta clé API dans <strong>Réglages</strong> pour activer Léa.</p>
+        </div>
+      ) : !isOnline ? (
+        <div style={styles.offline}>
+          <p>🌿 Léa est hors ligne — ton écriture est sauvegardée localement.</p>
+        </div>
+      ) : (
         <div style={styles.inputWrap}>
           <textarea
             ref={inputRef}
@@ -135,10 +143,6 @@ export default function CoachPanel({ coach, hasKey, currentChapter, chatHistory,
           <button style={styles.sendBtn} onClick={handleSend} disabled={!input.trim() || loading}>
             <Send size={15} />
           </button>
-        </div>
-      ) : (
-        <div style={styles.noKey}>
-          <p>Ajoute ta clé API dans <strong>Réglages</strong> pour activer Léa.</p>
         </div>
       )}
     </aside>
@@ -262,6 +266,14 @@ const styles = {
     borderTop: '1px solid var(--border-l)',
     background: 'var(--gold-ll)',
     fontSize: '.78rem', color: 'var(--brown)', lineHeight: 1.5,
+    textAlign: 'center',
+  },
+  offline: {
+    padding: '10px 14px',
+    borderTop: '1px solid var(--border-l)',
+    background: '#FEF3E2',
+    border: '1px solid #F5C97A',
+    fontSize: '.78rem', color: '#92400E', lineHeight: 1.5,
     textAlign: 'center',
   },
 }
