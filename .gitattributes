@@ -1,0 +1,37 @@
+# Normalisation des fins de ligne — L'Atelier Caroline
+# Référence : https://docs.github.com/en/get-started/git-basics/configuring-git-to-handle-line-endings
+
+# Règle globale : détection auto
+* text=auto
+
+# Fichiers source → toujours LF dans le repo
+*.js   text eol=lf
+*.jsx  text eol=lf
+*.ts   text eol=lf
+*.tsx  text eol=lf
+*.json text eol=lf
+*.md   text eol=lf
+*.html text eol=lf
+*.css  text eol=lf
+*.yml  text eol=lf
+*.yaml text eol=lf
+*.sh   text eol=lf
+*.toml text eol=lf
+*.txt  text eol=lf
+
+# Fichiers Windows → CRLF autorisé
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
+*.ps1  text eol=crlf
+
+# Binaires → jamais normalisés
+*.png    binary
+*.jpg    binary
+*.jpeg   binary
+*.ico    binary
+*.mp3    binary
+*.woff   binary
+*.woff2  binary
+*.ttf    binary
+*.eot    binary
+*.otf    binary
