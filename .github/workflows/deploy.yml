@@ -1,0 +1,16 @@
+name: Deploy to Cloudflare Pages
+
+on:
+  push:
+      branches: [main]
+
+      jobs:
+        deploy:
+            runs-on: ubuntu-latest
+                steps:
+                      - name: Trigger Cloudflare Pages build
+                              run: |
+                                        curl -s -X POST "${{ secrets.CLOUDFLARE_BUILD_HOOK }}" \
+                                                    --fail \
+                                                                --write-out "\n%{http_code}" \
+                                                                            | tail -1 | grep -E '^2' && echo "Build triggered" || (echo "Build hook failed" && exit 1)
