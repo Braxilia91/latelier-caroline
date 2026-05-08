@@ -30,9 +30,9 @@ describe('buildSynonymPrompt', () => {
     expect(prompt).toContain('mélancolie')
   })
 
-  it('contient le niveau de registre', () => {
-    const prompt = buildSynonymPrompt({ word: 'joie', sentence: '', level: 'populaire' })
-    expect(prompt).toContain('populaire')
+  it('contient une note sur le niveau de registre (simple → courant)', () => {
+    const prompt = buildSynonymPrompt({ word: 'joie', sentence: '', level: 'simple' })
+    expect(prompt).toContain('courant')
   })
 
   it('intègre la phrase contextuelle quand fournie', () => {
@@ -111,6 +111,7 @@ describe('buildAkinatorSoftPrompt', () => {
     const prompt = buildAkinatorSoftPrompt({ nature: 'sensation', registre: 'courant', contexte: '' })
     expect(typeof prompt).toBe('string')
     expect(prompt.length).toBeGreaterThan(20)
+    // Le prompt doit mettre "non précisé" pour les champs manquants
     expect(prompt).toContain('non précisé')
   })
 
@@ -138,13 +139,18 @@ describe('buildPredictivePrompt', () => {
   it('contient (une partie du) texte du chapitre', () => {
     const content = 'Je me souviens d\u2019un été brûlant dans la cour de la maison.'
     const prompt = buildPredictivePrompt(content)
+    // Le prompt tronque à 1000 chars — notre texte court doit y être intégralement
     expect(prompt).toContain('été brûlant')
   })
 
-  it('tronque les chapitres très longs à 1000 caractères max', () => {
+  it('tronque les chapitres très longs — contenu limité à 1000 chars', () => {
     const long = 'A'.repeat(2000)
     const prompt = buildPredictivePrompt(long)
-    expect(prompt.length).toBeLessThan(1500)
+    // Le prompt inclut 1000 chars de contenu + ~614 chars de texte statique = ~1614
+    // On vérifie que le contenu n'est PAS passé intégralement (2000 A)
+    expect(prompt).not.toContain('A'.repeat(1001))
+    // Et que la taille totale reste raisonnable (< 1800 avec marge)
+    expect(prompt.length).toBeLessThan(1800)
   })
 
   it('est une string non-vide avec contenu vide', () => {
@@ -185,6 +191,7 @@ describe('buildDiscoveryPrompt', () => {
 
   it('contient une référence à l\u2019autobiographie ou au contexte', () => {
     const prompt = buildDiscoveryPrompt('Elle avait les yeux clairs.')
+    // Le prompt doit mentionner Caroline ou l'autobiographie — vérifier un mot clé métier
     const lower = prompt.toLowerCase()
     const hasMention = lower.includes('caroline') || lower.includes('autobio') || lower.includes('mot') || lower.includes('écriture')
     expect(hasMention).toBe(true)
