@@ -1,7 +1,12 @@
 import { useState } from 'react'
 import { Plus, BookOpen, Trash2, GripVertical } from 'lucide-react'
 
-export default function Sidebar({ chapters, currentId, setCurrentId, createChapter, removeChapter, totalWords, streak }) {
+export default function Sidebar({
+  chapters, currentId, setCurrentId,
+  createChapter, removeChapter,
+  totalWords, streak,
+  isMobile, isOpen, onClose,
+}) {
 
   const [confirmDel, setConfirmDel] = useState(null)
 
@@ -15,10 +20,32 @@ export default function Sidebar({ chapters, currentId, setCurrentId, createChapt
     }
   }
 
+  const handleSelectChapter = (id) => {
+    setCurrentId(id)
+    if (isMobile && isOpen) onClose()
+  }
+
+  const handleCreateChapter = () => {
+    createChapter()
+    if (isMobile && isOpen) onClose()
+  }
+
   const wordCount = (text) => text?.split(/\s+/).filter(Boolean).length ?? 0
 
+  // Style calculé selon mode (desktop inline / mobile drawer fixed)
+  const computedStyle = isMobile
+    ? {
+        ...styles.sbBase,
+        ...styles.sbMobile,
+        transform: isOpen ? 'translateX(0)' : 'translateX(-100%)',
+      }
+    : {
+        ...styles.sbBase,
+        ...styles.sbDesktop,
+      }
+
   return (
-    <aside style={styles.sb}>
+    <aside style={computedStyle}>
       {/* Stats */}
       <div style={styles.stats}>
         <div style={styles.stat}>
@@ -40,7 +67,7 @@ export default function Sidebar({ chapters, currentId, setCurrentId, createChapt
       {/* Header */}
       <div style={styles.hdr}>
         <span style={styles.hdrTitle}>Mes chapitres</span>
-        <button style={styles.addBtn} onClick={createChapter} title="Nouveau chapitre">
+        <button style={styles.addBtn} onClick={handleCreateChapter} title="Nouveau chapitre">
           <Plus size={16} />
         </button>
       </div>
@@ -51,7 +78,7 @@ export default function Sidebar({ chapters, currentId, setCurrentId, createChapt
           <div style={styles.empty}>
             <BookOpen size={28} color="var(--border)" />
             <p>Commence ton premier chapitre</p>
-            <button style={styles.firstBtn} onClick={createChapter}>
+            <button style={styles.firstBtn} onClick={handleCreateChapter}>
               + Nouveau chapitre
             </button>
           </div>
@@ -64,7 +91,7 @@ export default function Sidebar({ chapters, currentId, setCurrentId, createChapt
               ...styles.item,
               ...(ch.id === currentId ? styles.itemActive : {}),
             }}
-            onClick={() => setCurrentId(ch.id)}
+            onClick={() => handleSelectChapter(ch.id)}
           >
             <GripVertical size={14} color="var(--border)" style={{ flexShrink: 0 }} />
             <div style={styles.itemBody}>
@@ -92,14 +119,26 @@ export default function Sidebar({ chapters, currentId, setCurrentId, createChapt
 }
 
 const styles = {
-  sb: {
-    width: 220,
-    flexShrink: 0,
+  sbBase: {
     background: 'var(--paper)',
     borderRight: '1px solid var(--border-l)',
     display: 'flex',
     flexDirection: 'column',
     overflow: 'hidden',
+  },
+  sbDesktop: {
+    width: 220,
+    flexShrink: 0,
+  },
+  sbMobile: {
+    position: 'fixed',
+    top: 52,
+    bottom: 0,
+    left: 0,
+    width: 280,
+    zIndex: 100,
+    transition: 'transform 0.25s ease-out',
+    boxShadow: '4px 0 16px rgba(0,0,0,0.1)',
   },
   stats: {
     display: 'flex',
