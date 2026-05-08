@@ -366,3 +366,40 @@ export const INSPIRATION_PROMPTS = [
   { cat: 'Liberté', q: "Y a-t-il quelque chose que tu fais aujourd'hui qui aurait surpris la version de toi d'il y a dix ans ?" },
   { cat: 'Liberté', q: "Qu'est-ce que tu as appris à dire non — et qu'est-ce que ce non t'a ouvert ?" },
 ]
+
+
+// ─── DicoCaro — Akinator Soft (formulaire guidé → mot) ────────
+export function buildAkinatorSoftPrompt({ nature, mouvement, registre, contexte }) {
+  return `Caroline cherche un mot précis. Voici ses indices :
+- Nature du concept : ${nature}
+- Implique du mouvement ou une action : ${mouvement || 'non précisé'}
+- Registre visé : ${registre || 'courant'}
+- Contexte ou phrase : "${contexte?.trim() || 'non précisé'}"
+
+À partir de ces indices, propose 3 mots ou expressions qui correspondent.
+Pour chaque mot :
+1. Le mot
+2. Pourquoi il correspond à ces indices — 1 phrase
+3. Un exemple dans une phrase autobiographique
+
+Commence directement par les propositions, sans introduction.
+Ton : précis, chaleureux, jamais condescendant.`
+}
+
+// ─── DicoCaro — Prédictif (mots que Caroline va peut-être chercher) ─
+export function buildPredictivePrompt(chapterContent) {
+  return `Voici ce que Caroline est en train d'écrire dans son autobiographie :
+
+"${(chapterContent || '').slice(0, 1000)}"
+
+En lisant son texte, anticipe les mots ou expressions qu'elle pourrait bientôt avoir besoin.
+Cherche : des nuances d'émotions qu'elle ébauche, des verbes de sensation qui manquent, des mots pour préciser ce qu'elle évoque.
+
+Propose 6 mots utiles, répartis en 3 catégories :
+🎭 Émotions & nuances (2 mots)
+🌊 Sensations & mouvement (2 mots)
+🖊️ Style & précision (2 mots)
+
+Pour chaque mot : le mot + 1 ligne d'explication simple + 1 exemple dans une phrase personnelle.
+Ton : léger, curieux, jamais magistral. Une trouvaille, pas une leçon.`
+}
