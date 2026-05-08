@@ -1,18 +1,21 @@
 import { useState, useRef, useEffect } from 'react'
-import { Send, Volume2, VolumeX, Trash2, Scissors, BookOpen, AlertCircle, Lightbulb } from 'lucide-react'
+import { Send, Volume2, VolumeX, Trash2, Scissors, BookOpen, AlertCircle, Lightbulb, Play, Pause, Square } from 'lucide-react'
 import { LEA_COMMANDS } from '../../lib/commands'
 
 export default function CoachPanel({
   coach, hasKey, currentChapter, chatHistory, welcomeMsg, onOpenVrac,
   isOnline = true,
-  // ── Mobile drawer ──
   isMobile, isOpen, onClose,
 }) {
-  const [input, setInput]       = useState('')
-  const bottomRef               = useRef(null)
-  const inputRef                = useRef(null)
+  const [input, setInput] = useState('')
+  const bottomRef = useRef(null)
+  const inputRef = useRef(null)
 
-  const { loading, streaming, voiceOn, toggleVoice, sendMessage, findThread, expressDoubt } = coach
+  const {
+    loading, streaming, voiceOn, toggleVoice, sendMessage,
+    findThread, expressDoubt,
+    ttsState, ttsPlay, ttsPause, ttsStop, ttsSetSpeed,
+  } = coach
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -29,6 +32,9 @@ export default function CoachPanel({
     if (!currentChapter?.content) return
     await findThread(currentChapter.content)
   }
+
+  const playerVisible = voiceOn && (ttsState?.playing || ttsState?.paused)
+  const SPEEDS = [0.75, 1.0, 1.25, 1.5]
 
   // Style calculé selon mode (desktop inline / mobile drawer fixed slide-right)
   const computedStyle = isMobile
@@ -97,6 +103,43 @@ export default function CoachPanel({
         )}
         <div ref={bottomRef} />
       </div>
+
+      {/* Player TTS — visible quand voix active et audio en cours */}
+      {playerVisible && (
+        <div style={styles.player}>
+          <button
+            style={styles.playerBtn}
+            onClick={ttsState?.paused ? ttsPlay : ttsPause}
+            title={ttsState?.paused ? 'Reprendre' : 'Pause'}
+            aria-label={ttsState?.paused ? 'Reprendre' : 'Pause'}
+          >
+            {ttsState?.paused ? <Play size={13} /> : <Pause size={13} />}
+          </button>
+          <button
+            style={styles.playerBtn}
+            onClick={ttsStop}
+            title="Stop"
+            aria-label="Stop"
+          >
+            <Square size={12} />
+          </button>
+          <div style={styles.speedGroup}>
+            {SPEEDS.map(s => (
+              <button
+                key={s}
+                style={{
+                  ...styles.speedBtn,
+                  ...(ttsState?.speed === s ? styles.speedBtnActive : {}),
+                }}
+                onClick={() => ttsSetSpeed(s)}
+                title={`Vitesse ${s}x`}
+              >
+                {s}×
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Raccourcis */}
       <div style={styles.shortcuts}>
@@ -192,7 +235,7 @@ const styles = {
     background: 'var(--cream)',
   },
   hdrTitle: { fontFamily: "'Cormorant Garamond', serif", fontSize: '1.05rem', fontWeight: 600, color: 'var(--brown)' },
-  hdrSub:   { fontSize: '.67rem', color: 'var(--ink-ll)', marginTop: 1 },
+  hdrSub: { fontSize: '.67rem', color: 'var(--ink-ll)', marginTop: 1 },
   iconBtn: {
     width: 28, height: 28,
     borderRadius: 8,
@@ -216,7 +259,7 @@ const styles = {
     fontSize: '.82rem', color: 'var(--ink-l)', lineHeight: 1.6,
   },
   userMsg: { display: 'flex', justifyContent: 'flex-end' },
-  leaMsg:  { display: 'flex', gap: 8, alignItems: 'flex-start' },
+  leaMsg: { display: 'flex', gap: 8, alignItems: 'flex-start' },
   userBubble: {
     background: 'linear-gradient(135deg, var(--brown), var(--gold))',
     color: '#fff', borderRadius: '14px 14px 4px 14px',
@@ -241,6 +284,44 @@ const styles = {
     fontFamily: "'Cormorant Garamond', serif",
     fontSize: '.9rem', fontWeight: 600, flexShrink: 0,
   },
+  // ── Player TTS ───────────────────────────────────────────────
+  player: {
+    display: 'flex', alignItems: 'center', gap: 6,
+    padding: '6px 10px',
+    borderTop: '1px solid var(--border-l)',
+    background: 'var(--gold-ll)',
+  },
+  playerBtn: {
+    width: 28, height: 28,
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+    background: 'var(--paper)',
+    border: '1.5px solid var(--border-l)',
+    borderRadius: 8,
+    color: 'var(--brown)',
+    cursor: 'pointer',
+    transition: 'all .15s',
+    flexShrink: 0,
+  },
+  speedGroup: {
+    display: 'flex', gap: 3, marginLeft: 'auto',
+  },
+  speedBtn: {
+    padding: '3px 7px',
+    background: 'var(--paper)',
+    border: '1.5px solid var(--border-l)',
+    borderRadius: 6,
+    fontSize: '.66rem', fontWeight: 700,
+    fontFamily: "'Nunito', sans-serif",
+    color: 'var(--ink-l)',
+    cursor: 'pointer',
+    transition: 'all .15s',
+  },
+  speedBtnActive: {
+    background: 'var(--brown)',
+    border: '1.5px solid var(--brown)',
+    color: '#fff',
+  },
+  // ── Raccourcis ─────────────────────────────────────────────
   shortcuts: {
     display: 'flex', flexWrap: 'wrap', gap: 5, padding: '6px 10px',
     borderTop: '1px solid var(--border-l)',
