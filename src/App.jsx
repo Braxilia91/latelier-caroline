@@ -1,10 +1,9 @@
 import { useState, useCallback, useEffect, useRef, lazy, Suspense } from 'react'
 import './styles/globals.css'
-
 import { useAppState }             from './hooks/useDB'
 import { useCoach }                from './hooks/useCoach'
+import { useMediaQuery }           from './hooks/useMediaQuery'
 import { ToastProvider, useToast } from './components/ui/Toast'
-
 import { buildWelcomeMessage } from './lib/prompts'
 
 // ── Imports critiques (chemin de rendu initial) ──────────────────
@@ -70,11 +69,15 @@ function AppSkeleton() {
 function AppInner() {
   const toast = useToast()
   const db    = useAppState()
+
   const [modal,        setModal]       = useState(null)
   const [moodOpen,     setMoodOpen]    = useState(false)
   const [ambientOpen,  setAmbientOpen] = useState(false)
   const [showPack,     setShowPack]    = useState(false)
   const [isOnline,     setIsOnline]    = useState(navigator.onLine)
+  const [sidebarOpen,  setSidebarOpen] = useState(false)
+
+  const isMobile = useMediaQuery('(max-width: 767px)')
 
   // ── Ambiance sonore ─────────────────────────────────────────────
   const audioRef        = useRef(null)
@@ -146,6 +149,21 @@ function AppInner() {
     if (db.editorTheme) document.documentElement.setAttribute('data-theme', db.editorTheme)
   }, [db.editorTheme])
 
+  // ── Reset drawer mobile au resize desktop ───────────────────────
+  useEffect(() => {
+    if (!isMobile) setSidebarOpen(false)
+  }, [isMobile])
+
+  // ── Escape ferme le drawer mobile ───────────────────────────────
+  useEffect(() => {
+    if (!sidebarOpen) return
+    const handler = (e) => {
+      if (e.key === 'Escape') setSidebarOpen(false)
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [sidebarOpen])
+
   // ── Coach Léa ────────────────────────────────────────────────────
   const coach = useCoach({
     apiKey: db.apiKey, openAiKey: db.openAiKey,
@@ -207,7 +225,6 @@ function AppInner() {
   }, [db.ready]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!db.ready) return <AppSkeleton />
-
   if (!db.isSetup) return <Onboarding onComplete={handleSetupComplete} />
 
   return (
@@ -225,12 +242,18 @@ function AppInner() {
         onVolumeChange={handleVolumeChange}
         ambientOpen={ambientOpen}
         setAmbientOpen={setAmbientOpen}
+        isMobile={isMobile}
+        onMenuClick={() => setSidebarOpen(true)}
       />
+
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
         <Sidebar
           chapters={db.chapters} currentId={db.currentId} setCurrentId={db.setCurrentId}
           createChapter={db.createChapter} removeChapter={handleRemoveChapter}
           totalWords={db.totalWords} streak={db.streak}
+          isMobile={isMobile}
+          isOpen={sidebarOpen}
+          onClose={() => setSidebarOpen(false)}
         />
         <WritingArea
           chapter={db.currentChapter} updateChapter={db.updateChapter}
@@ -247,6 +270,22 @@ function AppInner() {
           onOpenVrac={() => setModal('vrac')}
         />
       </div>
+
+      {/* ── Backdrop drawer mobile ─────────────────────────────── */}
+      {isMobile && sidebarOpen && (
+        <div
+          onClick={() => setSidebarOpen(false)}
+          style={{
+            position: 'fixed',
+            top: 52, left: 0, right: 0, bottom: 0,
+            background: 'rgba(0,0,0,0.4)',
+            zIndex: 99,
+            transition: 'opacity .25s',
+          }}
+          aria-label="Fermer le panneau"
+          role="button"
+        />
+      )}
 
       {/* ── Modaux lazy — chargés uniquement à la première ouverture ── */}
       <Suspense fallback={null}>
@@ -309,7 +348,6 @@ function AppInner() {
         }} />
         {isOnline ? 'En ligne' : 'Hors ligne — sauvegardé localement'}
       </div>
-
     </div>
   )
 }
