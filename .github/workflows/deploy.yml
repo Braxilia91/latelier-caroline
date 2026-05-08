@@ -7,19 +7,32 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      deployments: write
     steps:
-      - name: Trigger Cloudflare Pages deployment via API
-        run: |
-          HTTP_STATUS=$(curl -s -o /tmp/cf_response.json -w "%{http_code}" \
-            -X POST \
-            "https://api.cloudflare.com/client/v4/accounts/ad277d19b37865f39bad4ced32f38b42/pages/projects/latelier-caroline/deployments" \
-            -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" \
-            -H "Content-Type: application/json" \
-            -d '{"branch":"main"}')
-          cat /tmp/cf_response.json
-          if [ "$HTTP_STATUS" -ge 200 ] && [ "$HTTP_STATUS" -lt 300 ]; then
-            echo "Deploy triggered successfully (HTTP $HTTP_STATUS)"
-          else
-            echo "Deploy failed (HTTP $HTTP_STATUS)"
-            exit 1
-          fi
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install --legacy-peer-deps
+
+      - name: Build
+        run: npm run build
+        env:
+          VITE_SYNC_WORKER_URL: ${{ secrets.VITE_SYNC_WORKER_URL }}
+
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/pages-action@v1
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ad277d19b37865f39bad4ced32f38b42
+          projectName: latelier-caroline
+          directory: dist
+          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
