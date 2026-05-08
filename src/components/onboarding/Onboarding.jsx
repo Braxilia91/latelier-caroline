@@ -204,12 +204,12 @@ export default function Onboarding({ onComplete }) {
             )}
             <p style={S.label}>
               <Key size={12} style={{ marginRight: 4, verticalAlign: -1 }} />
-              Clé d'accès à Léa <span style={S.optional}>(optionnel)</span>
+              Mot de passe Léa
             </p>
-            <input style={S.input} type="password" placeholder="Clé API ou mot de passe…"
+            <input style={S.input} type="password" placeholder="Le mot que Mourad t'a donné…"
               value={apiKey} onChange={e => setApiKey(e.target.value)} />
-            <p style={S.hint}>Sans clé, tu peux écrire librement — Léa sera silencieuse. À ajouter plus tard dans les Réglages.</p>
-            <div style={S.privacyBox}><p style={S.privacyTxt}>🔒 Tout reste sur ton appareil. Rien n'est envoyé ailleurs.</p></div>
+            <p style={S.hint}>Ce mot active Léa. Sans lui, tu peux écrire mais Léa restera silencieuse.</p>
+            <div style={S.privacyBox}><p style={S.privacyTxt}>🔒 Tes textes restent sur ton appareil. Léa répond via un serveur sécurisé.</p></div>
             <button style={{ ...S.btn, opacity: name.trim() ? 1 : .45 }}
               disabled={!name.trim() || loading} onClick={handleComplete}>
               {loading ? "Ouverture de l'atelier…" : 'Ouvrir mon atelier →'}
