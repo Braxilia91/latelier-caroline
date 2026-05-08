@@ -1,4 +1,4 @@
-import { Feather, Mic, BookOpen, Download, Settings, Lightbulb, Search, Music, Menu } from 'lucide-react'
+import { Feather, Mic, BookOpen, Download, Settings, Lightbulb, Search, Music, Menu, Leaf } from 'lucide-react'
 
 const MOODS = [
   { value: 'joyeuse',     emoji: '☀️', label: 'Belle humeur' },
@@ -21,15 +21,20 @@ export default function Header({
   name, moodToday, setMood, streak,
   onDictate, onPlan, onExport, onSettings, onInspir, onVocab,
   moodOpen, setMoodOpen,
+  // ── Ambiance ──
   ambientSound, ambientPlaying, onAmbientChange,
   ambientVolume, onVolumeChange,
   ambientOpen, setAmbientOpen,
-  isMobile, onMenuClick,
+  // ── Mobile drawers ──
+  isMobile, onMenuClick, onCoachClick,
 }) {
+
   const currentMood = MOODS.find(m => m.value === moodToday)
 
   return (
     <header style={styles.hdr}>
+
+      {/* Bouton hamburger mobile (Sidebar) */}
       {isMobile && (
         <button
           style={styles.menuBtn}
@@ -41,11 +46,13 @@ export default function Header({
         </button>
       )}
 
+      {/* Logo */}
       <div style={styles.logo}>
         <Feather size={18} color="var(--gold)" />
         <span style={styles.logoText}>L'Atelier</span>
       </div>
 
+      {/* Centre — humeur + streak */}
       <div style={styles.center}>
         <div style={{ position: 'relative' }}>
           <button
@@ -84,14 +91,16 @@ export default function Header({
         )}
       </div>
 
+      {/* Actions droite */}
       <div style={styles.actions}>
         <BtnH icon={<Lightbulb size={16} />} label="Inspiration" onClick={onInspir} />
-        <BtnH icon={<Search size={16} />} label="Vocabulaire" onClick={onVocab} />
-        <BtnH icon={<Mic size={16} />} label="Dicter" onClick={onDictate} />
-        <BtnH icon={<BookOpen size={16} />} label="Plan" onClick={onPlan} />
-        <BtnH icon={<Download size={16} />} label="Exporter" onClick={onExport} />
-        <BtnH icon={<Settings size={16} />} label="Réglages" onClick={onSettings} />
+        <BtnH icon={<Search size={16} />}     label="Vocabulaire" onClick={onVocab} />
+        <BtnH icon={<Mic size={16} />}        label="Dicter"      onClick={onDictate} />
+        <BtnH icon={<BookOpen size={16} />}   label="Plan"        onClick={onPlan} />
+        <BtnH icon={<Download size={16} />}   label="Exporter"    onClick={onExport} />
+        <BtnH icon={<Settings size={16} />}   label="Réglages"    onClick={onSettings} />
 
+        {/* ── Ambiance sonore ── */}
         <div style={{ position: 'relative' }}>
           <button
             style={{
@@ -134,9 +143,7 @@ export default function Header({
                 <span style={styles.volLbl}>Volume</span>
                 <input
                   type="range"
-                  min={0}
-                  max={1}
-                  step={0.01}
+                  min={0} max={1} step={0.01}
                   value={ambientVolume}
                   onChange={e => onVolumeChange(parseFloat(e.target.value))}
                   style={styles.volSlider}
@@ -148,6 +155,18 @@ export default function Header({
           )}
         </div>
       </div>
+
+      {/* Bouton Léa mobile (CoachPanel) */}
+      {isMobile && (
+        <button
+          style={styles.coachBtn}
+          onClick={onCoachClick}
+          title="Léa"
+          aria-label="Ouvrir le panneau de Léa"
+        >
+          <Leaf size={20} />
+        </button>
+      )}
     </header>
   )
 }
@@ -183,6 +202,17 @@ const styles = {
     border: '1.5px solid var(--border-l)',
     borderRadius: 8,
     color: 'var(--ink)',
+    cursor: 'pointer',
+    transition: 'all .15s',
+    flexShrink: 0,
+  },
+  coachBtn: {
+    width: 36, height: 36,
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+    background: 'transparent',
+    border: '1.5px solid var(--sage-l)',
+    borderRadius: 8,
+    color: 'var(--sage)',
     cursor: 'pointer',
     transition: 'all .15s',
     flexShrink: 0,
@@ -273,6 +303,7 @@ const styles = {
     background: '#6B8F71',
     display: 'inline-block',
   },
+  // ── Ambient dropdown ────────────────────────────────────────
   ambientDrop: {
     position: 'absolute', top: '110%', right: 0,
     background: 'var(--paper)',
