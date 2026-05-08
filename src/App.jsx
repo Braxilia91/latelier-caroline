@@ -200,47 +200,4 @@ function AppInner() {
     if (syncToken   !== undefined) await db.setSyncToken(syncToken)
     if (editorFont  !== undefined) await db.setEditorFont(editorFont)
     if (editorTheme !== undefined) await db.setEditorTheme(editorTheme)
-    if (editorWidth !== undefined) await db.setEditorWidth(editorWidth)
-    toast('Réglages sauvegardés ✓', 'success')
-  }
-
-  const handleInsertDictation = useCallback((text) => {
-    if (!db.currentChapter) return
-    const newContent = (db.currentChapter.content || '') + (db.currentChapter.content ? ' ' : '') + text
-    db.updateChapter(db.currentId, { content: newContent })
-    toast('Texte inséré ✓', 'success')
-  }, [db])
-
-  // ── Undo suppression de chapitre via toast ──────────────────────
-  const handleRemoveChapter = useCallback((id) => {
-    const chapter = db.chapters.find(c => c.id === id)
-    if (!chapter) {
-      db.removeChapter(id)
-      return
-    }
-    db.removeChapter(id)
-    toast(`Chapitre "${chapter.title || 'sans titre'}" supprimé`, 'info', 4000, {
-      label: 'Annuler',
-      fn: () => {
-        db.restoreChapter(chapter)
-        toast('Chapitre restauré ✓', 'success')
-      },
-    })
-  }, [db, toast])
-
-  // ── Auto-sync silencieux au démarrage ─────────────────────────
-  useEffect(() => {
-    if (db.ready && db.syncToken && import.meta.env.VITE_SYNC_WORKER_URL) {
-      db.syncNow()
-    }
-  }, [db.ready]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  if (!db.ready) return <AppSkeleton />
-  if (!db.isSetup) return <Onboarding onComplete={handleSetupComplete} />
-
-  return (
-    <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-      <Header
-        name={db.name} moodToday={db.moodToday} setMood={db.setMood}
-        streak={db.streak} moodOpen={moodOpen} setMoodOpen={setMoodOpen}
-        onDictate={() => setModal('
+    if (editorWidth 
