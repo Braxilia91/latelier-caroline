@@ -1,10 +1,5 @@
 import { useState, useEffect } from 'react'
 
-// ── Séquence de la scène ──────────────────────────────────────────
-// Phase 0 (0 ms)     : "Caroline…" — typewriter
-// Phase 1 (+1 500 ms): sous-titre "Ton frère t'a préparé quelque chose."
-// Phase 2 (+3 000 ms): texte principal + CTA
-
 const MAIN_TEXT = [
   "Cet atelier, c'est pour toi.",
   "Pour que tu puisses écrire ta vie,",
@@ -17,7 +12,6 @@ const MAIN_TEXT = [
   "Alors… par où est-ce que tu veux commencer ?",
 ]
 
-// Typewriter hook
 function useTypewriter(text, active, speed = 60) {
   const [displayed, setDisplayed] = useState('')
   useEffect(() => {
@@ -35,26 +29,22 @@ function useTypewriter(text, active, speed = 60) {
 }
 
 export default function PackOpeningModal({ onClose }) {
-  const [phase, setPhase] = useState(0)  // 0 | 1 | 2
+  const [phase, setPhase] = useState(0)
   const [p2Vis, setP2Vis] = useState(false)
-
   const nameTyped = useTypewriter('Caroline…', phase >= 0, 70)
 
   useEffect(() => {
     const t1 = setTimeout(() => setPhase(1), 1500)
     const t2 = setTimeout(() => setPhase(2), 3200)
-    const t3 = setTimeout(() => setP2Vis(true), 3600)  // fade-in texte principal
+    const t3 = setTimeout(() => setP2Vis(true), 3600)
     return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3) }
   }, [])
 
   return (
     <div style={S.overlay}>
-      {/* Particules de lumière (CSS pur) */}
       <div style={S.glow} />
 
       <div style={S.content}>
-
-        {/* Phase 0 + 1 : nom + sous-titre */}
         <div style={{ ...S.intro, opacity: phase < 2 ? 1 : 0, transition: 'opacity .8s ease' }}>
           <p style={S.name}>{nameTyped}</p>
           <p style={{ ...S.subtitle, opacity: phase >= 1 ? 1 : 0, transition: 'opacity .6s ease' }}>
@@ -62,7 +52,6 @@ export default function PackOpeningModal({ onClose }) {
           </p>
         </div>
 
-        {/* Phase 2 : texte principal */}
         <div style={{ ...S.mainBlock, opacity: p2Vis ? 1 : 0, transition: 'opacity 1.2s ease' }}>
           <div style={S.ornament}>✦</div>
           <div style={S.mainText}>
@@ -78,7 +67,6 @@ export default function PackOpeningModal({ onClose }) {
             Entrer dans mon atelier ✨
           </button>
         </div>
-
       </div>
     </div>
   )
@@ -86,11 +74,14 @@ export default function PackOpeningModal({ onClose }) {
 
 const S = {
   overlay: {
-    position: 'fixed', inset: 0,
+    position: 'fixed',
+    inset: 0,
     background: '#0F0A05',
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
     zIndex: 9999,
     padding: 24,
+    overflowY: 'auto',
+    display: 'flex',
+    flexDirection: 'column',
   },
   glow: {
     position: 'absolute',
@@ -105,9 +96,8 @@ const S = {
     width: '100%',
     textAlign: 'center',
     display: 'flex', flexDirection: 'column', alignItems: 'center',
+    margin: 'auto',
   },
-
-  // Phases 0-1
   intro: {
     position: 'absolute',
     display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16,
@@ -127,8 +117,6 @@ const S = {
     color: '#9C8060',
     margin: 0,
   },
-
-  // Phase 2
   mainBlock: {
     display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 24,
     paddingTop: 8,
