@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { ArrowRight, Feather, Key } from 'lucide-react'
 
-// ─── Réactions de Léa par question ────────────────────────────
 const LEA_REACTIONS = {
   topic: {
     'Enfance & famille':   "La famille, les origines... c'est là que tout commence pour la plupart d'entre nous. Tu as sûrement des choses précieuses à raconter.",
@@ -82,7 +81,6 @@ export default function Onboarding({ onComplete }) {
   return (
     <div style={S.bg}>
       <div style={S.card}>
-
         <div style={S.header}>
           <div style={S.featherWrap}><Feather size={28} color="#C4956A" /></div>
           <p style={S.ornament}>✦ · ✦ · ✦</p>
@@ -90,7 +88,6 @@ export default function Onboarding({ onComplete }) {
           <p style={S.subtitle}>Mon Histoire</p>
         </div>
 
-        {/* Réaction Léa (transition) */}
         {reaction && (
           <div style={S.leaReact}>
             <div style={S.avatar}>L</div>
@@ -98,7 +95,6 @@ export default function Onboarding({ onComplete }) {
           </div>
         )}
 
-        {/* WELCOME */}
         {!reaction && step === 'welcome' && (
           <div style={S.body}>
             <p style={S.bigMsg}>Bonjour. Je m'appelle <strong>Léa</strong>.</p>
@@ -108,7 +104,6 @@ export default function Onboarding({ onComplete }) {
           </div>
         )}
 
-        {/* NOM */}
         {!reaction && step === 'name' && (
           <div style={S.body}>
             <div style={S.leaQ}><div style={S.avatar}>L</div><p style={S.leaItalic}>Comment tu t'appelles ?</p></div>
@@ -123,7 +118,6 @@ export default function Onboarding({ onComplete }) {
           </div>
         )}
 
-        {/* Q1 */}
         {!reaction && step === 'q1' && (
           <div style={S.body}>
             <div style={S.leaQ}>
@@ -134,7 +128,6 @@ export default function Onboarding({ onComplete }) {
           </div>
         )}
 
-        {/* Q1 libre */}
         {!reaction && step === 'q1libre' && (
           <div style={S.body}>
             <div style={S.leaQ}><div style={S.avatar}>L</div><p style={S.leaItalic}>Dis-moi en quelques mots ce que tu veux raconter.</p></div>
@@ -149,7 +142,6 @@ export default function Onboarding({ onComplete }) {
           </div>
         )}
 
-        {/* Q2 */}
         {!reaction && step === 'q2' && (
           <div style={S.body}>
             <div style={S.leaQ}><div style={S.avatar}>L</div><p style={S.leaItalic}>Qu'est-ce qui te fait peur dans l'idée d'écrire ?</p></div>
@@ -157,7 +149,6 @@ export default function Onboarding({ onComplete }) {
           </div>
         )}
 
-        {/* Q3 */}
         {!reaction && step === 'q3' && (
           <div style={S.body}>
             <div style={S.leaQ}><div style={S.avatar}>L</div><p style={S.leaItalic}>Quand est-ce que tu préfères écrire ?</p></div>
@@ -165,7 +156,6 @@ export default function Onboarding({ onComplete }) {
           </div>
         )}
 
-        {/* Q4 */}
         {!reaction && step === 'q4' && (
           <div style={S.body}>
             <div style={S.leaQ}><div style={S.avatar}>L</div><p style={S.leaItalic}>Qu'est-ce qui te fait rire ? (en quelques mots)</p></div>
@@ -178,7 +168,6 @@ export default function Onboarding({ onComplete }) {
           </div>
         )}
 
-        {/* Q5 */}
         {!reaction && step === 'q5' && (
           <div style={S.body}>
             <div style={S.leaQ}><div style={S.avatar}>L</div><p style={S.leaItalic}>Un seul mot pour décrire comment tu te sens par rapport à ce livre.</p></div>
@@ -191,7 +180,6 @@ export default function Onboarding({ onComplete }) {
           </div>
         )}
 
-        {/* PRÉSENTATION LÉA */}
         {!reaction && step === 'lea' && (
           <div style={S.body}>
             <div style={S.leaCard}>
@@ -205,7 +193,6 @@ export default function Onboarding({ onComplete }) {
           </div>
         )}
 
-        {/* CLÉ API */}
         {!reaction && step === 'apikey' && (
           <div style={S.body}>
             {!name.trim() && (
@@ -229,49 +216,55 @@ export default function Onboarding({ onComplete }) {
             </button>
           </div>
         )}
-
       </div>
     </div>
   )
 }
 
 const S = {
-  bg: { minHeight: '100vh', background: 'linear-gradient(160deg, #2D1B0E 0%, #5C3D1E 40%, #8B6445 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, fontFamily: "'Nunito', sans-serif" },
-  card: { background: '#FFFEFB', borderRadius: 24, width: '100%', maxWidth: 420, overflow: 'hidden', boxShadow: '0 24px 60px rgba(0,0,0,.35)' },
+  bg: {
+    position: 'fixed',
+    inset: 0,
+    background: 'linear-gradient(160deg, #2D1B0E 0%, #5C3D1E 40%, #8B6445 100%)',
+    padding: 20,
+    fontFamily: "'Nunito', sans-serif",
+    overflowY: 'auto',
+    display: 'flex',
+    flexDirection: 'column',
+  },
+  card: {
+    background: '#FFFEFB',
+    borderRadius: 24,
+    width: '100%',
+    maxWidth: 420,
+    overflow: 'hidden',
+    boxShadow: '0 24px 60px rgba(0,0,0,.35)',
+    margin: 'auto',
+  },
   header: { background: 'linear-gradient(135deg, #2D1B0E, #8B6445)', padding: '30px 32px 20px', textAlign: 'center', color: '#fff' },
   featherWrap: { width: 50, height: 50, borderRadius: '50%', background: 'rgba(255,255,255,.12)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
   ornament: { fontSize: '.68rem', letterSpacing: 8, opacity: .45, marginBottom: 4 },
   title:    { fontFamily: "'Cormorant Garamond', serif", fontSize: '1.75rem', fontWeight: 400, marginBottom: 2 },
   subtitle: { fontFamily: "'Cormorant Garamond', serif", fontStyle: 'italic', fontSize: '.88rem', opacity: .7 },
-
   body: { padding: '22px 22px 26px' },
-
   leaReact: { display: 'flex', gap: 10, alignItems: 'flex-start', padding: '18px 22px 22px', background: '#F7EFE3', borderTop: '1px solid #EDE7DE' },
   leaQ:     { display: 'flex', gap: 10, alignItems: 'flex-start', marginBottom: 14, background: '#FAF7F2', borderRadius: 12, padding: '12px 13px', border: '1px solid #EDE7DE' },
-
   avatar: { width: 28, height: 28, borderRadius: '50%', flexShrink: 0, background: 'linear-gradient(135deg, #6B8F71, #8B6445)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Cormorant Garamond', serif", fontSize: '.9rem', fontWeight: 600 },
   avatarLg: { width: 46, height: 46, borderRadius: '50%', background: 'linear-gradient(135deg, #6B8F71, #8B6445)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Cormorant Garamond', serif", fontSize: '1.2rem', fontWeight: 600, margin: '0 auto 12px' },
-
   leaItalic: { fontFamily: "'Lora', serif", fontStyle: 'italic', fontSize: '.85rem', color: '#2A1A0E', lineHeight: 1.65, flex: 1, margin: 0 },
-
   bigMsg:   { fontSize: '1rem', color: '#2A1A0E', textAlign: 'center', marginBottom: 8, fontWeight: 600 },
   subMsg:   { fontFamily: "'Lora', serif", fontStyle: 'italic', fontSize: '.86rem', color: '#6B5A4E', textAlign: 'center', lineHeight: 1.7, marginBottom: 20 },
-
   leaCard: { background: '#FAF7F2', borderRadius: 14, padding: '18px', border: '1px solid #EDE7DE', textAlign: 'center', marginBottom: 16 },
   leaCardTitle: { fontFamily: "'Cormorant Garamond', serif", fontSize: '1.05rem', fontWeight: 600, color: '#8B6445', marginBottom: 12 },
   leaCardText:  { fontFamily: "'Lora', serif", fontStyle: 'italic', fontSize: '.82rem', color: '#4A3728', lineHeight: 1.65, margin: '0 0 8px' },
-
   choices: { display: 'flex', flexDirection: 'column', gap: 7 },
   choice:  { padding: '10px 14px', background: '#FAF7F2', border: '1.5px solid #DDD5C8', borderRadius: 10, fontSize: '.87rem', fontFamily: "'Nunito', sans-serif", color: '#2A1A0E', cursor: 'pointer', textAlign: 'left', transition: 'background .12s' },
-
   input: { width: '100%', padding: '11px 13px', border: '1.5px solid #DDD5C8', borderRadius: 10, fontSize: '.94rem', fontFamily: "'Nunito', sans-serif", background: '#FAF7F2', color: '#2A1A0E', outline: 'none', marginBottom: 12, boxSizing: 'border-box' },
-
   label:    { display: 'block', fontSize: '.72rem', fontWeight: 700, color: '#6B5A4E', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: 6 },
   optional: { fontWeight: 400, textTransform: 'none', opacity: .7 },
   hint:     { fontSize: '.73rem', color: '#9C8878', lineHeight: 1.5, marginBottom: 10, marginTop: -4 },
   privacyBox: { background: '#F7EFE3', border: '1px solid #E8D5B8', borderRadius: 10, padding: '9px 13px', marginBottom: 12 },
   privacyTxt: { fontSize: '.75rem', color: '#8B6445', margin: 0 },
-
   btn:  { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '12px 20px', background: 'linear-gradient(135deg, #8B6445, #C4956A)', color: '#fff', border: 'none', borderRadius: 12, fontSize: '.9rem', fontWeight: 700, fontFamily: "'Nunito', sans-serif", cursor: 'pointer', marginTop: 4 },
   link: { display: 'block', width: '100%', marginTop: 8, background: 'transparent', border: 'none', color: '#9C8878', fontSize: '.77rem', fontFamily: "'Nunito', sans-serif", cursor: 'pointer', padding: '5px 0', textAlign: 'center' },
 }
