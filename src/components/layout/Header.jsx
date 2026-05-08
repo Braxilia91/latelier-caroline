@@ -49,56 +49,58 @@ export default function Header({
       {/* Logo */}
       <div style={styles.logo}>
         <Feather size={18} color="var(--gold)" />
-        <span style={styles.logoText}>L'Atelier</span>
+        {!isMobile && <span style={styles.logoText}>L'Atelier</span>}
       </div>
 
-      {/* Centre — humeur + streak */}
-      <div style={styles.center}>
-        <div style={{ position: 'relative' }}>
-          <button
-            style={styles.moodBtn}
-            onClick={() => { setMoodOpen(o => !o); setAmbientOpen(false) }}
-            title="Mon humeur du jour"
-          >
-            {currentMood
-              ? <>{currentMood.emoji} <span style={styles.moodLabel}>{currentMood.label}</span></>
-              : <><span style={{ opacity: .6 }}>☁️</span> <span style={styles.moodLabel}>Comment tu te sens ?</span></>
-            }
-          </button>
+      {/* Centre — humeur + streak (caché sur mobile) */}
+      {!isMobile && (
+        <div style={styles.center}>
+          <div style={{ position: 'relative' }}>
+            <button
+              style={styles.moodBtn}
+              onClick={() => { setMoodOpen(o => !o); setAmbientOpen(false) }}
+              title="Mon humeur du jour"
+            >
+              {currentMood
+                ? <>{currentMood.emoji} <span style={styles.moodLabel}>{currentMood.label}</span></>
+                : <><span style={{ opacity: .6 }}>☁️</span> <span style={styles.moodLabel}>Comment tu te sens ?</span></>
+              }
+            </button>
 
-          {moodOpen && (
-            <div style={styles.moodDrop}>
-              {MOODS.map(m => (
-                <button
-                  key={m.value}
-                  style={{
-                    ...styles.moodOpt,
-                    ...(moodToday === m.value ? styles.moodOptAct : {}),
-                  }}
-                  onClick={() => { setMood(m.value); setMoodOpen(false) }}
-                >
-                  {m.emoji} {m.label}
-                </button>
-              ))}
+            {moodOpen && (
+              <div style={styles.moodDrop}>
+                {MOODS.map(m => (
+                  <button
+                    key={m.value}
+                    style={{
+                      ...styles.moodOpt,
+                      ...(moodToday === m.value ? styles.moodOptAct : {}),
+                    }}
+                    onClick={() => { setMood(m.value); setMoodOpen(false) }}
+                  >
+                    {m.emoji} {m.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {streak > 0 && (
+            <div style={styles.streak} title={`${streak} jour${streak > 1 ? 's' : ''} consécutifs`}>
+              🔥 {streak}
             </div>
           )}
         </div>
-
-        {streak > 0 && (
-          <div style={styles.streak} title={`${streak} jour${streak > 1 ? 's' : ''} consécutifs`}>
-            🔥 {streak}
-          </div>
-        )}
-      </div>
+      )}
 
       {/* Actions droite */}
       <div style={styles.actions}>
-        <BtnH icon={<Lightbulb size={16} />} label="Inspiration" onClick={onInspir} />
-        <BtnH icon={<Search size={16} />}     label="Vocabulaire" onClick={onVocab} />
-        <BtnH icon={<Mic size={16} />}        label="Dicter"      onClick={onDictate} />
-        <BtnH icon={<BookOpen size={16} />}   label="Plan"        onClick={onPlan} />
-        <BtnH icon={<Download size={16} />}   label="Exporter"    onClick={onExport} />
-        <BtnH icon={<Settings size={16} />}   label="Réglages"    onClick={onSettings} />
+        <BtnH icon={<Lightbulb size={16} />} label="Inspiration" onClick={onInspir} isMobile={isMobile} />
+        <BtnH icon={<Search size={16} />}     label="Vocabulaire" onClick={onVocab}   isMobile={isMobile} />
+        <BtnH icon={<Mic size={16} />}        label="Dicter"      onClick={onDictate} isMobile={isMobile} />
+        <BtnH icon={<BookOpen size={16} />}   label="Plan"        onClick={onPlan}    isMobile={isMobile} />
+        <BtnH icon={<Download size={16} />}   label="Exporter"    onClick={onExport}  isMobile={isMobile} />
+        <BtnH icon={<Settings size={16} />}   label="Réglages"    onClick={onSettings} isMobile={isMobile} />
 
         {/* ── Ambiance sonore ── */}
         <div style={{ position: 'relative' }}>
@@ -112,7 +114,7 @@ export default function Header({
             aria-label="Ambiance sonore"
           >
             <Music size={16} />
-            <span style={styles.hdrBtnLbl}>Ambiance</span>
+            {!isMobile && <span style={styles.hdrBtnLbl}>Ambiance</span>}
             {ambientPlaying && <span style={styles.playDot} aria-hidden="true" />}
           </button>
 
@@ -171,7 +173,7 @@ export default function Header({
   )
 }
 
-function BtnH({ icon, label, onClick }) {
+function BtnH({ icon, label, onClick, isMobile }) {
   return (
     <button
       style={styles.hdrBtn}
@@ -180,7 +182,7 @@ function BtnH({ icon, label, onClick }) {
       aria-label={label}
     >
       {icon}
-      <span style={styles.hdrBtnLbl}>{label}</span>
+      {!isMobile && <span style={styles.hdrBtnLbl}>{label}</span>}
     </button>
   )
 }
@@ -216,6 +218,7 @@ const styles = {
     cursor: 'pointer',
     transition: 'all .15s',
     flexShrink: 0,
+    marginLeft: 'auto',
   },
   logo: { display: 'flex', alignItems: 'center', gap: 7, flexShrink: 0 },
   logoText: {
