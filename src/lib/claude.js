@@ -1,12 +1,48 @@
 // ─── Client Léa (via Cloudflare Pages Functions proxy) ──────────
-// Les vraies clés API sont côté serveur (Cloudflare Pages secrets).
-// L'utilisateur saisit un "Mot de passe Léa" passé en header X-Lea-Pass.
-
-const CLAUDE_PROXY  = '/api/claude'
-const TTS_PROXY     = '/api/openai-tts'
+const CLAUDE_PROXY = '/api/claude'
+const TTS_PROXY = '/api/openai-tts'
 const WHISPER_PROXY = '/api/openai-whisper'
 
 const MODEL = 'claude-sonnet-4-20250514'
+
+// ─── Nettoyage du texte avant TTS ────────────────────────────────
+// Strip markdown (asterisques, headers, code, links), emojis, bullets
+// pour que la voix ne lise pas "astérisque astérisque etc"
+export function cleanForTTS(text) {
+  if (!text) return ''
+  return text
+    // Markdown bold/italic asterisks
+    .replace(/\*\*\*(.+?)\*\*\*/g, '$1')
+    .replace(/\*\*(.+?)\*\*/g, '$1')
+    .replace(/\*(.+?)\*/g, '$1')
+    // Markdown italic underscores
+    .replace(/___(.+?)___/g, '$1')
+    .replace(/__(.+?)__/g, '$1')
+    .replace(/(?<!\w)_(.+?)_(?!\w)/g, '$1')
+    // Markdown headers
+    .replace(/^#{1,6}\s+/gm, '')
+    // Markdown links [text](url) → text
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    // Markdown code blocks ``` ... ```
+    .replace(/```[\s\S]*?```/g, '')
+    .replace(/`([^`]+)`/g, '$1')
+    // Emojis (large Unicode blocks)
+    .replace(/[\u{1F300}-\u{1F9FF}]/gu, '')
+    .replace(/[\u{2600}-\u{27BF}]/gu, '')
+    .replace(/[\u{1F000}-\u{1F02F}]/gu, '')
+    .replace(/[\u{1F100}-\u{1F1FF}]/gu, '')
+    .replace(/[\u{1FA00}-\u{1FAFF}]/gu, '')
+    .replace(/[\u{200D}\u{FE0F}]/gu, '')
+    // Bullet markers en début de ligne
+    .replace(/^[-•*]\s+/gm, '')
+    .replace(/^\d+\.\s+/gm, '')
+    // Multiple newlines → pause
+    .replace(/\n{2,}/g, '. ')
+    .replace(/\n/g, ' ')
+    // Multiple spaces
+    .replace(/\s+/g, ' ')
+    .trim()
+}
 
 export async function askClaude({ apiKey, systemPrompt, messages, maxTokens = 600, onChunk }) {
   if (!apiKey) throw new Error('Mot de passe Léa manquant')
@@ -60,16 +96,24 @@ export async function askClaude({ apiKey, systemPrompt, messages, maxTokens = 60
 }
 
 // ─── TTS (voix de Léa via OpenAI proxy) ─────────────────────────
-// Note : openAiKey est en réalité le même mot de passe Léa
-export async function speakWithOpenAI({ openAiKey, text, voice = 'nova' }) {
+// Nettoyage du texte + speed param (0.5 - 2.0 selon préférence)
+// Modèle tts-1-hd pour qualité supérieure (× 2 coût mais accents français mieux)
+export async function speakWithOpenAI({ openAiKey, text, voice = 'nova', speed = 1.0, hd = true }) {
   if (!openAiKey) throw new Error('Mot de passe Léa manquant')
+  const cleanText = cleanForTTS(text).slice(0, 4096)
+  if (!cleanText) throw new Error('Texte vide après nettoyage')
   const res = await fetch(TTS_PROXY, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'X-Lea-Pass': openAiKey,
     },
-    body: JSON.stringify({ model: 'tts-1', voice, input: text.slice(0, 4096) }),
+    body: JSON.stringify({
+      model: hd ? 'tts-1-hd' : 'tts-1',
+      voice,
+      input: cleanText,
+      speed: Math.max(0.5, Math.min(2.0, speed)),
+    }),
   })
   if (!res.ok) throw new Error('TTS échoué')
   const blob = await res.blob()
