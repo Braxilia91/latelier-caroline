@@ -1,16 +1,21 @@
-// ─── Client Claude (Anthropic API) ────────────────────────────
-const API_URL = 'https://api.anthropic.com/v1/messages'
-const MODEL   = 'claude-sonnet-4-20250514'
+// ─── Client Léa (via Cloudflare Pages Functions proxy) ──────────
+// Les vraies clés API sont côté serveur (Cloudflare Pages secrets).
+// L'utilisateur saisit un "Mot de passe Léa" passé en header X-Lea-Pass.
+
+const CLAUDE_PROXY  = '/api/claude'
+const TTS_PROXY     = '/api/openai-tts'
+const WHISPER_PROXY = '/api/openai-whisper'
+
+const MODEL = 'claude-sonnet-4-20250514'
 
 export async function askClaude({ apiKey, systemPrompt, messages, maxTokens = 600, onChunk }) {
-  if (!apiKey) throw new Error('Clé API manquante')
+  if (!apiKey) throw new Error('Mot de passe Léa manquant')
 
-  const response = await fetch(API_URL, {
+  const response = await fetch(CLAUDE_PROXY, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
+      'X-Lea-Pass': apiKey,
     },
     body: JSON.stringify({
       model: MODEL,
@@ -22,13 +27,12 @@ export async function askClaude({ apiKey, systemPrompt, messages, maxTokens = 60
   })
 
   if (!response.ok) {
-    const err  = await response.json().catch(() => ({}))
-    const type = err.error?.type    || ''  // ex: "authentication_error", "overloaded_error"
-    const msg  = err.error?.message || ''  // ex: "invalid x-api-key"
-    throw new Error([type, msg].filter(Boolean).join(' ') || `Erreur API ${response.status}`)
+    const err = await response.json().catch(() => ({}))
+    const type = err.error?.type || ''
+    const msg = err.error?.message || ''
+    throw new Error([type, msg].filter(Boolean).join(' ') || `Erreur ${response.status}`)
   }
 
-  // Streaming
   if (onChunk) {
     const reader = response.body.getReader()
     const decoder = new TextDecoder()
@@ -37,7 +41,7 @@ export async function askClaude({ apiKey, systemPrompt, messages, maxTokens = 60
       const { done, value } = await reader.read()
       if (done) break
       const chunk = decoder.decode(value)
-      const lines  = chunk.split('\n').filter(l => l.startsWith('data: '))
+      const lines = chunk.split('\n').filter(l => l.startsWith('data: '))
       for (const line of lines) {
         const data = line.slice(6).trim()
         if (data === '[DONE]') break
@@ -51,19 +55,19 @@ export async function askClaude({ apiKey, systemPrompt, messages, maxTokens = 60
     return full
   }
 
-  // Non-streaming
   const data = await response.json()
   return data.content?.[0]?.text || ''
 }
 
-// ─── TTS (voix de Léa via OpenAI) ─────────────────────────────
+// ─── TTS (voix de Léa via OpenAI proxy) ─────────────────────────
+// Note : openAiKey est en réalité le même mot de passe Léa
 export async function speakWithOpenAI({ openAiKey, text, voice = 'nova' }) {
-  if (!openAiKey) throw new Error('Clé OpenAI manquante')
-  const res = await fetch('https://api.openai.com/v1/audio/speech', {
+  if (!openAiKey) throw new Error('Mot de passe Léa manquant')
+  const res = await fetch(TTS_PROXY, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${openAiKey}`,
+      'X-Lea-Pass': openAiKey,
     },
     body: JSON.stringify({ model: 'tts-1', voice, input: text.slice(0, 4096) }),
   })
@@ -75,16 +79,16 @@ export async function speakWithOpenAI({ openAiKey, text, voice = 'nova' }) {
   return audio
 }
 
-// ─── Transcription Whisper ─────────────────────────────────────
+// ─── Transcription Whisper (proxy) ──────────────────────────────
 export async function transcribeAudio({ openAiKey, audioBlob }) {
-  if (!openAiKey) throw new Error('Clé OpenAI manquante')
+  if (!openAiKey) throw new Error('Mot de passe Léa manquant')
   const form = new FormData()
   form.append('file', audioBlob, 'audio.webm')
   form.append('model', 'whisper-1')
   form.append('language', 'fr')
-  const res = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+  const res = await fetch(WHISPER_PROXY, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${openAiKey}` },
+    headers: { 'X-Lea-Pass': openAiKey },
     body: form,
   })
   if (!res.ok) throw new Error('Transcription échouée')
