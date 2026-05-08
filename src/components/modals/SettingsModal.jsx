@@ -3,25 +3,25 @@ import { X, Save, AlertTriangle, RefreshCw, Wifi, Download, Lock } from 'lucide-
 
 // ── Constantes ───────────────────────────────────────────────────
 const VOICES = [
-  { value: 'nova',    label: 'Nova — Douce et claire' },
+  { value: 'nova', label: 'Nova — Douce et claire' },
   { value: 'shimmer', label: 'Shimmer — Chaleureuse' },
-  { value: 'onyx',    label: 'Onyx — Posée et grave' },
-  { value: 'alloy',   label: 'Alloy — Neutre' },
+  { value: 'onyx', label: 'Onyx — Posée et grave' },
+  { value: 'alloy', label: 'Alloy — Neutre' },
 ]
 
-const FONT_SIZES  = [
+const FONT_SIZES = [
   { value: 's', label: 'S', desc: 'Compact' },
   { value: 'm', label: 'M', desc: 'Confort' },
   { value: 'l', label: 'L', desc: 'Grand' },
 ]
 const THEMES = [
-  { value: 'jour',   label: '☀️ Jour',   desc: 'Fond ivoire clair' },
-  { value: 'soir',   label: '🌙 Soir',   desc: 'Tons dorés apaisés' },
+  { value: 'jour', label: '☀️ Jour', desc: 'Fond ivoire clair' },
+  { value: 'soir', label: '🌙 Soir', desc: 'Tons dorés apaisés' },
   { value: 'bougie', label: '🕯️ Bougie', desc: 'Ambiance nocturne' },
 ]
 const WIDTHS = [
   { value: 'confort', label: 'Confort', desc: '680 px' },
-  { value: 'full',    label: 'Pleine page', desc: '100 %' },
+  { value: 'full', label: 'Pleine page', desc: '100 %' },
 ]
 
 // ── Composant section ────────────────────────────────────────────
@@ -58,30 +58,36 @@ function ToggleGroup({ options, value, onChange }) {
 // ── Modal principal ──────────────────────────────────────────────
 export default function SettingsModal({ state, chapters = [], vracIdeas = [], name = '', onClose, onSave, onReset }) {
   // Section 1 — Profil
-  const [sName,       setSName]      = useState(state.name      || '')
-  const [apiKey,      setApiKey]     = useState(state.apiKey    || '')
-  const [openAiKey,   setOpenAiKey]  = useState(state.openAiKey || '')
-  const [voice,       setVoice]      = useState(state.leaVoice  || 'nova')
+  const [sName, setSName] = useState(state.name || '')
+  const [apiKey, setApiKey] = useState(state.apiKey || '')
+  const [voice, setVoice] = useState(state.leaVoice || 'nova')
 
   // Section 2 — Écriture
-  const [editorFont,  setEditorFont]  = useState(state.editorFont  || 'm')
+  const [editorFont, setEditorFont] = useState(state.editorFont || 'm')
   const [editorTheme, setEditorTheme] = useState(state.editorTheme || 'jour')
   const [editorWidth, setEditorWidth] = useState(state.editorWidth || 'confort')
 
   // Section 3 — Sync
-  const [syncTok,     setSyncTok]    = useState(state.syncToken || '')
+  const [syncTok, setSyncTok] = useState(state.syncToken || '')
 
   // Section 4 — Sécurité
   const [confirmReset, setConfirmReset] = useState(false)
-  const [exportDone,   setExportDone]   = useState(false)
+  const [exportDone, setExportDone] = useState(false)
 
   const tokenChanged = state.syncToken && syncTok && syncTok !== state.syncToken
-  const tokenValid   = syncTok.length === 0 || syncTok.length >= 20
+  const tokenValid = syncTok.length === 0 || syncTok.length >= 20
 
   // ── Sauvegarde ────────────────────────────────────────────────
+  // Note: on copie apiKey dans openAiKey (même mot de passe pour tous les proxies)
   const handleSave = () => {
-    onSave({ name: sName, apiKey, openAiKey, leaVoice: voice, syncToken: syncTok,
-             editorFont, editorTheme, editorWidth })
+    onSave({
+      name: sName,
+      apiKey,
+      openAiKey: apiKey,
+      leaVoice: voice,
+      syncToken: syncTok,
+      editorFont, editorTheme, editorWidth,
+    })
     onClose()
   }
 
@@ -101,15 +107,15 @@ export default function SettingsModal({ state, chapters = [], vracIdeas = [], na
     const data = {
       exportedAt: new Date().toISOString(),
       name: name || sName,
-      chapters:  (chapters  || []).map(({ id, title, content, createdAt, updatedAt }) =>
+      chapters: (chapters || []).map(({ id, title, content, createdAt, updatedAt }) =>
         ({ id, title, content, createdAt, updatedAt })),
       vracIdeas: (vracIdeas || []).map(({ id, text, createdAt }) => ({ id, text, createdAt })),
     }
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
-    const url  = URL.createObjectURL(blob)
-    const a    = document.createElement('a')
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
     const date = new Date().toISOString().slice(0, 10)
-    a.href     = url
+    a.href = url
     a.download = `atelier-caroline-backup-${date}.json`
     a.click()
     URL.revokeObjectURL(url)
@@ -136,20 +142,13 @@ export default function SettingsModal({ state, chapters = [], vracIdeas = [], na
             </div>
 
             <div style={S.fg}>
-              <label style={S.label}>Clé API Anthropic <span style={S.badge}>Coach Léa</span></label>
+              <label style={S.label}>Mot de passe Léa <span style={S.badge}>active le coach</span></label>
               <input style={S.input} type="password" value={apiKey}
-                onChange={e => setApiKey(e.target.value)} placeholder="sk-ant-api03-…" />
-              <p style={S.hint}>🔒 Stockée sur cet appareil uniquement. Console.anthropic.com → API Keys</p>
+                onChange={e => setApiKey(e.target.value)} placeholder="Le mot que Mourad t'a donné…" />
+              <p style={S.hint}>🔒 Stocké sur cet appareil uniquement. Ce mot active Léa via un serveur sécurisé — sans lui, elle reste silencieuse.</p>
             </div>
 
-            <div style={S.fg}>
-              <label style={S.label}>Clé API OpenAI <span style={S.badgeOpt}>optionnel — voix naturelle</span></label>
-              <input style={S.input} type="password" value={openAiKey}
-                onChange={e => setOpenAiKey(e.target.value)} placeholder="sk-…" />
-              <p style={S.hint}>Pour les voix IA (nova, shimmer…). Sans cette clé, la voix du navigateur est utilisée.</p>
-            </div>
-
-            {openAiKey && (
+            {apiKey && (
               <div style={S.fg}>
                 <label style={S.label}>Voix de Léa</label>
                 <select style={S.select} value={voice} onChange={e => setVoice(e.target.value)}>
@@ -381,8 +380,8 @@ const S = {
     fontFamily: "'Nunito', sans-serif", cursor: 'pointer',
     marginTop: 8,
   },
-  okMsg:   { fontSize: '.72rem', color: '#3D6B45', margin: '4px 0 0', fontFamily: "'Nunito', sans-serif" },
-  errMsg:  { fontSize: '.72rem', color: '#C0392B', margin: '4px 0 0', fontFamily: "'Nunito', sans-serif" },
+  okMsg: { fontSize: '.72rem', color: '#3D6B45', margin: '4px 0 0', fontFamily: "'Nunito', sans-serif" },
+  errMsg: { fontSize: '.72rem', color: '#C0392B', margin: '4px 0 0', fontFamily: "'Nunito', sans-serif" },
   warnBox: {
     fontSize: '.72rem', color: '#92400E',
     background: '#FEF3C7', border: '1px solid #FCD34D',
@@ -399,7 +398,7 @@ const S = {
     background: '#FFFEFB', border: '1px solid #EDE7DE', borderRadius: 10,
   },
   actionTitle: { fontSize: '.82rem', fontWeight: 700, color: '#2A1A0E', fontFamily: "'Nunito', sans-serif" },
-  actionDesc:  { fontSize: '.72rem', color: '#9C8878', fontFamily: "'Nunito', sans-serif", marginTop: 2 },
+  actionDesc: { fontSize: '.72rem', color: '#9C8878', fontFamily: "'Nunito', sans-serif", marginTop: 2 },
   actionBtn: {
     display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0,
     padding: '7px 14px',
