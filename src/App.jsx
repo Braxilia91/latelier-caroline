@@ -76,8 +76,13 @@ function AppInner() {
   const [showPack,     setShowPack]    = useState(false)
   const [isOnline,     setIsOnline]    = useState(navigator.onLine)
   const [sidebarOpen,  setSidebarOpen] = useState(false)
+  const [coachOpen,    setCoachOpen]   = useState(false)
 
   const isMobile = useMediaQuery('(max-width: 767px)')
+
+  // ── Mutual exclusion drawers mobile ─────────────────────────────
+  const openSidebar = () => { setSidebarOpen(true); setCoachOpen(false) }
+  const openCoach   = () => { setCoachOpen(true); setSidebarOpen(false) }
 
   // ── Ambiance sonore ─────────────────────────────────────────────
   const audioRef        = useRef(null)
@@ -149,20 +154,26 @@ function AppInner() {
     if (db.editorTheme) document.documentElement.setAttribute('data-theme', db.editorTheme)
   }, [db.editorTheme])
 
-  // ── Reset drawer mobile au resize desktop ───────────────────────
+  // ── Reset drawers mobile au resize desktop ──────────────────────
   useEffect(() => {
-    if (!isMobile) setSidebarOpen(false)
+    if (!isMobile) {
+      setSidebarOpen(false)
+      setCoachOpen(false)
+    }
   }, [isMobile])
 
-  // ── Escape ferme le drawer mobile ───────────────────────────────
+  // ── Escape ferme les drawers mobile ─────────────────────────────
   useEffect(() => {
-    if (!sidebarOpen) return
+    if (!sidebarOpen && !coachOpen) return
     const handler = (e) => {
-      if (e.key === 'Escape') setSidebarOpen(false)
+      if (e.key === 'Escape') {
+        setSidebarOpen(false)
+        setCoachOpen(false)
+      }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [sidebarOpen])
+  }, [sidebarOpen, coachOpen])
 
   // ── Coach Léa ────────────────────────────────────────────────────
   const coach = useCoach({
@@ -243,7 +254,8 @@ function AppInner() {
         ambientOpen={ambientOpen}
         setAmbientOpen={setAmbientOpen}
         isMobile={isMobile}
-        onMenuClick={() => setSidebarOpen(true)}
+        onMenuClick={openSidebar}
+        onCoachClick={openCoach}
       />
 
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
@@ -268,13 +280,16 @@ function AppInner() {
           chatHistory={db.chatHistory}
           welcomeMsg={buildWelcomeMessage({ name: db.name, leaMemory: db.leaMemory, currentChapter: db.currentChapter })}
           onOpenVrac={() => setModal('vrac')}
+          isMobile={isMobile}
+          isOpen={coachOpen}
+          onClose={() => setCoachOpen(false)}
         />
       </div>
 
-      {/* ── Backdrop drawer mobile ─────────────────────────────── */}
-      {isMobile && sidebarOpen && (
+      {/* ── Backdrop drawer mobile (mutual exclusion) ──────────── */}
+      {isMobile && (sidebarOpen || coachOpen) && (
         <div
-          onClick={() => setSidebarOpen(false)}
+          onClick={() => { setSidebarOpen(false); setCoachOpen(false) }}
           style={{
             position: 'fixed',
             top: 52, left: 0, right: 0, bottom: 0,
