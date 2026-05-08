@@ -21,18 +21,15 @@ export default function Header({
   name, moodToday, setMood, streak,
   onDictate, onPlan, onExport, onSettings, onInspir, onVocab,
   moodOpen, setMoodOpen,
-  // ── Ambiance ──
   ambientSound, ambientPlaying, onAmbientChange,
   ambientVolume, onVolumeChange,
   ambientOpen, setAmbientOpen,
-  // ── Mobile drawer ──
   isMobile, onMenuClick,
 }) {
   const currentMood = MOODS.find(m => m.value === moodToday)
 
   return (
     <header style={styles.hdr}>
-      {/* Bouton hamburger mobile */}
       {isMobile && (
         <button
           style={styles.menuBtn}
@@ -44,13 +41,11 @@ export default function Header({
         </button>
       )}
 
-      {/* Logo */}
       <div style={styles.logo}>
         <Feather size={18} color="var(--gold)" />
         <span style={styles.logoText}>L'Atelier</span>
       </div>
 
-      {/* Centre — humeur + streak */}
       <div style={styles.center}>
         <div style={{ position: 'relative' }}>
           <button
@@ -89,16 +84,14 @@ export default function Header({
         )}
       </div>
 
-      {/* Actions droite */}
       <div style={styles.actions}>
         <BtnH icon={<Lightbulb size={16} />} label="Inspiration" onClick={onInspir} />
-        <BtnH icon={<Search size={16} />}     label="Vocabulaire" onClick={onVocab} />
-        <BtnH icon={<Mic size={16} />}        label="Dicter"      onClick={onDictate} />
-        <BtnH icon={<BookOpen size={16} />}   label="Plan"        onClick={onPlan} />
-        <BtnH icon={<Download size={16} />}   label="Exporter"    onClick={onExport} />
-        <BtnH icon={<Settings size={16} />}   label="Réglages"    onClick={onSettings} />
+        <BtnH icon={<Search size={16} />} label="Vocabulaire" onClick={onVocab} />
+        <BtnH icon={<Mic size={16} />} label="Dicter" onClick={onDictate} />
+        <BtnH icon={<BookOpen size={16} />} label="Plan" onClick={onPlan} />
+        <BtnH icon={<Download size={16} />} label="Exporter" onClick={onExport} />
+        <BtnH icon={<Settings size={16} />} label="Réglages" onClick={onSettings} />
 
-        {/* ── Ambiance sonore ── */}
         <div style={{ position: 'relative' }}>
           <button
             style={{
@@ -141,7 +134,9 @@ export default function Header({
                 <span style={styles.volLbl}>Volume</span>
                 <input
                   type="range"
-                  min={0} max={1} step={0.01}
+                  min={0}
+                  max={1}
+                  step={0.01}
                   value={ambientVolume}
                   onChange={e => onVolumeChange(parseFloat(e.target.value))}
                   style={styles.volSlider}
@@ -278,7 +273,6 @@ const styles = {
     background: '#6B8F71',
     display: 'inline-block',
   },
-  // ── Ambient dropdown ────────────────────────────────────────
   ambientDrop: {
     position: 'absolute', top: '110%', right: 0,
     background: 'var(--paper)',
@@ -330,7 +324,7 @@ const styles = {
   volLbl: {
     fontSize: '.68rem', fontWeight: 700,
     color: 'var(--ink-ll)',
-    fontFamily: "'Nunito', sans-serif',
+    fontFamily: "'Nunito', sans-serif",
     flexShrink: 0,
   },
   volSlider: {
