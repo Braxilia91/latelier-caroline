@@ -15,10 +15,9 @@ const TODAY = new Date().toDateString()
 export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }) {
   const [tab, setTab] = useState('synonymes')
 
-  // ── Scroll affordance onglets ──────────────────────────────
   const tabsRef = useRef(null)
   const tabRefs = useRef({})
-  const [canScrollLeft,  setCanScrollLeft]  = useState(false)
+  const [canScrollLeft, setCanScrollLeft] = useState(false)
   const [canScrollRight, setCanScrollRight] = useState(false)
 
   const updateScrollState = () => {
@@ -28,9 +27,8 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
     setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 4)
   }
 
-  // Init + resize
   useEffect(() => {
-    const t = setTimeout(updateScrollState, 50) // attendre que la modale soit mesurée
+    const t = setTimeout(updateScrollState, 50)
     window.addEventListener('resize', updateScrollState)
     return () => {
       clearTimeout(t)
@@ -38,37 +36,31 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
     }
   }, [])
 
-  // Auto-scroll vers l'onglet actif
   useEffect(() => {
     const btn = tabRefs.current[tab]
     if (btn && typeof btn.scrollIntoView === 'function') {
       btn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' })
     }
-    const t = setTimeout(updateScrollState, 350) // après l'anim de scroll
+    const t = setTimeout(updateScrollState, 350)
     return () => clearTimeout(t)
   }, [tab])
 
-  // ── Synonymes ──────────────────────────────────────────────
-  const [word,        setWord]        = useState('')
-  const [sentence,    setSentence]    = useState('')
-  const [level,       setLevel]       = useState('mixte')
+  const [word, setWord] = useState('')
+  const [sentence, setSentence] = useState('')
+  const [level, setLevel] = useState('mixte')
 
-  // ── Je cherche mes mots ────────────────────────────────────
   const [description, setDescription] = useState('')
 
-  // ── Akinator Soft ──────────────────────────────────────────
-  const [akinNature,    setAkinNature]    = useState('')
+  const [akinNature, setAkinNature] = useState('')
   const [akinMouvement, setAkinMouvement] = useState('')
-  const [akinRegistre,  setAkinRegistre]  = useState('courant')
-  const [akinContexte,  setAkinContexte]  = useState('')
+  const [akinRegistre, setAkinRegistre] = useState('courant')
+  const [akinContexte, setAkinContexte] = useState('')
 
-  // ── Wikipedia ──────────────────────────────────────────────
-  const [wikiQuery,   setWikiQuery]   = useState('')
-  const [wikiResult,  setWikiResult]  = useState(null)
+  const [wikiQuery, setWikiQuery] = useState('')
+  const [wikiResult, setWikiResult] = useState(null)
   const [wikiLoading, setWikiLoading] = useState(false)
-  const [wikiError,   setWikiError]   = useState('')
+  const [wikiError, setWikiError] = useState('')
 
-  // ── Conseil du jour ────────────────────────────────────────
   const [councilDone, setCouncilDone] = useState(
     () => localStorage.getItem('dicoCaroConseil') === TODAY
   )
@@ -76,7 +68,6 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
   const { loading, getSynonyms, searchWord, startAkinatorSoft, getPredictiveWords, getDiscovery } = coach
   const hasChapterContent = !!(currentChapter?.content?.trim())
 
-  // ── Recherche Wikipedia ────────────────────────────────────
   const handleWikiSearch = async () => {
     if (!wikiQuery.trim()) return
     setWikiLoading(true)
@@ -96,7 +87,6 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
     }
   }
 
-  // ── Envoi Claude ───────────────────────────────────────────
   const handleSend = async () => {
     if (loading) return
     if (tab === 'synonymes') {
@@ -110,10 +100,10 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
     } else if (tab === 'akinator') {
       if (!akinNature) return
       await startAkinatorSoft({
-        nature:    akinNature,
+        nature: akinNature,
         mouvement: akinMouvement || 'non précisé',
-        registre:  akinRegistre,
-        contexte:  akinContexte,
+        registre: akinRegistre,
+        contexte: akinContexte,
       })
       onClose()
     } else if (tab === 'predictif') {
@@ -129,11 +119,11 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
   }
 
   const canSend = hasKey && !loading && (
-    (tab === 'synonymes' && word.trim().length > 0)           ||
-    (tab === 'cherche'   && description.trim().length > 0)    ||
-    (tab === 'akinator'  && akinNature !== '')                 ||
-    (tab === 'predictif' && hasChapterContent)                 ||
-    (tab === 'conseil'   && !councilDone)
+    (tab === 'synonymes' && word.trim().length > 0) ||
+    (tab === 'cherche' && description.trim().length > 0) ||
+    (tab === 'akinator' && akinNature !== '') ||
+    (tab === 'predictif' && hasChapterContent) ||
+    (tab === 'conseil' && !councilDone)
   )
 
   const showFooter = hasKey && tab !== 'wiki' && !(tab === 'conseil' && councilDone)
@@ -141,8 +131,6 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
   return (
     <div style={S.overlay} onClick={e => e.target === e.currentTarget && onClose()}>
       <div style={S.modal}>
-
-        {/* ── Header ── */}
         <div style={S.hdr}>
           <div style={S.hdrLeft}>
             <span style={S.hdrIcon}>📖</span>
@@ -154,7 +142,6 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
           <button style={S.closeBtn} onClick={onClose}><X size={18} /></button>
         </div>
 
-        {/* ── Onglets (avec scroll affordance) ── */}
         <div style={S.tabsWrap}>
           <div
             style={S.tabs}
@@ -172,14 +159,11 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
               </button>
             ))}
           </div>
-          {canScrollLeft  && <div style={S.fadeLeft}  aria-hidden="true" />}
+          {canScrollLeft && <div style={S.fadeLeft} aria-hidden="true" />}
           {canScrollRight && <div style={S.fadeRight} aria-hidden="true" />}
         </div>
 
-        {/* ── Corps ── */}
         <div style={S.body}>
-
-          {/* Synonymes */}
           {tab === 'synonymes' && (
             <div style={S.form}>
               <label style={S.label}>Le mot dont tu cherches des alternatives</label>
@@ -211,7 +195,6 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
             </div>
           )}
 
-          {/* Je cherche mes mots */}
           {tab === 'cherche' && (
             <div style={S.form}>
               <label style={S.label}>Décris ce que tu veux dire — Léa trouve le mot</label>
@@ -229,7 +212,6 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
             </div>
           )}
 
-          {/* Akinator Soft */}
           {tab === 'akinator' && (
             <div style={S.form}>
               <div style={S.hint}>
@@ -240,9 +222,9 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
               <div style={S.pills}>
                 {[
                   ['une émotion ou un sentiment', 'Émotion'],
-                  ['une sensation physique',       'Sensation'],
-                  ['une action ou un mouvement',   'Action'],
-                  ['un concept ou une idée',       'Concept'],
+                  ['une sensation physique', 'Sensation'],
+                  ['une action ou un mouvement', 'Action'],
+                  ['un concept ou une idée', 'Concept'],
                 ].map(([v, l]) => (
                   <button key={v} style={{ ...S.pill, ...(akinNature === v ? S.pillActive : {}) }} onClick={() => setAkinNature(v)}>{l}</button>
                 ))}
@@ -276,7 +258,6 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
             </div>
           )}
 
-          {/* Définition Wikipedia */}
           {tab === 'wiki' && (
             <div style={S.form}>
               <label style={S.label}>Recherche une définition dans Wikipedia</label>
@@ -296,7 +277,7 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
                   style={{
                     ...S.sendBtn,
                     opacity: wikiQuery.trim() && !wikiLoading ? 1 : .45,
-                    cursor:  wikiQuery.trim() && !wikiLoading ? 'pointer' : 'not-allowed',
+                    cursor: wikiQuery.trim() && !wikiLoading ? 'pointer' : 'not-allowed',
                     flexShrink: 0,
                   }}
                   onClick={handleWikiSearch}
@@ -324,10 +305,13 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
                     <div style={S.wikiDesc}>{wikiResult.description}</div>
                   )}
                   {wikiResult.extract && (
-                    <div style={S.wikiExtract}>{wikiResult.extract.slice(0, 400)}{wikiResult.extract.length > 400 ? '…' : ''}</div>
+                    <div style={S.wikiExtract}>
+                      {wikiResult.extract.slice(0, 400)}
+                      {wikiResult.extract.length > 400 ? '…' : ''}
+                    </div>
                   )}
                   {wikiResult.content_urls?.desktop?.page && (
-                    
+                    <a
                       href={wikiResult.content_urls.desktop.page}
                       target="_blank"
                       rel="noopener noreferrer"
@@ -341,7 +325,6 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
             </div>
           )}
 
-          {/* Prédictif */}
           {tab === 'predictif' && (
             <div style={S.form}>
               <div style={S.akinatorCard}>
@@ -368,7 +351,6 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
             </div>
           )}
 
-          {/* Conseil du jour */}
           {tab === 'conseil' && (
             <div style={S.form}>
               <div style={S.akinatorCard}>
@@ -388,10 +370,8 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
               </div>
             </div>
           )}
+        </div>
 
-        </div>{/* fin body */}
-
-        {/* ── Footer ── */}
         {showFooter && (
           <div style={S.footer}>
             {!hasKey && (
@@ -408,13 +388,11 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
             )}
           </div>
         )}
-
       </div>
     </div>
   )
 }
 
-// ── Styles ─────────────────────────────────────────────────────
 const S = {
   overlay: {
     position: 'fixed', inset: 0, background: 'rgba(45,38,30,.55)',
@@ -431,10 +409,10 @@ const S = {
     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
     padding: '14px 18px', borderBottom: '1px solid #EDE7DE', flexShrink: 0,
   },
-  hdrLeft:  { display: 'flex', alignItems: 'center', gap: 10 },
-  hdrIcon:  { fontSize: 22 },
+  hdrLeft: { display: 'flex', alignItems: 'center', gap: 10 },
+  hdrIcon: { fontSize: 22 },
   hdrTitle: { fontSize: '.92rem', fontWeight: 700, color: '#2D261E', fontFamily: "'Nunito', sans-serif" },
-  hdrSub:   { fontSize: '.72rem', color: '#8B7355', fontFamily: "'Nunito', sans-serif" },
+  hdrSub: { fontSize: '.72rem', color: '#8B7355', fontFamily: "'Nunito', sans-serif" },
   closeBtn: {
     background: 'none', border: 'none', cursor: 'pointer', color: '#8B7355',
     padding: 4, borderRadius: 6, display: 'flex', alignItems: 'center',
@@ -474,8 +452,8 @@ const S = {
     pointerEvents: 'none',
     background: 'linear-gradient(to left, #FAF7F2 0%, rgba(250,247,242,0) 100%)',
   },
-  body:  { flex: 1, overflowY: 'auto', padding: '18px 20px' },
-  form:  { display: 'flex', flexDirection: 'column', gap: 12 },
+  body: { flex: 1, overflowY: 'auto', padding: '18px 20px' },
+  form: { display: 'flex', flexDirection: 'column', gap: 12 },
   label: {
     fontSize: '.78rem', fontWeight: 700, color: '#5C4A32',
     fontFamily: "'Nunito', sans-serif",
@@ -493,7 +471,7 @@ const S = {
     fontFamily: "'Nunito', sans-serif", boxSizing: 'border-box',
   },
   textarea: { resize: 'vertical', lineHeight: 1.55 },
-  pills:    { display: 'flex', gap: 6, flexWrap: 'wrap' },
+  pills: { display: 'flex', gap: 6, flexWrap: 'wrap' },
   pill: {
     padding: '5px 12px', borderRadius: 20,
     border: '1.5px solid #D4C4A8', background: '#FFFDF9',
