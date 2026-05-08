@@ -5,7 +5,8 @@ import {
   buildVocabPrompt, buildThreadPrompt,
   buildDoubtPrompt, buildVracInjectPrompt,
   buildDiscoveryPrompt, buildSynonymPrompt,
-  buildWordSearchPrompt,
+  buildWordSearchPrompt, buildAkinatorSoftPrompt,
+  buildPredictivePrompt,
 } from '../lib/prompts'
 
 export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, leaVoice, addMessage, chatHistory, carolineProfile, leaMemory, updateLeaMemory }) {
@@ -23,7 +24,7 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
     leaMemory,
   }), [name, moodToday, currentChapter, carolineProfile, leaMemory])
 
-  // ─── Envoyer un message à Léa ──────────────────────────────
+  // ─── Envoyer un message à Léa ──────────────────────────
   const sendMessage = useCallback(async (userText, { type = 'chat', extraSystem } = {}) => {
     if (!apiKey) return null
     setLoading(true); setStreaming('')
@@ -31,7 +32,6 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
     const userMsg = { role: 'user', content: userText }
     addMessage({ role: 'user', content: userText })
 
-    // Construire l'historique (garder les 20 derniers)
     const history = [...chatHistory.slice(-20), userMsg].map(m => ({
       role: m.role,
       content: m.content,
@@ -48,7 +48,6 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
       })
       addMessage({ role: 'assistant', content: full })
 
-      // ─── Mise à jour mémoire Léa ──────────────────────────
       if (updateLeaMemory && full && type === 'chat') {
         updateLeaMemory({
           lastSession: new Date().toISOString(),
@@ -56,14 +55,12 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
         })
       }
 
-      // TTS si voix activée
       if (voiceOn && full) {
         if (audioRef.current) audioRef.current.pause()
         if (openAiKey) {
           try {
             audioRef.current = await speakWithOpenAI({ openAiKey, text: full, voice: leaVoice })
           } catch (_) {
-            // Fallback voix navigateur
             speakBrowser(full)
           }
         } else {
@@ -78,27 +75,22 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
     return full
   }, [apiKey, openAiKey, systemPrompt, chatHistory, voiceOn, leaVoice, addMessage, updateLeaMemory, currentChapter])
 
-  // ─── Correction rapide ─────────────────────────────────────
   const correctText = useCallback(async (text) => {
     return sendMessage(buildCorrectionPrompt(text), { type: 'correction' })
   }, [sendMessage])
 
-  // ─── Définition d'un mot ───────────────────────────────────
   const defineWord = useCallback(async (word) => {
     return sendMessage(buildVocabPrompt(word), { type: 'vocab' })
   }, [sendMessage])
 
-  // ─── Retrouver le fil ──────────────────────────────────────
   const findThread = useCallback(async (chapterText) => {
     return sendMessage(buildThreadPrompt(chapterText), { type: 'thread' })
   }, [sendMessage])
 
-  // ─── Mode "Je doute" ───────────────────────────────────────
   const expressDoubt = useCallback(async (text) => {
     return sendMessage(buildDoubtPrompt(text), { type: 'doubt' })
   }, [sendMessage])
 
-  // ─── Injecter une idée du vrac ─────────────────────────────
   const injectVrac = useCallback(async (idea) => {
     return sendMessage(
       buildVracInjectPrompt({ idea, chapterTitle: currentChapter?.title }),
@@ -106,13 +98,11 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
     )
   }, [sendMessage, currentChapter])
 
-  // ─── Découverte du jour ────────────────────────────────────
   const getDiscovery = useCallback(async () => {
     const recentText = currentChapter?.content || ''
     return sendMessage(buildDiscoveryPrompt(recentText), { type: 'discovery' })
   }, [sendMessage, currentChapter])
 
-  // ─── DicoCaro — Synonymes ──────────────────────────────────
   const getSynonyms = useCallback(async ({ word, sentence, level }) => {
     if (!word?.trim()) return null
     return sendMessage(
@@ -121,13 +111,11 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
     )
   }, [sendMessage])
 
-  // ─── DicoCaro — Je cherche mes mots ───────────────────────
   const searchWord = useCallback(async (description) => {
     if (!description?.trim()) return null
     return sendMessage(buildWordSearchPrompt(description.trim()), { type: 'wordSearch' })
   }, [sendMessage])
 
-  // ─── DicoCaro — Akinator littéraire ───────────────────────
   const startAkinator = useCallback(async () => {
     return sendMessage(
       "Je cherche un mot précis mais je n'arrive pas à le formuler. Aide-moi à le trouver en me posant des questions une à une — sur l'émotion, la sensation, le contexte ou la nuance que je veux exprimer. Commence par ta première question.",
@@ -135,7 +123,19 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
     )
   }, [sendMessage])
 
-  // ─── Toggle voix ───────────────────────────────────────────
+  const startAkinatorSoft = useCallback(async (answers) => {
+    return sendMessage(
+      buildAkinatorSoftPrompt(answers),
+      { type: 'akinatorSoft' }
+    )
+  }, [sendMessage])
+
+  const getPredictiveWords = useCallback(async () => {
+    const content = currentChapter?.content || ''
+    if (!content.trim()) return null
+    return sendMessage(buildPredictivePrompt(content), { type: 'predictive' })
+  }, [sendMessage, currentChapter])
+
   const toggleVoice = useCallback(() => {
     if (voiceOn && audioRef.current) {
       audioRef.current.pause()
@@ -144,10 +144,14 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
     setVoiceOn(v => !v)
   }, [voiceOn])
 
-  return { loading, streaming, voiceOn, toggleVoice, sendMessage, correctText, defineWord, findThread, expressDoubt, injectVrac, getDiscovery, getSynonyms, searchWord, startAkinator }
+  return {
+    loading, streaming, voiceOn, toggleVoice, sendMessage,
+    correctText, defineWord, findThread, expressDoubt, injectVrac,
+    getDiscovery, getSynonyms, searchWord,
+    startAkinator, startAkinatorSoft, getPredictiveWords,
+  }
 }
 
-// ─── Humanisation des erreurs Léa ────────────────────────────
 function mapCoachError(err) {
   const msg = (err?.message || '').toLowerCase()
   if (!navigator.onLine || msg.includes('failed to fetch') || msg.includes('networkerror') || msg.includes('load failed')) {
@@ -165,7 +169,6 @@ function mapCoachError(err) {
   return "Léa n'a pas pu répondre — tu peux continuer à écrire, on réessaiera 🌿"
 }
 
-// ─── Voix navigateur fallback ─────────────────────────────────
 function speakBrowser(text) {
   if (!window.speechSynthesis) return
   window.speechSynthesis.cancel()
