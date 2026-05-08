@@ -1,49 +1,36 @@
-import { useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Mic, MicOff, Check, X } from 'lucide-react'
 import { useVoice } from '../../hooks/useVoice'
 
 export default function DictationModal({ onClose, onInsert }) {
-  const voice = useVoice({
-    onResult: (text) => {
-      // Accumule dans le textarea via state géré localement
-    }
+  const [accumulated, setAccumulated] = useState('')
+
+  // Callback stable — accumulateur React propre, sans window.__dictAcc__
+  const handleResult = useCallback((text) => {
+    setAccumulated(prev => prev + text)
+  }, [])
+
+  const { listening, interim, errorMsg, supported, toggle, stop } = useVoice({
+    onResult: handleResult,
   })
 
-  // Accumuler le texte dicté
-  const [accumulated, setAccumulated] = window.__dictAccum__ || [[], null]
+  // Stop propre à la fermeture — stop est stable (useCallback [])
+  useEffect(() => {
+    return () => { stop() }
+  }, [stop])
 
-  // Hack simple : utiliser un ref dans le parent — ici on gère localement
-  const [dictText, setDictText] = [
-    window.__dictText__ || '',
-    (t) => { window.__dictText__ = t }
-  ]
-
-  // Meilleure approche : re-déclencher useVoice avec callback accumulateur
-  const { listening, interim, supported, toggle, stop } = useVoice({
-    onResult: (text) => {
-      window.__dictAcc__ = (window.__dictAcc__ || '') + text
-    }
-  })
-
-  const getText = () => (window.__dictAcc__ || '') + (interim || '')
+  const displayText = accumulated + (interim || '')
 
   const handleInsert = () => {
-    const text = getText().trim()
+    const text = displayText.trim()
     if (text) onInsert(text)
-    window.__dictAcc__ = ''
     if (listening) stop()
     onClose()
   }
 
-  useEffect(() => {
-    window.__dictAcc__ = ''
-    return () => {
-      window.__dictAcc__ = ''
-      stop()
-    }
-  }, [])
-
-  const displayText = getText()
+  const handleClear = () => {
+    setAccumulated('')
+  }
 
   return (
     <div className="modal-bg" onClick={e => e.target === e.currentTarget && onClose()}>
@@ -60,6 +47,11 @@ export default function DictationModal({ onClose, onInsert }) {
 
         {supported && (
           <>
+            {/* Erreur permission ou micro indisponible */}
+            {errorMsg && (
+              <div style={styles.warn}>{errorMsg}</div>
+            )}
+
             {/* Bouton micro */}
             <div style={styles.micWrap}>
               <button
@@ -82,24 +74,25 @@ export default function DictationModal({ onClose, onInsert }) {
               )}
             </div>
 
-            {/* Texte transcrit */}
+            {/* Texte transcrit — interim affiché une seule fois, en gris */}
             <div style={styles.textBox}>
-              {displayText || <span style={styles.placeholder}>Le texte dicté apparaîtra ici…</span>}
-              {interim && <span style={styles.interim}>{interim}</span>}
+              {accumulated
+                ? <>{accumulated}<span style={styles.interim}>{interim}</span></>
+                : interim
+                  ? <span style={styles.interim}>{interim}</span>
+                  : <span style={styles.placeholder}>Le texte dicté apparaîtra ici…</span>
+              }
             </div>
 
             {/* Actions */}
             <div style={styles.actions}>
-              <button
-                style={styles.clearBtn}
-                onClick={() => { window.__dictAcc__ = '' }}
-              >
+              <button style={styles.clearBtn} onClick={handleClear}>
                 Effacer
               </button>
               <button
-                style={{ ...styles.insertBtn, opacity: displayText ? 1 : .5 }}
+                style={{ ...styles.insertBtn, opacity: displayText.trim() ? 1 : .5 }}
                 onClick={handleInsert}
-                disabled={!displayText}
+                disabled={!displayText.trim()}
               >
                 <Check size={16} /> Insérer dans le chapitre
               </button>
@@ -116,6 +109,7 @@ const styles = {
     background: '#FFF3E0', border: '1px solid #FFB74D',
     borderRadius: 10, padding: 14,
     fontSize: '.82rem', color: '#E65100', lineHeight: 1.6,
+    marginBottom: 12,
   },
   micWrap: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, margin: '20px 0' },
   micBtn: {
@@ -131,9 +125,7 @@ const styles = {
     boxShadow: '0 4px 24px rgba(192,57,43,.4)',
   },
   micHint: { fontSize: '.8rem', color: '#9C8878', textAlign: 'center' },
-  pulse: {
-    display: 'flex', gap: 5, alignItems: 'center',
-  },
+  pulse: { display: 'flex', gap: 5, alignItems: 'center' },
   textBox: {
     minHeight: 100,
     background: '#FAF7F2', border: '1.5px solid #EDE7DE',
