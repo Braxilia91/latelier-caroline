@@ -4,7 +4,6 @@
 export function buildSystemPrompt({ name, mood, currentChapter, intention, profile, leaMemory }) {
   const n = name || 'Caroline'
 
-  // ── Profil Caroline (onboarding) ─────────────────────────
   let profileSection = ''
   if (profile) {
     profileSection = `
@@ -17,7 +16,6 @@ PROFIL DE ${n.toUpperCase()} :
 `
   }
 
-  // ── Mémoire de session ────────────────────────────────────
   let memorySection = ''
   if (leaMemory && (leaMemory.lastSession || leaMemory.keyPoints?.length)) {
     memorySection = `
@@ -29,7 +27,6 @@ ${leaMemory.toCelebrate ? `- À célébrer : ${leaMemory.toCelebrate}` : ''}
 `
   }
 
-  // ── Contexte d'écriture en cours ─────────────────────────
   const moodLine    = mood            ? `\nHumeur du jour : ${mood}` : ''
   const chapterLine = currentChapter
     ? `\nChapitre en cours : "${currentChapter.title}"${intention ? ` — intention : "${intention}"` : ''}`
@@ -82,7 +79,6 @@ RÈGLES ABSOLUES :
 // ─── Mode "Je doute" ───────────────────────────────────────────
 export function buildDoubtPrompt(text) {
   const cleaned = text || ''
-  // Sur un chapitre long : début + fin pour préserver le contexte global
   const excerpt = cleaned.length > 1500
     ? `${cleaned.slice(0, 400)} […] ${cleaned.slice(-400)}`
     : cleaned
@@ -231,7 +227,6 @@ export function buildWelcomeMessage({ name, leaMemory, currentChapter }) {
   else if (hour >= 18 && hour < 22) timeGreet = `Bonsoir ${n} 🕯️`
   else timeGreet = `Bonne nuit ${n} 🌙`
 
-  // Si on a de la mémoire de session
   if (leaMemory?.lastChapter && leaMemory?.lastSession) {
     const lastDate = new Date(leaMemory.lastSession)
     const today    = new Date()
@@ -241,7 +236,6 @@ export function buildWelcomeMessage({ name, leaMemory, currentChapter }) {
     return `${timeGreet} — ${dayStr} tu travaillais sur "${leaMemory.lastChapter}". Comment tu te sens aujourd'hui pour reprendre ?`
   }
 
-  // Premier lancement ou pas de mémoire
   if (currentChapter) {
     return `${timeGreet} — je vois que tu travailles sur "${currentChapter.title}". Je suis là quand tu veux. Dis-moi comment tu te sens.`
   }
@@ -251,8 +245,6 @@ export function buildWelcomeMessage({ name, leaMemory, currentChapter }) {
 
 // ─── Prompts d'inspiration fixes (90 prompts, 12 catégories) ──
 export const INSPIRATION_PROMPTS = [
-
-  // ── Enfance ──────────────────────────────────────────────────
   { cat: 'Enfance', q: "Quel est le premier souvenir que tu as d'un endroit qui te faisait te sentir en sécurité ?" },
   { cat: 'Enfance', q: "Y a-t-il une odeur ou un son d'enfance qui te ramène instantanément quelque part ?" },
   { cat: 'Enfance', q: "Raconte un matin d'enfance dont tu te souviens avec une précision étrange." },
@@ -264,7 +256,6 @@ export const INSPIRATION_PROMPTS = [
   { cat: 'Enfance', q: "Y a-t-il une phrase qu'on répétait chez toi et qui t'a longtemps suivie ?" },
   { cat: 'Enfance', q: "Quel souvenir de repas, de table ou de cuisine revient souvent ?" },
 
-  // ── Personnes ─────────────────────────────────────────────────
   { cat: 'Personnes', q: "Qui t'a dit un jour quelque chose que tu n'as jamais oublié ?" },
   { cat: 'Personnes', q: "Pense à quelqu'un qui a changé ta vie sans le savoir. Comment te souviens-tu de lui ?" },
   { cat: 'Personnes', q: "Y a-t-il quelqu'un que tu as perdu de vue et dont tu te demandes encore ce qu'il est devenu ?" },
@@ -276,7 +267,6 @@ export const INSPIRATION_PROMPTS = [
   { cat: 'Personnes', q: "Y a-t-il quelqu'un dans ta famille dont tu n'as pas assez entendu l'histoire ?" },
   { cat: 'Personnes', q: "Qui t'a témoigné une confiance inattendue à un moment où tu en avais besoin ?" },
 
-  // ── Moments ───────────────────────────────────────────────────
   { cat: 'Moments', q: "Quelle est la journée où tu as ressenti pour la première fois que tu étais adulte ?" },
   { cat: 'Moments', q: "Y a-t-il un moment où tu as dû être forte alors que tu aurais voulu t'effondrer ?" },
   { cat: 'Moments', q: "Décris une attente — une salle, une gare, un couloir — et ce que tu ressentais." },
@@ -288,7 +278,6 @@ export const INSPIRATION_PROMPTS = [
   { cat: 'Moments', q: "Quel repas, quelle fête ou quelle réunion de famille resterait dans ta mémoire même si tout le reste disparaissait ?" },
   { cat: 'Moments', q: "Raconte une nuit — une seule — qui a tout changé." },
 
-  // ── Lieux ─────────────────────────────────────────────────────
   { cat: 'Lieux', q: "Y a-t-il un endroit dans le monde qui ressemble exactement à ce que tu ressens quand tu es bien ?" },
   { cat: 'Lieux', q: "Quel lieu de ton enfance n'existe peut-être plus, mais vit encore en toi ?" },
   { cat: 'Lieux', q: "Décris la maison où tu te sentais le plus chez toi — même si ce n'était pas la tienne." },
@@ -298,7 +287,6 @@ export const INSPIRATION_PROMPTS = [
   { cat: 'Lieux', q: "Y a-t-il un lieu que tu évites encore aujourd'hui parce qu'il garde trop de mémoire ?" },
   { cat: 'Lieux', q: "Quel paysage as-tu regardé un jour si longtemps que tu penses pouvoir le redessiner de mémoire ?" },
 
-  // ── Émotions ──────────────────────────────────────────────────
   { cat: 'Émotions', q: "Quelle est l'émotion la plus difficile à expliquer aux autres que tu ressens parfois ?" },
   { cat: 'Émotions', q: "Y a-t-il une colère que tu as longtemps tenue enfermée ? Qu'est-ce qu'elle cachait ?" },
   { cat: 'Émotions', q: "Décris une jalousie que tu as ressentie et dont tu comprends maintenant la vraie source." },
@@ -308,7 +296,6 @@ export const INSPIRATION_PROMPTS = [
   { cat: 'Émotions', q: "Quelle émotion as-tu appris à reconnaître en toi sur le tard ?" },
   { cat: 'Émotions', q: "Y a-t-il un sentiment que tu ressentais enfant et que tu ne sais plus tout à fait nommer maintenant ?" },
 
-  // ── Corps ─────────────────────────────────────────────────────
   { cat: 'Corps', q: "Comment ton corps a-t-il gardé la mémoire de certaines épreuves ?" },
   { cat: 'Corps', q: "Y a-t-il un geste que tes mains font encore par habitude et qui vient de très loin ?" },
   { cat: 'Corps', q: "Comment ta relation à ton corps a-t-elle changé avec les années ?" },
@@ -316,7 +303,6 @@ export const INSPIRATION_PROMPTS = [
   { cat: 'Corps', q: "Quel soin ou rituel du quotidien a compté davantage que son apparence banale ?" },
   { cat: 'Corps', q: "Décris la sensation physique d'un moment de bonheur intense — où tu le sentais dans le corps." },
 
-  // ── Objets ────────────────────────────────────────────────────
   { cat: 'Objets', q: "Quel objet possèdes-tu depuis longtemps et que tu n'arriverais pas à jeter ?" },
   { cat: 'Objets', q: "Y a-t-il un cadeau reçu dont la valeur n'était pas dans l'objet mais dans ce qu'il signifiait ?" },
   { cat: 'Objets', q: "Quel livre, disque ou film a changé quelque chose en toi au moment précis où tu l'as découvert ?" },
@@ -324,7 +310,6 @@ export const INSPIRATION_PROMPTS = [
   { cat: 'Objets', q: "Quel vêtement gardes-tu en mémoire pour ce qu'il représentait, pas pour ce qu'il était ?" },
   { cat: 'Objets', q: "Si tu devais choisir cinq objets pour raconter ta vie à quelqu'un qui ne te connaît pas, lesquels choisirais-tu ?" },
 
-  // ── Rêves ─────────────────────────────────────────────────────
   { cat: 'Rêves', q: "Quel rêve as-tu gardé secret longtemps ? Pourquoi secret ?" },
   { cat: 'Rêves', q: "Y a-t-il quelque chose que tu voulais faire et que tu as mis de côté — pas abandonné, juste mis de côté ?" },
   { cat: 'Rêves', q: "Quel rêve de jeunesse t'a guidée sans que tu le réalises vraiment à l'époque ?" },
@@ -332,7 +317,6 @@ export const INSPIRATION_PROMPTS = [
   { cat: 'Rêves', q: "Qu'est-ce que tu aurais voulu oser plus tôt ?" },
   { cat: 'Rêves', q: "Si tu pouvais transmettre une seule chose à quelqu'un qui commence sa vie, ce serait quoi ?" },
 
-  // ── Tournants ─────────────────────────────────────────────────
   { cat: 'Tournants', q: "Quelle décision a changé le cours de ta vie, même si elle semblait anodine sur le moment ?" },
   { cat: 'Tournants', q: "Y a-t-il une version de toi que tu as dû laisser derrière toi pour avancer ?" },
   { cat: 'Tournants', q: "Quel refus — un travail, une relation, un endroit — s'est révélé être une chance ?" },
@@ -342,7 +326,6 @@ export const INSPIRATION_PROMPTS = [
   { cat: 'Tournants', q: "Quel moment t'a fait comprendre ce que tu ne voulais plus jamais vivre ?" },
   { cat: 'Tournants', q: "Comment décrirais-tu la personne que tu es devenue par rapport à celle que tu pensais devenir ?" },
 
-  // ── Secrets ───────────────────────────────────────────────────
   { cat: 'Secrets', q: "Y a-t-il quelque chose que tu as fait et dont tu n'as jamais parlé — pas par honte, mais parce que les mots manquaient ?" },
   { cat: 'Secrets', q: "Quelle vérité sur toi as-tu mis longtemps à te dire à toi-même ?" },
   { cat: 'Secrets', q: "Y a-t-il quelque chose que tu as su avant tout le monde, et que tu as gardé pour toi ?" },
@@ -350,7 +333,6 @@ export const INSPIRATION_PROMPTS = [
   { cat: 'Secrets', q: "Y a-t-il quelque chose dont tu es fière mais que tu n'oses pas revendiquer ?" },
   { cat: 'Secrets', q: "Qu'est-ce que tu aurais aimé pouvoir dire à quelqu'un et que tu n'as jamais dit ?" },
 
-  // ── Joie ──────────────────────────────────────────────────────
   { cat: 'Joie', q: "Décris un moment de bonheur simple — si simple qu'il serait facile de l'oublier." },
   { cat: 'Joie', q: "Qu'est-ce qui te fait encore rire de la même façon qu'à 15 ans ?" },
   { cat: 'Joie', q: "Y a-t-il une joie que tu accueilles mieux maintenant qu'avant ?" },
@@ -358,7 +340,6 @@ export const INSPIRATION_PROMPTS = [
   { cat: 'Joie', q: "Quel moment de ta vie, en y repensant, te redonne de l'énergie ?" },
   { cat: 'Joie', q: "Y a-t-il quelque chose de tout petit — un détail, un instant — qui te rend heureuse à coup sûr ?" },
 
-  // ── Liberté ───────────────────────────────────────────────────
   { cat: 'Liberté', q: "Qu'est-ce qui te donne aujourd'hui le sentiment d'être libre ?" },
   { cat: 'Liberté', q: "Y a-t-il quelque chose dont tu t'es libérée progressivement, sans t'en apercevoir ?" },
   { cat: 'Liberté', q: "Quelle est la chose la plus courageuse que tu aies faite pour toi seule ?" },
@@ -367,8 +348,7 @@ export const INSPIRATION_PROMPTS = [
   { cat: 'Liberté', q: "Qu'est-ce que tu as appris à dire non — et qu'est-ce que ce non t'a ouvert ?" },
 ]
 
-
-// ─── DicoCaro — Akinator Soft (formulaire guidé → mot) ────────
+// ─── DicoCaro — Akinator Soft (legacy, conservé pour rollback) ────
 export function buildAkinatorSoftPrompt({ nature, mouvement, registre, contexte }) {
   return `Caroline cherche un mot précis. Voici ses indices :
 - Nature du concept : ${nature}
@@ -384,6 +364,44 @@ Pour chaque mot :
 
 Commence directement par les propositions, sans introduction.
 Ton : précis, chaleureux, jamais condescendant.`
+}
+
+// ─── DicoCaro — Akinator Turn (devinette pas-à-pas, JSON strict) ─
+export function buildAkinatorTurnPrompt({ history }) {
+  const turn = (history?.length || 0) + 1
+  const historyText = (history && history.length)
+    ? history.map((h, i) =>
+        `Tour ${i + 1}\n  Question : ${h.question}\n  Réponse de Caroline : ${h.answer}`
+      ).join('\n')
+    : '(aucun tour précédent — c\'est le tour 1)'
+
+  return `Tu joues à un Akinator lexical avec Caroline pour l'aider à trouver un mot français qu'elle a sur le bout de la langue. Contexte : autobiographie, récit personnel.
+
+Historique des tours :
+${historyText}
+
+Tour actuel : ${turn} sur 5 maximum.
+
+RÈGLES DE DÉCISION :
+- Tours 1, 2, 3 : pose une nouvelle question utile pour réduire l'espace des mots possibles.
+- Tour 4 : tu peux poser une dernière question OU passer aux candidats si tu as déjà assez d'indices.
+- Tour 5 : tu DOIS produire les candidats finaux. Pas de nouvelle question.
+
+FORMAT DE RÉPONSE — UN SEUL JSON, PAS DE MARKDOWN, PAS DE TEXTE AUTOUR.
+
+Si tu poses une question :
+{"type":"question","question":"<question courte, max 12 mots>","choices":["<choix 1>","<choix 2>","<choix 3>"]}
+- 2 à 5 choix exclusifs, 1 à 3 mots chacun, en minuscules.
+- La question doit être différente des questions déjà posées.
+- N'aborde pas deux dimensions à la fois (ex : pas "émotion ou sensation, et joyeux ou triste").
+
+Si tu produis les candidats finaux :
+{"type":"candidates","candidates":[{"word":"<mot>","rationale":"<pourquoi il colle, 1 phrase courte>","example":"<phrase autobiographique d'exemple>"}]}
+- 3 à 6 candidats classés du plus probable au moins probable.
+- Mots français courants ou littéraires selon les indices.
+- L'exemple est une phrase à la première personne, naturelle, en lien avec le contexte donné.
+
+CRITIQUE : ta sortie doit être un JSON valide parsable directement. Aucun caractère avant le { ni après le }.`
 }
 
 // ─── DicoCaro — Prédictif (mots que Caroline va peut-être chercher) ─
