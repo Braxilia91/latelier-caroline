@@ -28,3 +28,4 @@ vite.config.js.timestamp-*.mjs
 
 # Dossiers locaux non destinés au repo
 src_extracted/
+cles-api.local.txt
