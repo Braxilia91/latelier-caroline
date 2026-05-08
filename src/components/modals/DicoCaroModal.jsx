@@ -58,10 +58,11 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
   const [akinError,      setAkinError]      = useState('')
   const [copiedWord,     setCopiedWord]     = useState(null)
 
-  const [wikiQuery,   setWikiQuery]   = useState('')
-  const [wikiResult,  setWikiResult]  = useState(null)
-  const [wikiLoading, setWikiLoading] = useState(false)
-  const [wikiError,   setWikiError]   = useState('')
+  const [wikiQuery,       setWikiQuery]       = useState('')
+  const [wikiResult,      setWikiResult]      = useState(null)
+  const [wikiLoading,     setWikiLoading]     = useState(false)
+  const [wikiError,       setWikiError]       = useState('')
+  const [wikiSuggestions, setWikiSuggestions] = useState([])
 
   const [councilDone, setCouncilDone] = useState(
     () => localStorage.getItem('dicoCaroConseil') === TODAY
@@ -71,20 +72,41 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
   const hasChapterContent = !!(currentChapter?.content?.trim())
   const wikiUrl = wikiResult && wikiResult.content_urls && wikiResult.content_urls.desktop && wikiResult.content_urls.desktop.page
 
-  const handleWikiSearch = async () => {
-    if (!wikiQuery.trim()) return
+  const handleWikiSearch = async (overrideTerm) => {
+    const term = (overrideTerm ?? wikiQuery).trim()
+    if (!term) return
+    if (overrideTerm) setWikiQuery(overrideTerm)
     setWikiLoading(true)
     setWikiResult(null)
     setWikiError('')
+    setWikiSuggestions([])
     try {
       const res = await fetch(
-        `https://fr.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(wikiQuery.trim())}`
+        `https://fr.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(term)}`
       )
       if (!res.ok) throw new Error('not_found')
       const data = await res.json()
       setWikiResult(data)
     } catch {
-      setWikiError('Aucun résultat. Essaie avec un autre terme ou une autre orthographe.')
+      // Fallback opensearch — suggestions d'orthographe alternatives
+      try {
+        const sugRes = await fetch(
+          `https://fr.wikipedia.org/w/api.php?action=opensearch&search=${encodeURIComponent(term)}&limit=6&namespace=0&format=json&origin=*`
+        )
+        if (sugRes.ok) {
+          const sugData = await sugRes.json()
+          const suggestions = Array.isArray(sugData?.[1]) ? sugData[1].filter(Boolean) : []
+          if (suggestions.length > 0) {
+            setWikiSuggestions(suggestions)
+          } else {
+            setWikiError('Aucun résultat. Essaie avec un autre terme ou une autre orthographe.')
+          }
+        } else {
+          setWikiError('Aucun résultat. Essaie avec un autre terme ou une autre orthographe.')
+        }
+      } catch {
+        setWikiError('Aucun résultat. Essaie avec un autre terme ou une autre orthographe.')
+      }
     } finally {
       setWikiLoading(false)
     }
@@ -419,6 +441,24 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
                 <div style={S.wikiError}>{wikiError}</div>
               )}
 
+              {wikiSuggestions.length > 0 && !wikiResult && (
+                <div style={S.wikiSugWrap}>
+                  <div style={S.wikiSugLabel}>Voulais-tu dire ?</div>
+                  <div style={S.wikiSugList}>
+                    {wikiSuggestions.map(s => (
+                      <button
+                        key={s}
+                        style={S.wikiSugChip}
+                        onClick={() => handleWikiSearch(s)}
+                        disabled={wikiLoading}
+                      >
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {wikiResult && (
                 <div style={S.wikiCard}>
                   {wikiResult.thumbnail?.source && (
@@ -728,5 +768,23 @@ const S = {
     fontSize: '.76rem', color: '#C4956A', fontStyle: 'italic',
     fontFamily: "'Nunito', sans-serif", padding: '8px 12px',
     background: '#FFF3E8', borderRadius: 8,
+  },
+  wikiSugWrap: {
+    background: '#F5F0E8', borderRadius: 8, padding: '10px 12px',
+    display: 'flex', flexDirection: 'column', gap: 8,
+  },
+  wikiSugLabel: {
+    fontSize: '.76rem', fontWeight: 700, color: '#5C4A32',
+    fontFamily: "'Nunito', sans-serif",
+  },
+  wikiSugList: {
+    display: 'flex', flexWrap: 'wrap', gap: 6,
+  },
+  wikiSugChip: {
+    background: '#FFFDF9', border: '1.5px solid #D4C4A8',
+    borderRadius: 16, padding: '4px 12px',
+    fontSize: '.74rem', fontWeight: 600, color: '#5C4A32',
+    fontFamily: "'Nunito', sans-serif", cursor: 'pointer',
+    transition: 'all .15s',
   },
 }
