@@ -17,7 +17,7 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
 
   const tabsRef = useRef(null)
   const tabRefs = useRef({})
-  const [canScrollLeft, setCanScrollLeft] = useState(false)
+  const [canScrollLeft,  setCanScrollLeft]  = useState(false)
   const [canScrollRight, setCanScrollRight] = useState(false)
 
   const updateScrollState = () => {
@@ -45,27 +45,30 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
     return () => clearTimeout(t)
   }, [tab])
 
-  const [word, setWord] = useState('')
-  const [sentence, setSentence] = useState('')
-  const [level, setLevel] = useState('mixte')
+  const [word,        setWord]        = useState('')
+  const [sentence,    setSentence]    = useState('')
+  const [level,       setLevel]       = useState('mixte')
 
   const [description, setDescription] = useState('')
 
-  const [akinNature, setAkinNature] = useState('')
-  const [akinMouvement, setAkinMouvement] = useState('')
-  const [akinRegistre, setAkinRegistre] = useState('courant')
-  const [akinContexte, setAkinContexte] = useState('')
+  // ── Akinator pas-à-pas (Livraison 2) ──────────────────────
+  const [akinPhase,      setAkinPhase]      = useState('idle')  // idle | loading | asking | candidates | error
+  const [akinHistory,    setAkinHistory]    = useState([])
+  const [akinCurrent,    setAkinCurrent]    = useState(null)
+  const [akinCandidates, setAkinCandidates] = useState([])
+  const [akinError,      setAkinError]      = useState('')
+  const [copiedWord,     setCopiedWord]     = useState(null)
 
-  const [wikiQuery, setWikiQuery] = useState('')
-  const [wikiResult, setWikiResult] = useState(null)
+  const [wikiQuery,   setWikiQuery]   = useState('')
+  const [wikiResult,  setWikiResult]  = useState(null)
   const [wikiLoading, setWikiLoading] = useState(false)
-  const [wikiError, setWikiError] = useState('')
+  const [wikiError,   setWikiError]   = useState('')
 
   const [councilDone, setCouncilDone] = useState(
     () => localStorage.getItem('dicoCaroConseil') === TODAY
   )
 
-  const { loading, getSynonyms, searchWord, startAkinatorSoft, getPredictiveWords, getDiscovery } = coach
+  const { loading, getSynonyms, searchWord, askAkinatorTurn, defineWord, getPredictiveWords, getDiscovery } = coach
   const hasChapterContent = !!(currentChapter?.content?.trim())
 
   const handleWikiSearch = async () => {
@@ -87,6 +90,86 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
     }
   }
 
+  // ── Akinator handlers ─────────────────────────────────────
+  const applyAkinResult = (res) => {
+    if (!res) {
+      setAkinError("Pas de réponse — réessaie.")
+      setAkinPhase('error')
+      return
+    }
+    if (res.type === 'question') {
+      setAkinCurrent({ question: res.question, choices: res.choices })
+      setAkinPhase('asking')
+    } else if (res.type === 'candidates') {
+      setAkinCandidates(res.candidates)
+      setAkinPhase('candidates')
+    } else {
+      setAkinError(res.message || "Léa n'a pas pu répondre.")
+      setAkinPhase('error')
+    }
+  }
+
+  const akinStart = async () => {
+    setAkinHistory([])
+    setAkinCurrent(null)
+    setAkinCandidates([])
+    setAkinError('')
+    setAkinPhase('loading')
+    const res = await askAkinatorTurn([])
+    applyAkinResult(res)
+  }
+
+  const akinAnswer = async (answer) => {
+    if (!akinCurrent) return
+    const newHistory = [
+      ...akinHistory,
+      { question: akinCurrent.question, choices: akinCurrent.choices, answer },
+    ]
+    setAkinHistory(newHistory)
+    setAkinPhase('loading')
+    const res = await askAkinatorTurn(newHistory)
+    applyAkinResult(res)
+  }
+
+  const akinReset = () => {
+    setAkinPhase('idle')
+    setAkinHistory([])
+    setAkinCurrent(null)
+    setAkinCandidates([])
+    setAkinError('')
+    setCopiedWord(null)
+  }
+
+  const akinCopy = async (rawWord) => {
+    const w = String(rawWord || '').trim()
+    if (!w) return
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(w)
+      } else {
+        const ta = document.createElement('textarea')
+        ta.value = w
+        ta.style.position = 'fixed'
+        ta.style.left = '-9999px'
+        document.body.appendChild(ta)
+        ta.select()
+        document.execCommand('copy')
+        document.body.removeChild(ta)
+      }
+      setCopiedWord(w)
+      setTimeout(() => setCopiedWord(prev => prev === w ? null : prev), 1500)
+    } catch (_) {
+      setCopiedWord('échec — copie manuelle')
+      setTimeout(() => setCopiedWord(null), 2500)
+    }
+  }
+
+  const akinExplain = async (word) => {
+    if (!defineWord) return
+    await defineWord(word)
+    onClose()
+  }
+
   const handleSend = async () => {
     if (loading) return
     if (tab === 'synonymes') {
@@ -96,15 +179,6 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
     } else if (tab === 'cherche') {
       if (!description.trim()) return
       await searchWord(description)
-      onClose()
-    } else if (tab === 'akinator') {
-      if (!akinNature) return
-      await startAkinatorSoft({
-        nature: akinNature,
-        mouvement: akinMouvement || 'non précisé',
-        registre: akinRegistre,
-        contexte: akinContexte,
-      })
       onClose()
     } else if (tab === 'predictif') {
       if (!hasChapterContent) return
@@ -119,18 +193,21 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
   }
 
   const canSend = hasKey && !loading && (
-    (tab === 'synonymes' && word.trim().length > 0) ||
-    (tab === 'cherche' && description.trim().length > 0) ||
-    (tab === 'akinator' && akinNature !== '') ||
-    (tab === 'predictif' && hasChapterContent) ||
-    (tab === 'conseil' && !councilDone)
+    (tab === 'synonymes' && word.trim().length > 0)        ||
+    (tab === 'cherche'   && description.trim().length > 0) ||
+    (tab === 'predictif' && hasChapterContent)             ||
+    (tab === 'conseil'   && !councilDone)
   )
 
-  const showFooter = hasKey && tab !== 'wiki' && !(tab === 'conseil' && councilDone)
+  const showFooter = hasKey
+    && tab !== 'wiki'
+    && tab !== 'akinator'
+    && !(tab === 'conseil' && councilDone)
 
   return (
     <div style={S.overlay} onClick={e => e.target === e.currentTarget && onClose()}>
       <div style={S.modal}>
+
         <div style={S.hdr}>
           <div style={S.hdrLeft}>
             <span style={S.hdrIcon}>📖</span>
@@ -151,7 +228,7 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
             {TABS.map(t => (
               <button
                 key={t.id}
-                ref={el => { tabRefs.current[t.id] = el }}
+                ref={el => (tabRefs.current[t.id] = el)}
                 style={{ ...S.tab, ...(tab === t.id ? S.tabActive : {}) }}
                 onClick={() => setTab(t.id)}
               >
@@ -159,11 +236,12 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
               </button>
             ))}
           </div>
-          {canScrollLeft && <div style={S.fadeLeft} aria-hidden="true" />}
+          {canScrollLeft  && <div style={S.fadeLeft}  aria-hidden="true" />}
           {canScrollRight && <div style={S.fadeRight} aria-hidden="true" />}
         </div>
 
         <div style={S.body}>
+
           {tab === 'synonymes' && (
             <div style={S.form}>
               <label style={S.label}>Le mot dont tu cherches des alternatives</label>
@@ -214,47 +292,98 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
 
           {tab === 'akinator' && (
             <div style={S.form}>
-              <div style={S.hint}>
-                Réponds à ces 3 questions — Léa trouve ton mot sans te poser de questions une à une.
-              </div>
 
-              <label style={S.label}>1. C'est plutôt…</label>
-              <div style={S.pills}>
-                {[
-                  ['une émotion ou un sentiment', 'Émotion'],
-                  ['une sensation physique', 'Sensation'],
-                  ['une action ou un mouvement', 'Action'],
-                  ['un concept ou une idée', 'Concept'],
-                ].map(([v, l]) => (
-                  <button key={v} style={{ ...S.pill, ...(akinNature === v ? S.pillActive : {}) }} onClick={() => setAkinNature(v)}>{l}</button>
-                ))}
-              </div>
+              {akinPhase === 'idle' && (
+                <div style={S.akinatorCard}>
+                  <div style={S.akinatorIcon}>🎯</div>
+                  <p style={S.akinatorText}>Devinette lexicale avec Léa</p>
+                  <p style={S.akinatorSub}>
+                    Léa te pose 3 à 5 questions courtes pour deviner le mot que tu cherches.
+                    Tu réponds en cliquant sur un choix — pas de saisie.
+                  </p>
+                  {!hasKey && (
+                    <p style={{ ...S.akinatorSub, color: '#C4956A', fontStyle: 'italic' }}>
+                      Configure ton mot de passe Léa dans les réglages pour commencer.
+                    </p>
+                  )}
+                  {hasKey && (
+                    <button style={S.startBtn} onClick={akinStart}>Commencer →</button>
+                  )}
+                </div>
+              )}
 
-              <label style={S.label}>2. Est-ce que ça implique du mouvement ?</label>
-              <div style={S.pills}>
-                {[['oui', 'Oui'], ['non', 'Non'], ['un peu', 'Un peu']].map(([v, l]) => (
-                  <button key={v} style={{ ...S.pill, ...(akinMouvement === v ? S.pillActive : {}) }} onClick={() => setAkinMouvement(v)}>{l}</button>
-                ))}
-              </div>
+              {akinPhase === 'loading' && (
+                <div style={S.akinatorCard}>
+                  <div style={S.akinatorIcon}>💭</div>
+                  <p style={S.akinatorText}>Léa réfléchit…</p>
+                </div>
+              )}
 
-              <label style={S.label}>3. Registre souhaité</label>
-              <div style={S.pills}>
-                {[['courant', 'Courant'], ['littéraire', 'Littéraire'], ['familier', 'Familier']].map(([v, l]) => (
-                  <button key={v} style={{ ...S.pill, ...(akinRegistre === v ? S.pillActive : {}) }} onClick={() => setAkinRegistre(v)}>{l}</button>
-                ))}
-              </div>
+              {akinPhase === 'asking' && akinCurrent && (
+                <>
+                  {akinHistory.length > 0 && (
+                    <div style={S.akinHistory}>
+                      {akinHistory.map((h, i) => (
+                        <div key={i} style={S.akinHistoryItem}>
+                          <span style={S.akinHistoryQ}>Q{i + 1}</span>
+                          <span style={S.akinHistoryAns}>{h.answer}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div style={S.akinTurnBadge}>Question {akinHistory.length + 1} / 5</div>
+                  <div style={S.akinQuestion}>{akinCurrent.question}</div>
+                  <div style={S.pills}>
+                    {akinCurrent.choices.map(c => (
+                      <button key={c} style={S.pill} onClick={() => akinAnswer(c)}>{c}</button>
+                    ))}
+                  </div>
+                  <div style={S.akinFooterActions}>
+                    <button style={S.akinSecondary} onClick={akinReset}>Recommencer</button>
+                  </div>
+                </>
+              )}
 
-              <label style={S.label}>
-                Contexte ou phrase
-                <span style={S.optional}> (optionnel)</span>
-              </label>
-              <textarea
-                style={{ ...S.input, ...S.textarea }}
-                value={akinContexte}
-                onChange={e => setAkinContexte(e.target.value)}
-                placeholder="ex : je veux décrire comment je me sentais dans la cuisine de ma mère…"
-                rows={2}
-              />
+              {akinPhase === 'candidates' && (
+                <>
+                  <div style={S.hint}>
+                    Voici les mots que Léa propose — clique « Copier » pour récupérer le mot, « Explique-moi » pour creuser dans le chat.
+                  </div>
+                  {akinCandidates.map((cand, i) => (
+                    <div key={`${cand.word}-${i}`} style={S.akinCandidate}>
+                      <div style={S.akinCandidateWord}>{cand.word}</div>
+                      {cand.rationale && <div style={S.akinCandidateRat}>{cand.rationale}</div>}
+                      {cand.example && <div style={S.akinCandidateEx}>« {cand.example} »</div>}
+                      <div style={S.akinActions}>
+                        <button
+                          style={{ ...S.akinAction, ...(copiedWord === cand.word ? S.akinActionDone : {}) }}
+                          onClick={() => akinCopy(cand.word)}
+                        >
+                          {copiedWord === cand.word ? '✓ Copié' : 'Copier'}
+                        </button>
+                        <button style={S.akinAction} onClick={() => akinExplain(cand.word)}>
+                          Explique-moi
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                  {copiedWord === 'échec — copie manuelle' && (
+                    <div style={S.wikiError}>Copie automatique impossible — sélectionne le mot et copie-le manuellement.</div>
+                  )}
+                  <div style={S.akinFooterActions}>
+                    <button style={S.akinSecondary} onClick={akinReset}>Recommencer une devinette</button>
+                  </div>
+                </>
+              )}
+
+              {akinPhase === 'error' && (
+                <div style={S.akinatorCard}>
+                  <div style={S.akinatorIcon}>⚠️</div>
+                  <p style={S.akinatorText}>{akinError || "Une erreur est survenue."}</p>
+                  <button style={S.startBtn} onClick={akinStart}>Réessayer</button>
+                </div>
+              )}
+
             </div>
           )}
 
@@ -277,7 +406,7 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
                   style={{
                     ...S.sendBtn,
                     opacity: wikiQuery.trim() && !wikiLoading ? 1 : .45,
-                    cursor: wikiQuery.trim() && !wikiLoading ? 'pointer' : 'not-allowed',
+                    cursor:  wikiQuery.trim() && !wikiLoading ? 'pointer' : 'not-allowed',
                     flexShrink: 0,
                   }}
                   onClick={handleWikiSearch}
@@ -311,7 +440,7 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
                     </div>
                   )}
                   {wikiResult.content_urls?.desktop?.page && (
-                    <a
+                    
                       href={wikiResult.content_urls.desktop.page}
                       target="_blank"
                       rel="noopener noreferrer"
@@ -370,6 +499,7 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
               </div>
             </div>
           )}
+
         </div>
 
         {showFooter && (
@@ -388,6 +518,7 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
             )}
           </div>
         )}
+
       </div>
     </div>
   )
@@ -409,10 +540,10 @@ const S = {
     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
     padding: '14px 18px', borderBottom: '1px solid #EDE7DE', flexShrink: 0,
   },
-  hdrLeft: { display: 'flex', alignItems: 'center', gap: 10 },
-  hdrIcon: { fontSize: 22 },
+  hdrLeft:  { display: 'flex', alignItems: 'center', gap: 10 },
+  hdrIcon:  { fontSize: 22 },
   hdrTitle: { fontSize: '.92rem', fontWeight: 700, color: '#2D261E', fontFamily: "'Nunito', sans-serif" },
-  hdrSub: { fontSize: '.72rem', color: '#8B7355', fontFamily: "'Nunito', sans-serif" },
+  hdrSub:   { fontSize: '.72rem', color: '#8B7355', fontFamily: "'Nunito', sans-serif" },
   closeBtn: {
     background: 'none', border: 'none', cursor: 'pointer', color: '#8B7355',
     padding: 4, borderRadius: 6, display: 'flex', alignItems: 'center',
@@ -452,8 +583,8 @@ const S = {
     pointerEvents: 'none',
     background: 'linear-gradient(to left, #FAF7F2 0%, rgba(250,247,242,0) 100%)',
   },
-  body: { flex: 1, overflowY: 'auto', padding: '18px 20px' },
-  form: { display: 'flex', flexDirection: 'column', gap: 12 },
+  body:  { flex: 1, overflowY: 'auto', padding: '18px 20px' },
+  form:  { display: 'flex', flexDirection: 'column', gap: 12 },
   label: {
     fontSize: '.78rem', fontWeight: 700, color: '#5C4A32',
     fontFamily: "'Nunito', sans-serif",
@@ -471,7 +602,7 @@ const S = {
     fontFamily: "'Nunito', sans-serif", boxSizing: 'border-box',
   },
   textarea: { resize: 'vertical', lineHeight: 1.55 },
-  pills: { display: 'flex', gap: 6, flexWrap: 'wrap' },
+  pills:    { display: 'flex', gap: 6, flexWrap: 'wrap' },
   pill: {
     padding: '5px 12px', borderRadius: 20,
     border: '1.5px solid #D4C4A8', background: '#FFFDF9',
@@ -494,6 +625,13 @@ const S = {
     fontSize: '.82rem', fontWeight: 700,
     fontFamily: "'Nunito', sans-serif", cursor: 'pointer',
   },
+  startBtn: {
+    background: '#C4956A', color: '#fff', border: 'none',
+    borderRadius: 8, padding: '10px 22px',
+    fontSize: '.84rem', fontWeight: 700,
+    fontFamily: "'Nunito', sans-serif", cursor: 'pointer',
+    marginTop: 4,
+  },
   akinatorCard: {
     background: '#F5F0E8', borderRadius: 12, padding: '20px',
     textAlign: 'center', display: 'flex', flexDirection: 'column',
@@ -508,6 +646,69 @@ const S = {
     fontSize: '.78rem', color: '#8B7355',
     fontFamily: "'Nunito', sans-serif", lineHeight: 1.5,
     margin: 0, maxWidth: 380,
+  },
+  akinTurnBadge: {
+    fontSize: '.7rem', fontWeight: 700, color: '#C4956A',
+    fontFamily: "'Nunito', sans-serif", letterSpacing: '.04em',
+    textTransform: 'uppercase',
+  },
+  akinQuestion: {
+    fontSize: '.95rem', fontWeight: 700, color: '#2D261E',
+    fontFamily: "'Nunito', sans-serif", lineHeight: 1.45,
+    marginTop: 2, marginBottom: 4,
+  },
+  akinHistory: {
+    display: 'flex', flexDirection: 'column', gap: 4,
+    background: '#F5F0E8', borderRadius: 8, padding: '8px 12px',
+    fontFamily: "'Nunito', sans-serif",
+  },
+  akinHistoryItem: {
+    display: 'flex', gap: 8, alignItems: 'baseline',
+    fontSize: '.74rem',
+  },
+  akinHistoryQ: {
+    fontWeight: 800, color: '#C4956A',
+    fontSize: '.7rem', flexShrink: 0,
+  },
+  akinHistoryAns: { color: '#5C4A32' },
+  akinCandidate: {
+    background: '#F5F0E8', borderRadius: 10, padding: 14,
+    display: 'flex', flexDirection: 'column', gap: 6,
+  },
+  akinCandidateWord: {
+    fontSize: '.96rem', fontWeight: 800, color: '#2D261E',
+    fontFamily: "'Nunito', sans-serif",
+  },
+  akinCandidateRat: {
+    fontSize: '.78rem', color: '#5C4A32', lineHeight: 1.5,
+    fontFamily: "'Nunito', sans-serif",
+  },
+  akinCandidateEx: {
+    fontSize: '.76rem', color: '#8B7355', fontStyle: 'italic',
+    lineHeight: 1.5, fontFamily: "'Nunito', sans-serif",
+    borderLeft: '2px solid #D4C4A8', paddingLeft: 8,
+  },
+  akinActions: {
+    display: 'flex', gap: 8, marginTop: 4, flexWrap: 'wrap',
+  },
+  akinAction: {
+    background: '#FFFDF9', border: '1.5px solid #D4C4A8',
+    borderRadius: 6, padding: '5px 14px',
+    fontSize: '.74rem', fontWeight: 700, color: '#5C4A32',
+    fontFamily: "'Nunito', sans-serif", cursor: 'pointer',
+  },
+  akinActionDone: {
+    background: '#E8DDC9', borderColor: '#C4956A', color: '#5C4A32',
+  },
+  akinFooterActions: {
+    display: 'flex', justifyContent: 'flex-end', marginTop: 4,
+  },
+  akinSecondary: {
+    background: 'none', border: 'none',
+    color: '#8B7355', fontSize: '.76rem', fontWeight: 600,
+    fontFamily: "'Nunito', sans-serif", cursor: 'pointer',
+    textDecoration: 'underline',
+    padding: 0,
   },
   wikiCard: {
     background: '#F5F0E8', borderRadius: 10, padding: 16,
