@@ -1,4 +1,4 @@
-import { Feather, Mic, BookOpen, Download, Settings, Lightbulb, Search, Music } from 'lucide-react'
+import { Feather, Mic, BookOpen, Download, Settings, Lightbulb, Search, Music, Menu } from 'lucide-react'
 
 const MOODS = [
   { value: 'joyeuse',     emoji: '☀️', label: 'Belle humeur' },
@@ -25,11 +25,27 @@ export default function Header({
   ambientSound, ambientPlaying, onAmbientChange,
   ambientVolume, onVolumeChange,
   ambientOpen, setAmbientOpen,
+  // ── Mobile drawer ──
+  isMobile, onMenuClick,
 }) {
+
   const currentMood = MOODS.find(m => m.value === moodToday)
 
   return (
     <header style={styles.hdr}>
+
+      {/* Bouton hamburger mobile */}
+      {isMobile && (
+        <button
+          style={styles.menuBtn}
+          onClick={onMenuClick}
+          title="Chapitres"
+          aria-label="Ouvrir la liste des chapitres"
+        >
+          <Menu size={20} />
+        </button>
+      )}
+
       {/* Logo */}
       <div style={styles.logo}>
         <Feather size={18} color="var(--gold)" />
@@ -167,6 +183,17 @@ const styles = {
     gap: 12, flexShrink: 0,
     position: 'relative', zIndex: 10,
   },
+  menuBtn: {
+    width: 36, height: 36,
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+    background: 'transparent',
+    border: '1.5px solid var(--border-l)',
+    borderRadius: 8,
+    color: 'var(--ink)',
+    cursor: 'pointer',
+    transition: 'all .15s',
+    flexShrink: 0,
+  },
   logo: { display: 'flex', alignItems: 'center', gap: 7, flexShrink: 0 },
   logoText: {
     fontFamily: "'Cormorant Garamond', serif",
@@ -262,61 +289,4 @@ const styles = {
     boxShadow: '0 8px 28px rgba(42,26,14,.16)',
     padding: '10px',
     zIndex: 50,
-    width: 210,
-    animation: 'slideUp .18s ease',
-  },
-  ambientTitle: {
-    fontFamily: "'Cormorant Garamond', serif",
-    fontSize: '.82rem', fontWeight: 600,
-    color: 'var(--brown)',
-    marginBottom: 8,
-    paddingBottom: 6,
-    borderBottom: '1px solid var(--border-l)',
-  },
-  soundList: {
-    display: 'flex', flexDirection: 'column', gap: 2,
-    marginBottom: 10,
-  },
-  soundBtn: {
-    display: 'flex', alignItems: 'center', gap: 8,
-    padding: '7px 9px',
-    background: 'transparent',
-    border: '1.5px solid transparent',
-    borderRadius: 9,
-    fontSize: '.78rem', fontWeight: 600,
-    fontFamily: "'Nunito', sans-serif",
-    color: 'var(--ink)', cursor: 'pointer',
-    transition: 'all .13s',
-    textAlign: 'left', width: '100%',
-  },
-  soundBtnAct: {
-    background: 'var(--gold-ll)',
-    borderColor: 'var(--gold-l)',
-    color: 'var(--brown)',
-  },
-  soundEmoji: { fontSize: '.95rem', width: 20, textAlign: 'center', flexShrink: 0 },
-  soundLabel: { flex: 1 },
-  soundPlaying: { fontSize: '.6rem', color: '#6B8F71', fontWeight: 800 },
-  volRow: {
-    display: 'flex', alignItems: 'center', gap: 8,
-    padding: '8px 0 0',
-    borderTop: '1px solid var(--border-l)',
-  },
-  volLbl: {
-    fontSize: '.68rem', fontWeight: 700,
-    color: 'var(--ink-ll)',
-    fontFamily: "'Nunito', sans-serif",
-    flexShrink: 0,
-  },
-  volSlider: {
-    flex: 1,
-    accentColor: 'var(--brown)',
-    cursor: 'pointer',
-  },
-  volVal: {
-    fontSize: '.68rem', fontWeight: 700,
-    color: 'var(--ink-ll)',
-    fontFamily: "'Nunito', sans-serif",
-    flexShrink: 0, width: 30, textAlign: 'right',
-  },
-}
+    width: 210
