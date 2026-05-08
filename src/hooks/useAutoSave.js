@@ -25,10 +25,16 @@ export function useAutoSave(value, onSave, delay = 1200) {
 
     if (timerRef.current) clearTimeout(timerRef.current)
     timerRef.current = setTimeout(() => {
+      timerRef.current = null  // ← null avant save : évite double-save si visibilitychange arrive au même moment
       onSave(value)
     }, delay)
 
-    return () => { if (timerRef.current) clearTimeout(timerRef.current) }
+    return () => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current)
+        timerRef.current = null  // ← null après cleanup : visibilitychange ne ghost-save plus
+      }
+    }
   }, [value, onSave, delay])
 
   // Flush immédiat si la page est cachée et qu'un debounce est en attente
