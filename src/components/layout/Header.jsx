@@ -28,12 +28,10 @@ export default function Header({
   // ── Mobile drawer ──
   isMobile, onMenuClick,
 }) {
-
   const currentMood = MOODS.find(m => m.value === moodToday)
 
   return (
     <header style={styles.hdr}>
-
       {/* Bouton hamburger mobile */}
       {isMobile && (
         <button
@@ -289,4 +287,61 @@ const styles = {
     boxShadow: '0 8px 28px rgba(42,26,14,.16)',
     padding: '10px',
     zIndex: 50,
-    width: 210
+    width: 210,
+    animation: 'slideUp .18s ease',
+  },
+  ambientTitle: {
+    fontFamily: "'Cormorant Garamond', serif",
+    fontSize: '.82rem', fontWeight: 600,
+    color: 'var(--brown)',
+    marginBottom: 8,
+    paddingBottom: 6,
+    borderBottom: '1px solid var(--border-l)',
+  },
+  soundList: {
+    display: 'flex', flexDirection: 'column', gap: 2,
+    marginBottom: 10,
+  },
+  soundBtn: {
+    display: 'flex', alignItems: 'center', gap: 8,
+    padding: '7px 9px',
+    background: 'transparent',
+    border: '1.5px solid transparent',
+    borderRadius: 9,
+    fontSize: '.78rem', fontWeight: 600,
+    fontFamily: "'Nunito', sans-serif",
+    color: 'var(--ink)', cursor: 'pointer',
+    transition: 'all .13s',
+    textAlign: 'left', width: '100%',
+  },
+  soundBtnAct: {
+    background: 'var(--gold-ll)',
+    borderColor: 'var(--gold-l)',
+    color: 'var(--brown)',
+  },
+  soundEmoji: { fontSize: '.95rem', width: 20, textAlign: 'center', flexShrink: 0 },
+  soundLabel: { flex: 1 },
+  soundPlaying: { fontSize: '.6rem', color: '#6B8F71', fontWeight: 800 },
+  volRow: {
+    display: 'flex', alignItems: 'center', gap: 8,
+    padding: '8px 0 0',
+    borderTop: '1px solid var(--border-l)',
+  },
+  volLbl: {
+    fontSize: '.68rem', fontWeight: 700,
+    color: 'var(--ink-ll)',
+    fontFamily: "'Nunito', sans-serif',
+    flexShrink: 0,
+  },
+  volSlider: {
+    flex: 1,
+    accentColor: 'var(--brown)',
+    cursor: 'pointer',
+  },
+  volVal: {
+    fontSize: '.68rem', fontWeight: 700,
+    color: 'var(--ink-ll)',
+    fontFamily: "'Nunito', sans-serif",
+    flexShrink: 0, width: 30, textAlign: 'right',
+  },
+}
