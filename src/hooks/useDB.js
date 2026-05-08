@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   getKV, setKV,
-  getChapters, saveChapter, deleteChapter,
+  getChapters, saveChapter, deleteChapter, restoreChapter as dbRestoreChapter,
   getChatHistoryRecent, addChatMessage, clearChatHistory,
   getVrac, addVrac, updateVrac, deleteVrac,
-  exportAllData, resetAllData, importSnapshot,
+  exportAllData, resetAllData, importSnapshot, getStorageEstimate,
 } from '../lib/db'
 import { pushSnapshot, pullSnapshot, buildSnapshot, whoWins } from '../lib/sync'
 
@@ -39,14 +39,27 @@ export function useAppState() {
   // ── Ambiance sonore ─────────────────────────────────────────
   const [ambientSound,   setAmbientSoundState]  = useState(null)    // null | 'pluie'|'cafe'|'feu'|'foret'
   const [ambientVolume,  setAmbientVolumeState] = useState(0.28)    // 0–1
+  // ── Alerte stockage (>85% du quota) ─────────────────────────
+  const [storageWarning, setStorageWarning] = useState(null)        // null | { ratio, usageMB, quotaMB }
+  // ── Lock anti-race recordSession ────────────────────────────
+  const recordSessionLockRef = useRef(false)
+  const lastSessionRef = useRef('')
 
   // ─── Chargement initial ──────────────────────────────────────
   useEffect(() => {
-    // Demander au navigateur de ne pas évincer le stockage de l'app
-    if (navigator.storage?.persist) {
-      navigator.storage.persist().catch(() => {/* silencieux si refusé */})
-    }
     ;(async () => {
+      // Demander au navigateur de ne pas évincer le stockage de l'app
+      let storagePersisted = false
+      if (navigator.storage?.persist) {
+        try {
+          storagePersisted = await navigator.storage.persist()
+        } catch { /* silencieux si refusé */ }
+      }
+      if (!storagePersisted) {
+        // Pas critique au boot — sera signalé via storageWarning si quota élevé
+        console.info('[Storage] Mode non-persistant. Le navigateur peut évincer les données en cas de pression mémoire.')
+      }
+
       const [n, k, oai, lv, st, sess, last, mood, chs, chat, prof, mem, vrac, stok, lsa, ef, et, ew, fls, snd, vol] = await Promise.all([
         getKV('name',             ''),
         getKV('apiKey',           ''),
@@ -57,7 +70,7 @@ export function useAppState() {
         getKV('lastSession',      ''),
         getKV('moodToday',        ''),
         getChapters(),
-        getChatHistoryRecent(50),   // ← 50 derniers seulement (perf)
+        getChatHistoryRecent(200),  // ← 200 derniers (cap RAM, persistance complète en DB)
         getKV('caroline_profile', null),
         getKV('lea_memory',       null),
         getVrac(),
@@ -92,12 +105,25 @@ export function useAppState() {
       setAmbientSoundState(snd)
       setAmbientVolumeState(vol)
       setReady(true)
+
+      // Quota check en arrière-plan — non bloquant
+      try {
+        const est = await getStorageEstimate()
+        if (est && est.ratio > 0.85) {
+          setStorageWarning({
+            ratio: est.ratio,
+            usageMB: Math.round(est.usage / 1024 / 1024),
+            quotaMB: Math.round(est.quota / 1024 / 1024),
+          })
+        }
+      } catch { /* tolérant */ }
     })()
   }, [])
 
   // ─── Sync refs (pour callbacks stables sans dépendances instables) ──
   useEffect(() => { chaptersRef.current  = chapters  }, [chapters])
   useEffect(() => { currentIdRef.current = currentId }, [currentId])
+  useEffect(() => { lastSessionRef.current = lastSession }, [lastSession])
 
   // ─── Helpers persist ─────────────────────────────────────────
   const setName   = useCallback(async (v) => { setNameState(v);   await setKV('name',      v) }, [])
@@ -150,8 +176,13 @@ export function useAppState() {
         lea_memory:        await getKV('lea_memory',       null),
         lastSyncedAt:      await getKV('lastSyncedAt',     null),
       }
-      const [chapters, vrac] = await Promise.all([getChapters(), getVrac()])
-      const local = buildSnapshot({ chapters, vrac, kvData })
+      const [chapters, vrac, chat] = await Promise.all([
+        getChapters(),
+        getVrac(),
+        getChatHistoryRecent(500),  // ← Inclut désormais l'historique de conversation
+      ])
+      // Annoter le snapshot avec chat (extension v3 du schema)
+      const local = { ...buildSnapshot({ chapters, vrac, kvData }), chat }
 
       // 2. Tirer le snapshot distant
       const remote = await pullSnapshot({ token })
@@ -168,10 +199,11 @@ export function useAppState() {
           return
         }
         // Rafraîchir l'état React depuis IndexedDB
-        const [chs, v] = await Promise.all([getChapters(), getVrac()])
+        const [chs, v, ch] = await Promise.all([getChapters(), getVrac(), getChatHistoryRecent(200)])
         setChapters(chs)
         if (chs.length > 0) setCurrentId(chs[0].id)
         setVracIdeas(v)
+        setChatHistory(ch)
         setLastSyncedAt(remote.syncedAt)
         setSyncStatus('ok'); setSyncMessage(`Données mises à jour depuis le cloud ✓`)
       } else if (winner === 'local' || remote.empty) {
@@ -196,27 +228,42 @@ export function useAppState() {
   }, [])
 
   // ─── Mémoire Léa ─────────────────────────────────────────────
-  const updateLeaMemory = useCallback(async (fields) => {
+  // Accepte soit un objet de patch ({ key: value, ... }),
+  // soit une fonction updater (prev) => patchObject — utile pour des updates
+  // dépendants de l'état précédent (ex. push dans keyPoints sans race).
+  const updateLeaMemory = useCallback(async (fieldsOrFn) => {
     setLeaMemoryState(prev => {
-      const next = { ...(prev || {}), ...fields, lastUpdated: new Date().toISOString() }
+      const patch = typeof fieldsOrFn === 'function' ? fieldsOrFn(prev) : fieldsOrFn
+      if (!patch || typeof patch !== 'object') return prev
+      const next = { ...(prev || {}), ...patch, lastUpdated: new Date().toISOString() }
       setKV('lea_memory', next)
       return next
     })
   }, [])
 
   // ─── Streak / sessions ───────────────────────────────────────
+  // Lock anti-race : si recordSession est appelé plusieurs fois en parallèle
+  // (par ex. via useAutoSave → updateChapter → recordSession), un seul exécute.
   const recordSession = useCallback(async () => {
+    if (recordSessionLockRef.current) return
     const today = new Date().toDateString()
-    if (lastSession === today) return
-    const newStreak   = (lastSession === new Date(Date.now() - 86400000).toDateString()) ? streak + 1 : 1
-    const newSessions = sessions + 1
-    setStreakState(newStreak); setSessionsState(newSessions); setLastSession(today)
-    await Promise.all([
-      setKV('streak',      newStreak),
-      setKV('sessions',    newSessions),
-      setKV('lastSession', today),
-    ])
-  }, [lastSession, streak, sessions])
+    if (lastSessionRef.current === today) return
+    recordSessionLockRef.current = true
+    try {
+      const yesterday = new Date(Date.now() - 86400000).toDateString()
+      const newStreak   = (lastSessionRef.current === yesterday) ? streak + 1 : 1
+      const newSessions = sessions + 1
+      lastSessionRef.current = today
+      setStreakState(newStreak); setSessionsState(newSessions); setLastSession(today)
+      await Promise.all([
+        setKV('streak',      newStreak),
+        setKV('sessions',    newSessions),
+        setKV('lastSession', today),
+      ])
+    } finally {
+      recordSessionLockRef.current = false
+    }
+  }, [streak, sessions])
 
   // ─── Chapitres ────────────────────────────────────────────────
   // Callbacks stables — lisent chaptersRef/currentIdRef pour éviter
@@ -248,6 +295,23 @@ export function useAppState() {
     })
   }, [])
 
+  /**
+   * Restaure un chapitre supprimé — utilisé par le toast undo dans App.jsx.
+   * Réinsère le chapitre dans IndexedDB + state React + le sélectionne comme courant.
+   */
+  const restoreChapter = useCallback(async (chapter) => {
+    if (!chapter?.id) return false
+    const ok = await dbRestoreChapter(chapter)
+    if (!ok) return false
+    setChapters(prev => {
+      // Ne pas dupliquer si déjà présent (race avec un autre flow)
+      if (prev.some(c => c.id === chapter.id)) return prev
+      return [...prev, chapter].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+    })
+    setCurrentId(chapter.id)
+    return true
+  }, [])
+
   const reorderChapters = useCallback(async (newOrder) => {
     const reordered = newOrder.map((ch, i) => ({ ...ch, order: i }))
     setChapters(reordered)
@@ -255,9 +319,15 @@ export function useAppState() {
   }, [])
 
   // ─── Chat ─────────────────────────────────────────────────────
+  // Borne le state React à 200 derniers messages (la DB IndexedDB conserve tout).
+  // Évite la croissance unbounded de la RAM sur sessions longues.
+  const CHAT_RAM_CAP = 200
   const addMessage = useCallback(async (msg) => {
     await addChatMessage(msg)
-    setChatHistory(prev => [...prev, msg])
+    setChatHistory(prev => {
+      const next = [...prev, msg]
+      return next.length > CHAT_RAM_CAP ? next.slice(-CHAT_RAM_CAP) : next
+    })
   }, [])
 
   const clearChat = useCallback(async () => {
@@ -300,7 +370,7 @@ export function useAppState() {
     moodToday, setMood,
     chapters, currentId, setCurrentId,
     currentChapter, totalWords,
-    createChapter, updateChapter, removeChapter, reorderChapters,
+    createChapter, updateChapter, removeChapter, restoreChapter, reorderChapters,
     chatHistory, addMessage, clearChat,
     carolineProfile, setCarolineProfile,
     leaMemory, updateLeaMemory,
@@ -309,6 +379,7 @@ export function useAppState() {
     editorFont, setEditorFont, editorTheme, setEditorTheme, editorWidth, setEditorWidth,
     firstLaunch, markFirstLaunchSeen,
     ambientSound, setAmbientSound, ambientVolume, setAmbientVolume,
-    exportAllData, resetAllData,
+    storageWarning, dismissStorageWarning: () => setStorageWarning(null),
+    exportAllData, resetAllData, importSnapshot,
   }
 }

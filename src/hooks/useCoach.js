@@ -7,9 +7,13 @@ import {
   buildDiscoveryPrompt, buildSynonymPrompt,
   buildWordSearchPrompt, buildAkinatorSoftPrompt,
   buildPredictivePrompt, buildAkinatorTurnPrompt,
+  buildMemoryExtractPrompt,
 } from '../lib/prompts'
 
 const AKINATOR_SYSTEM_PROMPT = `Tu joues à un jeu de devinette lexicale en français pour aider Caroline à trouver un mot. Tu poses des questions courtes et pertinentes, ou tu proposes des candidats finaux. Tu réponds UNIQUEMENT au format JSON demandé. Aucun markdown, aucun préambule, aucun texte hors du JSON.`
+
+const MEMORY_SYSTEM_PROMPT = `Tu es chargée d'extraire UN fait notable d'un échange entre Caroline et Léa, pour la mémoire long-terme de Léa. Tu réponds par 1 phrase courte (max 18 mots) qui résume un fait personnel concret, une émotion partagée, un souvenir évoqué, ou une décision narrative — PAS un compliment générique ni une métaphore. Si rien de notable, réponds exactement "RIEN".`
+
 
 export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, leaVoice, addMessage, chatHistory, carolineProfile, leaMemory, updateLeaMemory }) {
   const [loading,    setLoading]    = useState(false)
@@ -120,9 +124,18 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
       addMessage({ role: 'assistant', content: full })
 
       if (updateLeaMemory && full && type === 'chat') {
+        // Mise à jour synchrone des champs simples
         updateLeaMemory({
           lastSession: new Date().toISOString(),
           lastChapter: currentChapter?.title || null,
+        })
+        // Extraction asynchrone d'un keyPoint en arrière-plan (non bloquant)
+        // — évite de retarder la réponse à Caroline
+        extractKeyPointInBackground({
+          apiKey,
+          userText,
+          assistantText: full,
+          updateLeaMemory,
         })
       }
 
@@ -264,6 +277,35 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
     startAkinator, startAkinatorSoft, askAkinatorTurn, getPredictiveWords,
     ttsState, ttsPlay, ttsPause, ttsStop, ttsSetSpeed,
   }
+}
+
+// ─── Extraction de keyPoint en arrière-plan (mémoire Léa) ──
+// Appelle Claude avec un prompt minimaliste pour résumer 1 fait notable.
+// Stocke dans leaMemory.keyPoints (FIFO 10).
+// Échec silencieux : la mémoire est un nice-to-have, pas critique.
+async function extractKeyPointInBackground({ apiKey, userText, assistantText, updateLeaMemory }) {
+  if (!apiKey) return
+  try {
+    const summary = await askClaude({
+      apiKey,
+      systemPrompt: MEMORY_SYSTEM_PROMPT,
+      messages: [{
+        role: 'user',
+        content: buildMemoryExtractPrompt({ userText, assistantText }),
+      }],
+      maxTokens: 80,
+    })
+    const point = (summary || '').trim()
+    if (!point || point === 'RIEN' || point.length < 6 || point.length > 200) return
+
+    // FIFO 10 — pas de doublons exacts
+    updateLeaMemory((prev) => {
+      const existing = (prev?.keyPoints || []).filter(p => p !== point)
+      return {
+        keyPoints: [...existing, point].slice(-10),
+      }
+    })
+  } catch (_) { /* silencieux — la mémoire n'est pas critique */ }
 }
 
 // ─── Parser tolérant Akinator ─────────────────────────────────

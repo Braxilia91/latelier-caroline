@@ -37,16 +37,33 @@ export function useAutoSave(value, onSave, delay = 1200) {
     }
   }, [value, onSave, delay])
 
-  // Flush immédiat si la page est cachée et qu'un debounce est en attente
+  // Flush immédiat si la page est cachée OU avant fermeture (verrouillage, kill app, navigation).
+  // Couvre 3 vecteurs de perte :
+  //   - changement d'onglet / verrouillage écran  → visibilitychange
+  //   - fermeture d'onglet / reload                → beforeunload
+  //   - mise en arrière-plan PWA Android          → pagehide (souvent plus fiable que beforeunload sur mobile)
   useEffect(() => {
-    const handleHide = () => {
-      if (document.visibilityState === 'hidden' && timerRef.current) {
+    const flush = () => {
+      if (timerRef.current) {
         clearTimeout(timerRef.current)
         timerRef.current = null
-        onSaveRef.current(valueRef.current)
+        try { onSaveRef.current(valueRef.current) } catch (_) {/* tolérant */}
       }
     }
-    document.addEventListener('visibilitychange', handleHide)
-    return () => document.removeEventListener('visibilitychange', handleHide)
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'hidden') flush()
+    }
+    const handlePageHide = () => flush()
+    const handleBeforeUnload = () => flush()
+
+    document.addEventListener('visibilitychange', handleVisibility)
+    window.addEventListener('pagehide',           handlePageHide)
+    window.addEventListener('beforeunload',       handleBeforeUnload)
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility)
+      window.removeEventListener('pagehide',           handlePageHide)
+      window.removeEventListener('beforeunload',       handleBeforeUnload)
+    }
   }, []) // refs stables — pas de dépendances
 }
