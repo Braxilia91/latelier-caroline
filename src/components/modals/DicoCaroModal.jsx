@@ -51,8 +51,7 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
 
   const [description, setDescription] = useState('')
 
-  // ── Akinator pas-à-pas (Livraison 2) ──────────────────────
-  const [akinPhase,      setAkinPhase]      = useState('idle')  // idle | loading | asking | candidates | error
+  const [akinPhase,      setAkinPhase]      = useState('idle')
   const [akinHistory,    setAkinHistory]    = useState([])
   const [akinCurrent,    setAkinCurrent]    = useState(null)
   const [akinCandidates, setAkinCandidates] = useState([])
@@ -70,6 +69,7 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
 
   const { loading, getSynonyms, searchWord, askAkinatorTurn, defineWord, getPredictiveWords, getDiscovery } = coach
   const hasChapterContent = !!(currentChapter?.content?.trim())
+  const wikiUrl = wikiResult && wikiResult.content_urls && wikiResult.content_urls.desktop && wikiResult.content_urls.desktop.page
 
   const handleWikiSearch = async () => {
     if (!wikiQuery.trim()) return
@@ -90,7 +90,6 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
     }
   }
 
-  // ── Akinator handlers ─────────────────────────────────────
   const applyAkinResult = (res) => {
     if (!res) {
       setAkinError("Pas de réponse — réessaie.")
@@ -439,16 +438,7 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
                       {wikiResult.extract.length > 400 ? '…' : ''}
                     </div>
                   )}
-                  {wikiResult.content_urls?.desktop?.page && (
-                    
-                      href={wikiResult.content_urls.desktop.page}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      style={S.wikiLink}
-                    >
-                      Lire sur Wikipedia →
-                    </a>
-                  )}
+                  {wikiUrl && (<a href={wikiUrl} target="_blank" rel="noopener noreferrer" style={S.wikiLink}>Lire sur Wikipedia →</a>)}
                 </div>
               )}
             </div>
