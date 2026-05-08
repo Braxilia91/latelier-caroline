@@ -8,9 +8,20 @@ on:
         deploy:
             runs-on: ubuntu-latest
                 steps:
-                      - name: Trigger Cloudflare Pages build
+                      - name: Trigger Cloudflare Pages deployment via API
                               run: |
-                                        curl -s -X POST "${{ secrets.CLOUDFLARE_BUILD_HOOK }}" \
-                                                    --fail \
-                                                                --write-out "\n%{http_code}" \
-                                                                            | tail -1 | grep -E '^2' && echo "Build triggered" || (echo "Build hook failed" && exit 1)
+                                        response=$(curl -s -X POST \
+                                                    "https://api.cloudflare.com/client/v4/accounts/ad277d19b37865f39bad4ced32f38b42/pages/projects/latelier-caroline/deployments" \
+                                                                -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" \
+                                                                            -H "Content-Type: application/json" \
+                                                                                        -d '{"branch":"main"}')
+                                                                                                  echo "$response" | python3 -c "
+                                                                                                  import sys, json
+                                                                                                  r = json.load(sys.stdin)
+                                                                                                  if r.get('success'):
+                                                                                                      d = r.get('result', {})
+                                                                                                          print(f\"Deploy triggered: {d.get('id')} ({d.get('url')})\")  
+                                                                                                          else:
+                                                                                                              print('Error:', r.get('errors'))
+                                                                                                                  exit(1)
+                                                                                                                  "
