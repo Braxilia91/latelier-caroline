@@ -3,22 +3,41 @@ import { useState, useRef, useCallback } from 'react'
 export function useVoice({ onResult }) {
   const [listening,  setListening]  = useState(false)
   const [interim,    setInterim]    = useState('')
+  const [errorMsg,   setErrorMsg]   = useState('')
   const [supported,  setSupported]  = useState(
     !!(window.SpeechRecognition || window.webkitSpeechRecognition)
   )
   const recognitionRef = useRef(null)
+  const listeningRef   = useRef(false) // miroir stable — évite la stale closure dans onend
+
+  const setListeningSync = useCallback((val) => {
+    listeningRef.current = val
+    setListening(val)
+  }, [])
+
+  const stop = useCallback(() => {
+    if (recognitionRef.current) {
+      recognitionRef.current.onend = null
+      recognitionRef.current.stop()
+      recognitionRef.current = null
+    }
+    listeningRef.current = false
+    setListening(false)
+    setInterim('')
+  }, [])
 
   const start = useCallback(() => {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition
     if (!SR) { setSupported(false); return }
 
+    setErrorMsg('')
     const rec = new SR()
     rec.lang            = 'fr-FR'
     rec.continuous      = true
     rec.interimResults  = true
     rec.maxAlternatives = 1
 
-    rec.onstart = () => setListening(true)
+    rec.onstart = () => setListeningSync(true)
 
     rec.onresult = (e) => {
       let finalText = ''; let interimText = ''
@@ -32,35 +51,30 @@ export function useVoice({ onResult }) {
     }
 
     rec.onerror = (e) => {
-      if (e.error !== 'no-speech') stop()
+      if (e.error === 'not-allowed' || e.error === 'audio-capture' || e.error === 'service-not-allowed') {
+        setErrorMsg('Le micro n\'est pas autorisé. Vérifie les permissions de ton navigateur.')
+        stop()
+      } else if (e.error !== 'no-speech') {
+        stop()
+      }
     }
 
     rec.onend = () => {
-      // Relancer si toujours en écoute
-      if (recognitionRef.current && listening) {
-        try { recognitionRef.current.start() } catch (_) { setListening(false) }
+      // listeningRef.current évite la stale closure — restart si toujours en écoute
+      if (recognitionRef.current && listeningRef.current) {
+        try { recognitionRef.current.start() } catch (_) { setListeningSync(false) }
       } else {
-        setListening(false)
+        setListeningSync(false)
       }
     }
 
     recognitionRef.current = rec
-    try { rec.start() } catch (_) { setListening(false) }
-  }, [onResult, listening])
-
-  const stop = useCallback(() => {
-    if (recognitionRef.current) {
-      recognitionRef.current.onend = null
-      recognitionRef.current.stop()
-      recognitionRef.current = null
-    }
-    setListening(false)
-    setInterim('')
-  }, [])
+    try { rec.start() } catch (_) { setListeningSync(false) }
+  }, [onResult, stop, setListeningSync])
 
   const toggle = useCallback(() => {
     listening ? stop() : start()
   }, [listening, start, stop])
 
-  return { listening, interim, supported, toggle, start, stop }
+  return { listening, interim, errorMsg, supported, toggle, start, stop }
 }
