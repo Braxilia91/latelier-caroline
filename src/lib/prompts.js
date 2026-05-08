@@ -348,6 +348,32 @@ export const INSPIRATION_PROMPTS = [
   { cat: 'Liberté', q: "Qu'est-ce que tu as appris à dire non — et qu'est-ce que ce non t'a ouvert ?" },
 ]
 
+// ─── Mémoire Léa — extraction de fait notable (background) ───────
+export function buildMemoryExtractPrompt({ userText, assistantText }) {
+  const u = (userText || '').slice(0, 600)
+  const a = (assistantText || '').slice(0, 600)
+  return `Voici un échange entre Caroline et Léa :
+
+Caroline : "${u}"
+Léa : "${a}"
+
+Extrais UN fait notable de cet échange pour la mémoire long-terme de Léa. Format : 1 phrase courte (max 18 mots), à la 3e personne, qui résume :
+- soit un fait personnel concret livré par Caroline (ex : "Caroline a perdu sa mère en 2018")
+- soit une décision narrative ("Caroline veut commencer son livre par l'enfance")
+- soit une émotion forte évoquée ("Caroline a peur d'être jugée par sa famille")
+- soit un souvenir précis ("Caroline a évoqué la cuisine de sa grand-mère, l'odeur du pain")
+
+NE PAS extraire :
+- compliments ou encouragements génériques
+- métaphores ou tournures stylistiques
+- conseils techniques ou orthographiques
+- questions de Léa
+
+Si rien de notable ne ressort de cet échange, réponds EXACTEMENT le mot : RIEN
+
+Réponds UNIQUEMENT par la phrase ou par "RIEN". Aucune autre formulation.`
+}
+
 // ─── DicoCaro — Akinator Soft (legacy, conservé pour rollback) ────
 export function buildAkinatorSoftPrompt({ nature, mouvement, registre, contexte }) {
   return `Caroline cherche un mot précis. Voici ses indices :

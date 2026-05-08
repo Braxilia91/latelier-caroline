@@ -203,6 +203,8 @@ export function isValidSnapshot(data) {
   if (typeof data.version !== 'number')               return false
   if (!Array.isArray(data.chapters))                  return false
   if (!Array.isArray(data.vrac))                      return false
+  // chat est optionnel pour rétrocompatibilité (ancien snapshots v1/v2)
+  if (data.chat != null && !Array.isArray(data.chat)) return false
   if (typeof data.kv !== 'object' || !data.kv)        return false
   // Guard syncedAt — doit être une date ISO 8601 parseable (rejette '' et les strings invalides)
   if (data.syncedAt != null && (!data.syncedAt || isNaN(Date.parse(data.syncedAt)))) return false
@@ -257,22 +259,84 @@ export async function importSnapshot(snapshot) {
     })
   }
 
+  // ── Chat history (sync) ─────────────────────────────────────
+  // Si le snapshot contient chat, on remplace l'historique local par le distant
+  // (last-write-wins par snapshot, pas par message — simple et lisible)
+  if (Array.isArray(snapshot.chat)) {
+    await new Promise((resolve, reject) => {
+      const req = tx('chat', 'readwrite').clear()
+      req.onsuccess = () => resolve()
+      req.onerror   = (e) => reject(e.target.error)
+    })
+    for (const msg of snapshot.chat.slice(-500)) {
+      await new Promise((resolve, reject) => {
+        // On laisse IndexedDB générer l'id auto-incrémenté
+        const { id, ...rest } = msg
+        const req = tx('chat', 'readwrite').add(rest)
+        req.onsuccess = () => resolve()
+        req.onerror   = (e) => reject(e.target.error)
+      })
+    }
+  }
+
   // Marquer le moment du dernier import
   await setKV('lastSyncedAt', snapshot.syncedAt || new Date().toISOString())
   return true
 }
 
+/**
+ * Restaure un chapitre supprimé — wrapper safe sur saveChapter.
+ * Utilisé par le toast undo après removeChapter.
+ */
+export async function restoreChapter(chapter) {
+  if (!chapter || typeof chapter.id !== 'string' || !chapter.id) return false
+  await openDB()
+  return new Promise((resolve, reject) => {
+    const req = tx('chapters', 'readwrite').put({
+      ...chapter,
+      restoredAt: new Date().toISOString(),
+    })
+    req.onsuccess = () => resolve(true)
+    req.onerror   = (e) => reject(e.target.error)
+  })
+}
+
 // ─── Export complet ─────────────────────────────────────────────
 export async function exportAllData() {
-  const [chapters, name, streak, sessions, profile, vrac] = await Promise.all([
+  const [chapters, name, streak, sessions, profile, vrac, chat, leaMemory] = await Promise.all([
     getChapters(),
     getKV('name',             ''),
     getKV('streak',           0),
     getKV('sessions',         0),
     getKV('caroline_profile', null),
     getVrac(),
+    getChatHistoryRecent(500),
+    getKV('lea_memory',       null),
   ])
-  return { name, chapters, streak, sessions, profile, vrac, exportedAt: new Date().toISOString() }
+  return {
+    name, chapters, streak, sessions, profile, vrac,
+    chat, leaMemory,
+    exportedAt: new Date().toISOString(),
+    version: 3,
+  }
+}
+
+/**
+ * Estime le quota IndexedDB utilisé.
+ * Retourne { usage, quota, ratio } ou null si non supporté.
+ */
+export async function getStorageEstimate() {
+  if (!navigator.storage?.estimate) return null
+  try {
+    const e = await navigator.storage.estimate()
+    return {
+      usage:  e.usage  || 0,
+      quota:  e.quota  || 0,
+      ratio:  e.quota ? (e.usage / e.quota) : 0,
+    }
+  } catch {
+    return null
+  }
 }
 
 // ─── Reset total ────────────────────────────────────────────────
