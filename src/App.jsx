@@ -7,14 +7,14 @@ import { ToastProvider, useToast } from './components/ui/Toast'
 
 import { buildWelcomeMessage } from './lib/prompts'
 
-// Imports critiques (chemin de rendu initial)
+// ── Imports critiques (chemin de rendu initial) ──────────────────
 import Onboarding  from './components/onboarding/Onboarding'
 import Header      from './components/layout/Header'
 import Sidebar     from './components/layout/Sidebar'
 import WritingArea from './components/writing/WritingArea'
 import CoachPanel  from './components/layout/CoachPanel'
 
-// Modaux : charges a la demande uniquement
+// ── Modaux : chargés à la demande uniquement ─────────────────────
 const DictationModal   = lazy(() => import('./components/modals/DictationModal'))
 const SettingsModal    = lazy(() => import('./components/modals/SettingsModal'))
 const InspirationModal = lazy(() => import('./components/modals/InspirationModal'))
@@ -24,12 +24,13 @@ const DicoCaroModal    = lazy(() => import('./components/modals/DicoCaroModal'))
 const PlanModal        = lazy(() => import('./components/modals/PlanModal'))
 const PackOpeningModal = lazy(() => import('./components/modals/PackOpeningModal'))
 
-// Skeleton affiche pendant l'init IndexedDB
+// ── Skeleton affiché pendant l'init IndexedDB ────────────────────
 function AppSkeleton() {
   const pulse = { background: 'linear-gradient(90deg,#EDE7DE 25%,#E5DDD4 50%,#EDE7DE 75%)', backgroundSize: '200% 100%', animation: 'skeletonPulse 1.4s ease infinite', borderRadius: 4 }
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#FAF7F2' }}>
       <style>{`@keyframes skeletonPulse{0%{background-position:200% 0}100%{background-position:-200% 0}}`}</style>
+      {/* Header */}
       <div style={{ height: 52, borderBottom: '1px solid #EDE7DE', display: 'flex', alignItems: 'center', padding: '0 16px', gap: 10, flexShrink: 0 }}>
         <div style={{ ...pulse, width: 28, height: 28, borderRadius: 6 }} />
         <div style={{ ...pulse, width: 110, height: 16 }} />
@@ -39,13 +40,16 @@ function AppSkeleton() {
         <div style={{ ...pulse, width: 28, height: 28, borderRadius: 6 }} />
         <div style={{ ...pulse, width: 28, height: 28, borderRadius: '50%' }} />
       </div>
+      {/* Body */}
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+        {/* Sidebar */}
         <div style={{ width: 200, borderRight: '1px solid #EDE7DE', padding: '16px 12px', display: 'flex', flexDirection: 'column', gap: 10 }}>
           <div style={{ ...pulse, height: 13, width: '55%' }} />
           <div style={{ ...pulse, height: 32, borderRadius: 6 }} />
           <div style={{ ...pulse, height: 32, borderRadius: 6, opacity: .6 }} />
           <div style={{ ...pulse, height: 32, borderRadius: 6, opacity: .4 }} />
         </div>
+        {/* WritingArea */}
         <div style={{ flex: 1, padding: '48px 60px', display: 'flex', flexDirection: 'column', gap: 14 }}>
           <div style={{ ...pulse, height: 22, width: '35%' }} />
           <div style={{ ...pulse, height: 14, width: '92%' }} />
@@ -53,6 +57,7 @@ function AppSkeleton() {
           <div style={{ ...pulse, height: 14, width: '85%' }} />
           <div style={{ ...pulse, height: 14, width: '60%' }} />
         </div>
+        {/* CoachPanel */}
         <div style={{ width: 280, borderLeft: '1px solid #EDE7DE', padding: '16px 12px', display: 'flex', flexDirection: 'column', gap: 10 }}>
           <div style={{ ...pulse, height: 13, width: '45%' }} />
           <div style={{ ...pulse, height: 60, borderRadius: 8 }} />
@@ -71,9 +76,11 @@ function AppInner() {
   const [showPack,     setShowPack]    = useState(false)
   const [isOnline,     setIsOnline]    = useState(navigator.onLine)
 
+  // ── Ambiance sonore ─────────────────────────────────────────────
   const audioRef        = useRef(null)
   const [ambientPlaying, setAmbientPlaying] = useState(false)
 
+  // Lance / change le son en cours
   const startAmbient = useCallback((sound, volume) => {
     if (audioRef.current) {
       audioRef.current.pause()
@@ -84,10 +91,11 @@ function AppInner() {
     const audio      = new Audio(`/sounds/${sound}.mp3`)
     audio.loop       = true
     audio.volume     = Math.max(0, Math.min(1, volume ?? 0.28))
-    audio.play().catch(e => console.warn('[Ambiance] lecture bloquee:', e))
+    audio.play().catch(e => console.warn('[Ambiance] lecture bloquée:', e))
     audioRef.current = audio
   }, [])
 
+  // Sélection d'un son : null = Silence (arrêt)
   const handleAmbientChange = useCallback((sound) => {
     db.setAmbientSound(sound)
     if (sound === null) {
@@ -100,11 +108,13 @@ function AppInner() {
     }
   }, [db.setAmbientSound, db.ambientVolume, startAmbient])
 
+  // Changement de volume (temps réel, persiste dans IndexedDB)
   const handleVolumeChange = useCallback((v) => {
     db.setAmbientVolume(v)
     if (audioRef.current) audioRef.current.volume = Math.max(0, Math.min(1, v))
   }, [db.setAmbientVolume])
 
+  // Nettoyage à l'unmount
   useEffect(() => {
     return () => {
       audioRef.current?.pause()
@@ -112,20 +122,30 @@ function AppInner() {
     }
   }, [])
 
+  // ── Pack opening : déclenché une seule fois après setup ─────────
   useEffect(() => {
     if (db.ready && db.isSetup && db.firstLaunch) setShowPack(true)
   }, [db.ready, db.isSetup, db.firstLaunch])
 
+  // ── Indicateur connexion + toast transitions réseau ─────────────
   useEffect(() => {
-    const update = () => setIsOnline(navigator.onLine)
-    window.addEventListener('online',  update)
-    window.addEventListener('offline', update)
-    return () => {
-      window.removeEventListener('online',  update)
-      window.removeEventListener('offline', update)
+    const goOnline  = () => {
+      setIsOnline(true)
+      toast('Connexion rétablie — Léa est de nouveau disponible 🌿', 'success')
     }
-  }, [])
+    const goOffline = () => {
+      setIsOnline(false)
+      toast('Connexion perdue — tu peux continuer à écrire, Léa revient dès que possible.', 'info')
+    }
+    window.addEventListener('online',  goOnline)
+    window.addEventListener('offline', goOffline)
+    return () => {
+      window.removeEventListener('online',  goOnline)
+      window.removeEventListener('offline', goOffline)
+    }
+  }, []) // toast est stable (useCallback []) — pas de re-registration
 
+  // ── Thème global (data-theme sur <html>) ─────────────────────────
   useEffect(() => {
     if (db.editorTheme) document.documentElement.setAttribute('data-theme', db.editorTheme)
   }, [db.editorTheme])
@@ -145,7 +165,7 @@ function AppInner() {
     if (apiKey)   await db.setApiKey(apiKey)
     if (profile)  await db.setCarolineProfile(profile)
     await db.createChapter()
-    toast('Bienvenue ' + name + ' ! Ton atelier est pret !', 'success')
+    toast(`Bienvenue ${name} ! Ton atelier est prêt 🌿`, 'success')
   }
 
   const handleSaveSettings = async ({ name, apiKey, openAiKey, leaVoice, syncToken, editorFont, editorTheme, editorWidth }) => {
@@ -155,16 +175,17 @@ function AppInner() {
     if (editorFont  !== undefined) await db.setEditorFont(editorFont)
     if (editorTheme !== undefined) await db.setEditorTheme(editorTheme)
     if (editorWidth !== undefined) await db.setEditorWidth(editorWidth)
-    toast('Reglages sauvegardes !', 'success')
+    toast('Réglages sauvegardés ✓', 'success')
   }
 
   const handleInsertDictation = useCallback((text) => {
     if (!db.currentChapter) return
     const newContent = (db.currentChapter.content || '') + (db.currentChapter.content ? ' ' : '') + text
     db.updateChapter(db.currentId, { content: newContent })
-    toast('Texte insere !', 'success')
+    toast('Texte inséré ✓', 'success')
   }, [db])
 
+  // ── Auto-sync silencieux au démarrage ─────────────────────────
   useEffect(() => {
     if (db.ready && db.syncToken && import.meta.env.VITE_SYNC_WORKER_URL) {
       db.syncNow()
@@ -213,6 +234,7 @@ function AppInner() {
         />
       </div>
 
+      {/* ── Modaux lazy — chargés uniquement à la première ouverture ── */}
       <Suspense fallback={null}>
         {modal === 'plan'      && <PlanModal chapters={db.chapters} updateChapter={db.updateChapter} onClose={() => setModal(null)} />}
         {modal === 'dictation' && <DictationModal onClose={() => setModal(null)} onInsert={handleInsertDictation} />}
@@ -251,12 +273,13 @@ function AppInner() {
         )}
       </Suspense>
 
+      {/* ── Indicateur offline ─────────────────────────────── */}
       <div style={{
         position: 'fixed', bottom: 16, right: 16,
         display: 'flex', alignItems: 'center', gap: 6,
         padding: '5px 12px',
         background: isOnline ? 'rgba(61,107,69,.12)' : 'rgba(180,83,9,.12)',
-        border: '1px solid ' + (isOnline ? '#6B8F71' : '#C4956A'),
+        border: `1px solid ${isOnline ? '#6B8F71' : '#C4956A'}`,
         borderRadius: 20,
         fontSize: '.68rem', fontWeight: 600,
         fontFamily: "'Nunito', sans-serif",
@@ -270,7 +293,7 @@ function AppInner() {
           background: isOnline ? '#6B8F71' : '#C4956A',
           flexShrink: 0,
         }} />
-        {isOnline ? 'En ligne' : 'Hors ligne - sauvegarde localement'}
+        {isOnline ? 'En ligne' : 'Hors ligne — sauvegardé localement'}
       </div>
 
     </div>
