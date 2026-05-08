@@ -228,7 +228,7 @@ function AppInner() {
         />}
         {modal === 'inspir'    && <InspirationModal onClose={() => setModal(null)} onSendToCoach={coach.sendMessage} hasKey={!!db.apiKey} />}
         {modal === 'export'    && <ExportModal chapters={db.chapters} name={db.name} onClose={() => setModal(null)} />}
-        {modal === 'vocab'     && <DicoCaroModal onClose={() => setModal(null)} coach={coach} hasKey={!!db.apiKey} />}
+        {modal === 'vocab'     && <DicoCaroModal onClose={() => setModal(null)} coach={coach} hasKey={!!db.apiKey} currentChapter={db.currentChapter} />}
         {modal === 'vrac'      && (
           <VracModal
             onClose={() => setModal(null)}
