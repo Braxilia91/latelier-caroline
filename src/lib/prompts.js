@@ -236,7 +236,7 @@ export function buildWelcomeMessage({ name, leaMemory, currentChapter }) {
     const lastDate = new Date(leaMemory.lastSession)
     const today    = new Date()
     const diffDays = Math.floor((today - lastDate) / 86400000)
-    const dayStr   = diffDays === 0 ? 'tout à l'heure' : diffDays === 1 ? 'hier' : `il y a ${diffDays} jours`
+    const dayStr   = diffDays === 0 ? "tout à l'heure" : diffDays === 1 ? 'hier' : `il y a ${diffDays} jours`
 
     return `${timeGreet} — ${dayStr} tu travaillais sur "${leaMemory.lastChapter}". Comment tu te sens aujourd'hui pour reprendre ?`
   }
