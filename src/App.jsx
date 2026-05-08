@@ -80,7 +80,6 @@ function AppInner() {
   const audioRef        = useRef(null)
   const [ambientPlaying, setAmbientPlaying] = useState(false)
 
-  // Lance / change le son en cours
   const startAmbient = useCallback((sound, volume) => {
     if (audioRef.current) {
       audioRef.current.pause()
@@ -95,7 +94,6 @@ function AppInner() {
     audioRef.current = audio
   }, [])
 
-  // Sélection d'un son : null = Silence (arrêt)
   const handleAmbientChange = useCallback((sound) => {
     db.setAmbientSound(sound)
     if (sound === null) {
@@ -108,13 +106,11 @@ function AppInner() {
     }
   }, [db.setAmbientSound, db.ambientVolume, startAmbient])
 
-  // Changement de volume (temps réel, persiste dans IndexedDB)
   const handleVolumeChange = useCallback((v) => {
     db.setAmbientVolume(v)
     if (audioRef.current) audioRef.current.volume = Math.max(0, Math.min(1, v))
   }, [db.setAmbientVolume])
 
-  // Nettoyage à l'unmount
   useEffect(() => {
     return () => {
       audioRef.current?.pause()
@@ -150,6 +146,7 @@ function AppInner() {
     if (db.editorTheme) document.documentElement.setAttribute('data-theme', db.editorTheme)
   }, [db.editorTheme])
 
+  // ── Coach Léa ────────────────────────────────────────────────────
   const coach = useCoach({
     apiKey: db.apiKey, openAiKey: db.openAiKey,
     name: db.name, moodToday: db.moodToday,
@@ -185,6 +182,23 @@ function AppInner() {
     toast('Texte inséré ✓', 'success')
   }, [db])
 
+  // ── Undo suppression de chapitre via toast ──────────────────────
+  const handleRemoveChapter = useCallback((id) => {
+    const chapter = db.chapters.find(c => c.id === id)
+    if (!chapter) {
+      db.removeChapter(id)
+      return
+    }
+    db.removeChapter(id)
+    toast(`Chapitre "${chapter.title || 'sans titre'}" supprimé`, 'info', 4000, {
+      label: 'Annuler',
+      fn: () => {
+        db.restoreChapter(chapter)
+        toast('Chapitre restauré ✓', 'success')
+      },
+    })
+  }, [db, toast])
+
   // ── Auto-sync silencieux au démarrage ─────────────────────────
   useEffect(() => {
     if (db.ready && db.syncToken && import.meta.env.VITE_SYNC_WORKER_URL) {
@@ -215,7 +229,7 @@ function AppInner() {
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
         <Sidebar
           chapters={db.chapters} currentId={db.currentId} setCurrentId={db.setCurrentId}
-          createChapter={db.createChapter} removeChapter={db.removeChapter}
+          createChapter={db.createChapter} removeChapter={handleRemoveChapter}
           totalWords={db.totalWords} streak={db.streak}
         />
         <WritingArea
@@ -301,5 +315,9 @@ function AppInner() {
 }
 
 export default function App() {
-  return <ToastProvider><AppInner /></ToastProvider>
+  return (
+    <ToastProvider>
+      <AppInner />
+    </ToastProvider>
+  )
 }
