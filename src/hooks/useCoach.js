@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useMemo } from 'react'
-import { askClaude, speakWithOpenAI } from '../lib/claude'
+import { askClaude, speakWithOpenAI, cleanForTTS } from '../lib/claude'
 import {
   buildSystemPrompt, buildCorrectionPrompt,
   buildVocabPrompt, buildThreadPrompt,
@@ -15,7 +15,11 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
   const [loading,    setLoading]    = useState(false)
   const [streaming,  setStreaming]  = useState('')
   const [voiceOn,    setVoiceOn]    = useState(false)
-  const audioRef = useRef(null)
+  const [ttsState,   setTtsState]   = useState({ playing: false, paused: false, speed: 1.0, mode: null })
+
+  const audioRef       = useRef(null)
+  const browserUttRef  = useRef(null)
+  const speedRef       = useRef(1.0)
 
   const systemPrompt = useMemo(() => buildSystemPrompt({
     name,
@@ -26,6 +30,72 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
     leaMemory,
   }), [name, moodToday, currentChapter, carolineProfile, leaMemory])
 
+  // ── Helpers TTS ────────────────────────────────────────────
+  const stopAllTts = useCallback(() => {
+    if (audioRef.current) {
+      try { audioRef.current.__ttsAbort?.abort() } catch (_) {}
+      try { audioRef.current.pause() } catch (_) {}
+      try { audioRef.current.currentTime = 0 } catch (_) {}
+      audioRef.current = null
+    }
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+      try { window.speechSynthesis.cancel() } catch (_) {}
+    }
+    browserUttRef.current = null
+    setTtsState(s => ({ playing: false, paused: false, speed: s.speed, mode: null }))
+  }, [])
+
+  const speakBrowserManaged = useCallback((text) => {
+    if (typeof window === 'undefined' || !window.speechSynthesis) return
+    try { window.speechSynthesis.cancel() } catch (_) {}
+    const cleaned = cleanForTTS(text || '').slice(0, 500)
+    if (!cleaned) return
+    const utt = new SpeechSynthesisUtterance(cleaned)
+    utt.lang = 'fr-FR'
+    utt.rate = speedRef.current
+    utt.onstart  = () => setTtsState({ playing: true,  paused: false, speed: speedRef.current, mode: 'browser' })
+    utt.onpause  = () => setTtsState(s => ({ ...s, playing: false, paused: true }))
+    utt.onresume = () => setTtsState(s => ({ ...s, playing: true,  paused: false }))
+    utt.onend    = () => setTtsState({ playing: false, paused: false, speed: speedRef.current, mode: null })
+    utt.onerror  = () => setTtsState({ playing: false, paused: false, speed: speedRef.current, mode: null })
+    browserUttRef.current = utt
+    setTtsState({ playing: true, paused: false, speed: speedRef.current, mode: 'browser' })
+    try { window.speechSynthesis.speak(utt) } catch (_) {}
+  }, [])
+
+  const ttsPlay = useCallback(() => {
+    if (audioRef.current && audioRef.current.paused) {
+      audioRef.current.play().catch(() => {})
+      setTtsState(s => ({ ...s, playing: true, paused: false }))
+    } else if (typeof window !== 'undefined' && window.speechSynthesis?.paused) {
+      try { window.speechSynthesis.resume() } catch (_) {}
+      setTtsState(s => ({ ...s, playing: true, paused: false }))
+    }
+  }, [])
+
+  const ttsPause = useCallback(() => {
+    if (audioRef.current && !audioRef.current.paused) {
+      try { audioRef.current.pause() } catch (_) {}
+      setTtsState(s => ({ ...s, playing: false, paused: true }))
+    } else if (typeof window !== 'undefined' && window.speechSynthesis?.speaking) {
+      try { window.speechSynthesis.pause() } catch (_) {}
+      setTtsState(s => ({ ...s, playing: false, paused: true }))
+    }
+  }, [])
+
+  const ttsStop = useCallback(() => stopAllTts(), [stopAllTts])
+
+  const ttsSetSpeed = useCallback((s) => {
+    const clamped = Math.max(0.5, Math.min(2.0, Number(s) || 1.0))
+    speedRef.current = clamped
+    if (audioRef.current) {
+      try { audioRef.current.playbackRate = clamped } catch (_) {}
+    }
+    // Browser : utt.rate ne peut pas changer en live, sera appliqué au prochain message
+    setTtsState(state => ({ ...state, speed: clamped }))
+  }, [])
+
+  // ── Envoyer un message à Léa ──────────────────────────────
   const sendMessage = useCallback(async (userText, { type = 'chat', extraSystem } = {}) => {
     if (!apiKey) return null
     setLoading(true); setStreaming('')
@@ -57,15 +127,39 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
       }
 
       if (voiceOn && full) {
-        if (audioRef.current) audioRef.current.pause()
+        stopAllTts()
         if (openAiKey) {
           try {
-            audioRef.current = await speakWithOpenAI({ openAiKey, text: full, voice: leaVoice })
+            const audio = await speakWithOpenAI({
+              openAiKey,
+              text: full,
+              voice: leaVoice,
+              speed: speedRef.current,
+            })
+            audioRef.current = audio
+            try { audio.playbackRate = speedRef.current } catch (_) {}
+
+            // addEventListener + AbortController pour cleanup propre.
+            // Plus robuste que onplay/onpause/onended directs : si une nouvelle
+            // lecture démarre avant la fin de l'ancienne, le AbortController
+            // précédent (stocké sur audio.__ttsAbort) annule les listeners orphelins.
+            try { audio.__ttsAbort?.abort() } catch (_) {}
+            const ac = new AbortController()
+            audio.__ttsAbort = ac
+            const opts = { signal: ac.signal }
+            audio.addEventListener('play',  () => setTtsState({ playing: true,  paused: false, speed: speedRef.current, mode: 'openai' }), opts)
+            audio.addEventListener('pause', () => setTtsState(s => ({ ...s, playing: false, paused: true })), opts)
+            audio.addEventListener('ended', () => setTtsState({ playing: false, paused: false, speed: speedRef.current, mode: null }), opts)
+            audio.addEventListener('error', () => setTtsState({ playing: false, paused: false, speed: speedRef.current, mode: null }), opts)
+
+            // Set immédiat au cas où l'event 'play' soit déjà fired
+            // (audio.play() est appelé dans speakWithOpenAI, donc avant qu'on attache ici).
+            setTtsState({ playing: true, paused: false, speed: speedRef.current, mode: 'openai' })
           } catch (_) {
-            speakBrowser(full)
+            speakBrowserManaged(full)
           }
         } else {
-          speakBrowser(full)
+          speakBrowserManaged(full)
         }
       }
     } catch (err) {
@@ -74,7 +168,7 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
       setLoading(false); setStreaming('')
     }
     return full
-  }, [apiKey, openAiKey, systemPrompt, chatHistory, voiceOn, leaVoice, addMessage, updateLeaMemory, currentChapter])
+  }, [apiKey, openAiKey, systemPrompt, chatHistory, voiceOn, leaVoice, addMessage, updateLeaMemory, currentChapter, stopAllTts, speakBrowserManaged])
 
   const correctText = useCallback(async (text) => {
     return sendMessage(buildCorrectionPrompt(text), { type: 'correction' })
@@ -157,18 +251,18 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
   }, [sendMessage, currentChapter])
 
   const toggleVoice = useCallback(() => {
-    if (voiceOn && audioRef.current) {
-      audioRef.current.pause()
-      window.speechSynthesis?.cancel()
+    if (voiceOn) {
+      stopAllTts()
     }
     setVoiceOn(v => !v)
-  }, [voiceOn])
+  }, [voiceOn, stopAllTts])
 
   return {
     loading, streaming, voiceOn, toggleVoice, sendMessage,
     correctText, defineWord, findThread, expressDoubt, injectVrac,
     getDiscovery, getSynonyms, searchWord,
     startAkinator, startAkinatorSoft, askAkinatorTurn, getPredictiveWords,
+    ttsState, ttsPlay, ttsPause, ttsStop, ttsSetSpeed,
   }
 }
 
@@ -238,14 +332,4 @@ function mapCoachError(err) {
     return "Le service est momentanément surchargé — réessaie dans un moment 🌿"
   }
   return "Léa n'a pas pu répondre — tu peux continuer à écrire, on réessaiera 🌿"
-}
-
-// ─── Voix navigateur fallback ─────────────────────────────────
-function speakBrowser(text) {
-  if (!window.speechSynthesis) return
-  window.speechSynthesis.cancel()
-  const utt = new SpeechSynthesisUtterance(text.slice(0, 500))
-  utt.lang = 'fr-FR'
-  utt.rate = 0.92
-  window.speechSynthesis.speak(utt)
 }
