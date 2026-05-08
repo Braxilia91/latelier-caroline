@@ -2,7 +2,12 @@ import { useState, useRef, useEffect } from 'react'
 import { Send, Volume2, VolumeX, Trash2, Scissors, BookOpen, AlertCircle, Lightbulb } from 'lucide-react'
 import { LEA_COMMANDS } from '../../lib/commands'
 
-export default function CoachPanel({ coach, hasKey, currentChapter, chatHistory, welcomeMsg, onOpenVrac, isOnline = true }) {
+export default function CoachPanel({
+  coach, hasKey, currentChapter, chatHistory, welcomeMsg, onOpenVrac,
+  isOnline = true,
+  // ── Mobile drawer ──
+  isMobile, isOpen, onClose,
+}) {
   const [input, setInput]       = useState('')
   const bottomRef               = useRef(null)
   const inputRef                = useRef(null)
@@ -25,14 +30,26 @@ export default function CoachPanel({ coach, hasKey, currentChapter, chatHistory,
     await findThread(currentChapter.content)
   }
 
+  // Style calculé selon mode (desktop inline / mobile drawer fixed slide-right)
+  const computedStyle = isMobile
+    ? {
+        ...styles.panelBase,
+        ...styles.panelMobile,
+        transform: isOpen ? 'translateX(0)' : 'translateX(100%)',
+      }
+    : {
+        ...styles.panelBase,
+        ...styles.panelDesktop,
+      }
+
   return (
-    <aside style={styles.panel}>
+    <aside style={computedStyle}>
       {/* Header */}
       <div style={styles.hdr}>
         <div>
           <div style={styles.hdrTitle}>🌿 Léa</div>
           <div style={styles.hdrSub}>
-            {hasKey ? 'Ton coach d\'écriture' : 'En attente de ta clé API'}
+            {hasKey ? "Ton coach d'écriture" : 'En attente de ta clé API'}
           </div>
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
@@ -55,7 +72,6 @@ export default function CoachPanel({ coach, hasKey, currentChapter, chatHistory,
             </p>
           </div>
         )}
-
         {chatHistory.map((msg, i) => (
           <div
             key={msg.timestamp || msg.id || `${msg.role}-${i}-${String(msg.content).slice(0, 12)}`}
@@ -67,7 +83,6 @@ export default function CoachPanel({ coach, hasKey, currentChapter, chatHistory,
             </div>
           </div>
         ))}
-
         {(loading || streaming) && (
           <div style={styles.leaMsg}>
             <div style={styles.leaAvatar}>L</div>
@@ -80,7 +95,6 @@ export default function CoachPanel({ coach, hasKey, currentChapter, chatHistory,
             </div>
           </div>
         )}
-
         <div ref={bottomRef} />
       </div>
 
@@ -150,12 +164,26 @@ export default function CoachPanel({ coach, hasKey, currentChapter, chatHistory,
 }
 
 const styles = {
-  panel: {
-    width: 270, flexShrink: 0,
+  panelBase: {
     background: 'var(--paper)',
     borderLeft: '1px solid var(--border-l)',
-    display: 'flex', flexDirection: 'column',
+    display: 'flex',
+    flexDirection: 'column',
     overflow: 'hidden',
+  },
+  panelDesktop: {
+    width: 270,
+    flexShrink: 0,
+  },
+  panelMobile: {
+    position: 'fixed',
+    top: 52,
+    bottom: 0,
+    right: 0,
+    width: 320,
+    zIndex: 100,
+    transition: 'transform 0.25s ease-out',
+    boxShadow: '-4px 0 16px rgba(0,0,0,0.1)',
   },
   hdr: {
     padding: '12px 14px',
