@@ -58,9 +58,9 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
   const [akinError,      setAkinError]      = useState('')
   const [copiedWord,     setCopiedWord]     = useState(null)
 
-  const [wikiQuery,       setWikiQuery]       = useState('')
-  const [wikiResult,      setWikiResult]      = useState(null)
-  const [wikiLoading,     setWikiLoading]     = useState(false)
+  const [wikiQuery,   setWikiQuery]   = useState('')
+  const [wikiResult,  setWikiResult]  = useState(null)
+  const [wikiLoading, setWikiLoading] = useState(false)
   const [wikiError,       setWikiError]       = useState('')
   const [wikiSuggestions, setWikiSuggestions] = useState([])
 
@@ -73,9 +73,12 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
   const wikiUrl = wikiResult && wikiResult.content_urls && wikiResult.content_urls.desktop && wikiResult.content_urls.desktop.page
 
   const handleWikiSearch = async (overrideTerm) => {
-    const term = (overrideTerm ?? wikiQuery).trim()
+    // Guard : si appelé via onClick={handleWikiSearch}, overrideTerm est un Event React.
+    // Seules les strings sont des termes de recherche valides.
+    const isStringTerm = typeof overrideTerm === 'string'
+    const term = (isStringTerm ? overrideTerm : wikiQuery).trim()
     if (!term) return
-    if (overrideTerm) setWikiQuery(overrideTerm)
+    if (isStringTerm) setWikiQuery(overrideTerm)
     setWikiLoading(true)
     setWikiResult(null)
     setWikiError('')
@@ -430,7 +433,7 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
                     cursor:  wikiQuery.trim() && !wikiLoading ? 'pointer' : 'not-allowed',
                     flexShrink: 0,
                   }}
-                  onClick={handleWikiSearch}
+                  onClick={() => handleWikiSearch()}
                   disabled={!wikiQuery.trim() || wikiLoading}
                 >
                   {wikiLoading ? '…' : 'Chercher'}
