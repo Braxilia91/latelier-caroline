@@ -34,10 +34,11 @@ export default defineConfig({
         ]
       },
       workbox: {
-        // mp3 inclus → sons ambiance disponibles hors-ligne
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2,mp3}'],
+        // mp3 exclus du precache (cafe.mp3 = 3.86MB > limite Workbox 2MB)
+        // Les sons sont chargés à la demande via runtimeCaching ou fetch normal
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
         runtimeCaching: [{
-          urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
+          urlPattern: /^https://fonts.googleapis.com/.*/i,
           handler: 'CacheFirst',
           options: { cacheName: 'google-fonts', expiration: { maxEntries: 10, maxAgeSeconds: 31536000 } }
         }]
