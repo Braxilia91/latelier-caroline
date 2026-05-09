@@ -73,10 +73,10 @@ export default function CoachPanel({
           </div>
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
-          <button style={styles.iconBtn} onClick={toggleVoice} title={voiceOn ? 'Couper la voix' : 'Activer la voix'}>
+          <button style={styles.iconBtn} onClick={toggleVoice} title={voiceOn ? 'Couper la voix' : 'Activer la voix'} aria-label={voiceOn ? 'Couper la voix de Léa' : 'Activer la voix de Léa'}>
             {voiceOn ? <Volume2 size={15} /> : <VolumeX size={15} />}
           </button>
-          <button style={styles.iconBtn} onClick={handleClearChat} title="Effacer la conversation">
+          <button style={styles.iconBtn} onClick={handleClearChat} title="Effacer la conversation" aria-label="Effacer la conversation avec Léa">
             <Trash2 size={15} />
           </button>
         </div>
@@ -211,7 +211,7 @@ export default function CoachPanel({
               if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() }
             }}
           />
-          <button style={styles.sendBtn} onClick={handleSend} disabled={!input.trim() || loading}>
+          <button style={styles.sendBtn} onClick={handleSend} disabled={!input.trim() || loading} aria-label="Envoyer à Léa">
             <Send size={15} />
           </button>
         </div>

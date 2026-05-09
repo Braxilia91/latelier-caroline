@@ -67,7 +67,7 @@ export default function Sidebar({
       {/* Header */}
       <div style={styles.hdr}>
         <span style={styles.hdrTitle}>Mes chapitres</span>
-        <button style={styles.addBtn} onClick={handleCreateChapter} title="Nouveau chapitre">
+        <button style={styles.addBtn} onClick={handleCreateChapter} title="Nouveau chapitre" aria-label="Nouveau chapitre">
           <Plus size={16} />
         </button>
       </div>
@@ -108,6 +108,7 @@ export default function Sidebar({
               }}
               onClick={e => { e.stopPropagation(); handleDelete(ch.id) }}
               title={confirmDel === ch.id ? 'Confirmer la suppression' : 'Supprimer'}
+              aria-label={confirmDel === ch.id ? 'Confirmer la suppression du chapitre' : 'Supprimer le chapitre'}
             >
               <Trash2 size={13} />
             </button>
