@@ -163,7 +163,12 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
             audio.addEventListener('error', () => setTtsState({ playing: false, paused: false, speed: speedRef.current, mode: null }), opts)
 
             setTtsState({ playing: true, paused: false, speed: speedRef.current, mode: 'openai' })
-          } catch (_) {
+          } catch (ttsErr) {
+            console.warn('[TTS] OpenAI échec, fallback navigateur', {
+              status: ttsErr?.status ?? null,
+              message: ttsErr?.message || String(ttsErr),
+              body: ttsErr?.body || null,
+            })
             speakBrowserManaged(full)
           }
         } else {
