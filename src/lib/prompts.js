@@ -2,37 +2,37 @@
 
 // ─── Prompt système principal ──────────────────────────────────
 export function buildSystemPrompt({ name, mood, currentChapter, intention, profile, leaMemory }) {
-  const n = name || 'Caroline'
+const n = name || 'Caroline'
 
-  let profileSection = ''
-  if (profile) {
-    profileSection = `
+let profileSection = ''
+if (profile) {
+profileSection = `
 PROFIL DE ${n.toUpperCase()} :
-- Ce qu'elle veut écrire : ${profile.topic   || 'son histoire de vie'}
+- Ce qu'elle veut écrire : ${profile.topic || 'son histoire de vie'}
 - Ce qui lui fait peur dans l'écriture : ${profile.fear || 'non précisé'}
 - Moment préféré pour écrire : ${profile.when || 'variable'}
 - Ce qui la fait rire : ${profile.humor || 'non précisé'}
 - Comment elle se sent par rapport à ce projet : ${profile.feeling || 'déterminée'}
 `
-  }
+}
 
-  let memorySection = ''
-  if (leaMemory && (leaMemory.lastSession || leaMemory.keyPoints?.length)) {
-    memorySection = `
+let memorySection = ''
+if (leaMemory && (leaMemory.lastSession || leaMemory.keyPoints?.length)) {
+memorySection = `
 CE QUE JE ME RAPPELLE DE NOS ÉCHANGES :
 - Dernière session : ${leaMemory.lastSession || 'récente'}
 - Dernier chapitre : ${leaMemory.lastChapter || 'en cours'}
 - Points clés : ${(leaMemory.keyPoints || []).slice(0, 3).join(' | ') || 'aucun encore'}
 ${leaMemory.toCelebrate ? `- À célébrer : ${leaMemory.toCelebrate}` : ''}
 `
-  }
+}
 
-  const moodLine    = mood            ? `\nHumeur du jour : ${mood}` : ''
-  const chapterLine = currentChapter
-    ? `\nChapitre en cours : "${currentChapter.title}"${intention ? ` — intention : "${intention}"` : ''}`
-    : ''
+const moodLine = mood ? `\nHumeur du jour : ${mood}` : ''
+const chapterLine = currentChapter
+? `\nChapitre en cours : "${currentChapter.title}"${intention ? ` — intention : "${intention}"` : ''}`
+: ''
 
-  return `Tu es Léa, la tutrice d'écriture et confidente éditoriale de ${n}.
+return `Tu es Léa, la tutrice d'écriture et confidente éditoriale de ${n}.
 ${n} écrit son autobiographie dans L'Atelier — un espace rien qu'à elle.
 ${profileSection}${memorySection}${moodLine}${chapterLine}
 
@@ -73,16 +73,19 @@ RÈGLES ABSOLUES :
 - Si ${n} exprime une détresse émotionnelle forte, accueille-la et suggère doucement un professionnel
 - Ne fais jamais de suppositions sur sa vie au-delà de ce qu'elle t'a partagé
 - La propriété des textes appartient intégralement à ${n}
-- Ne mentionne jamais que tu es une IA sauf si elle pose la question directement`
+- Ne mentionne jamais que tu es une IA sauf si elle pose la question directement
+
+FORMAT DE TES RÉPONSES :
+Écris toujours en texte simple et naturel, comme dans une vraie conversation. Pas de titres, pas de listes à puces, pas de tirets de liste, pas de numérotation, pas de markdown (pas de **gras**, pas de *italique*, pas de # titre, pas de --- séparateur, pas de blocs de code). Uniquement des phrases complètes et fluides. Maximum 3 paragraphes courts par message.`
 }
 
 // ─── Mode "Je doute" ───────────────────────────────────────────
 export function buildDoubtPrompt(text) {
-  const cleaned = text || ''
-  const excerpt = cleaned.length > 1500
-    ? `${cleaned.slice(0, 400)} […] ${cleaned.slice(-400)}`
-    : cleaned
-  return `Caroline doute de ce passage qu'elle vient d'écrire :
+const cleaned = text || ''
+const excerpt = cleaned.length > 1500
+? `${cleaned.slice(0, 400)} […] ${cleaned.slice(-400)}`
+: cleaned
+return `Caroline doute de ce passage qu'elle vient d'écrire :
 
 "${excerpt}"
 
@@ -102,11 +105,11 @@ Règles :
 
 // ─── Vocabulaire — synonymes par registre ─────────────────────
 export function buildSynonymPrompt({ word, sentence, level }) {
-  const levelNote = level === 'simple'
-    ? 'Reste dans le registre courant et familier — pas de mots trop littéraires.'
-    : 'Propose du courant au littéraire, avec explication courte pour les mots moins courants.'
+const levelNote = level === 'simple'
+? 'Reste dans le registre courant et familier — pas de mots trop littéraires.'
+: 'Propose du courant au littéraire, avec explication courte pour les mots moins courants.'
 
-  return `Caroline cherche des alternatives au mot : "${word}"
+return `Caroline cherche des alternatives au mot : "${word}"
 Contexte de la phrase : "${sentence || 'non précisé'}"
 ${levelNote}
 
@@ -121,7 +124,7 @@ Ne corrige pas la phrase originale. Ne propose que des alternatives au mot deman
 
 // ─── Vocabulaire — "je cherche mes mots" (description → mot) ──
 export function buildWordSearchPrompt(description) {
-  return `Caroline cherche un mot. Elle le décrit ainsi : "${description}"
+return `Caroline cherche un mot. Elle le décrit ainsi : "${description}"
 Contexte : autobiographie, récit personnel.
 
 Propose 5 mots ou expressions qui correspondent.
@@ -135,7 +138,7 @@ Inclus des mots français courants ET quelques mots rares ou d'origine étrangè
 
 // ─── Vrac — injecter une idée dans la conversation ────────────
 export function buildVracInjectPrompt({ idea, chapterTitle }) {
-  return `${chapterTitle ? `Caroline travaille sur "${chapterTitle}".` : ''}
+return `${chapterTitle ? `Caroline travaille sur "${chapterTitle}".` : ''}
 Elle avait déposé cette idée dans sa boîte à idées : "${idea.text}" (tagguée : ${idea.tag}).
 
 Utilise cette idée pour l'aider à avancer. Tu peux :
@@ -148,7 +151,7 @@ Une seule direction à la fois. Sois brève et concrète.`
 
 // ─── Découverte du jour ───────────────────────────────────────
 export function buildDiscoveryPrompt(recentText) {
-  return `Voici un extrait récent de l'écriture de Caroline :
+return `Voici un extrait récent de l'écriture de Caroline :
 "${(recentText || '').slice(0, 600)}"
 
 Propose-lui UNE micro-découverte littéraire adaptée à son niveau et à ce qu'elle écrit : un mot rare, une figure de style, une règle de grammaire, ou un conseil d'écriture autobiographique.
@@ -164,7 +167,7 @@ Ton : curieux, léger, encourageant. Pas de leçon — une trouvaille.`
 
 // ─── Correction d'un passage ───────────────────────────────────
 export function buildCorrectionPrompt(text) {
-  return `Caroline vient d'écrire ce passage :
+return `Caroline vient d'écrire ce passage :
 
 "${text}"
 
@@ -178,7 +181,7 @@ Réponds de façon courte et chaleureuse. Maximum 120 mots.`
 
 // ─── Définition d'un mot ───────────────────────────────────────
 export function buildVocabPrompt(word) {
-  return `Caroline veut comprendre le mot ou l'expression : "${word}"
+return `Caroline veut comprendre le mot ou l'expression : "${word}"
 
 Explique-le lui simplement :
 - Ce que ça veut dire en français clair
@@ -190,7 +193,7 @@ Réponds en 3-4 phrases maximum, de façon douce et encourageante.`
 
 // ─── Retrouver le fil ─────────────────────────────────────────
 export function buildThreadPrompt(chapterText) {
-  return `Voici un extrait du chapitre de Caroline :
+return `Voici un extrait du chapitre de Caroline :
 
 "${chapterText.slice(0, 2000)}"
 
@@ -204,7 +207,7 @@ Sois très courte et très encourageante.`
 
 // ─── Inspiration ──────────────────────────────────────────────
 export function buildInspirationPrompt({ name, mood }) {
-  return `Caroline (${name}) a besoin d'inspiration pour écrire aujourd'hui. Son humeur : ${mood || 'neutre'}.
+return `Caroline (${name}) a besoin d'inspiration pour écrire aujourd'hui. Son humeur : ${mood || 'neutre'}.
 
 Propose-lui UNE SEULE question d'écriture douce et personnelle — sur ses souvenirs, ses émotions, ses relations, ses moments importants.
 
@@ -218,141 +221,141 @@ Juste la question. Pas de préambule.`
 
 // ─── Message d'accueil (time-aware) ───────────────────────────
 export function buildWelcomeMessage({ name, leaMemory, currentChapter }) {
-  const hour = new Date().getHours()
-  const n    = name || 'Caroline'
+const hour = new Date().getHours()
+const n = name || 'Caroline'
 
-  let timeGreet = ''
-  if (hour >= 5  && hour < 12) timeGreet = `Bonjour ${n} ☀️`
-  else if (hour >= 12 && hour < 18) timeGreet = `Bonjour ${n} 🌿`
-  else if (hour >= 18 && hour < 22) timeGreet = `Bonsoir ${n} 🕯️`
-  else timeGreet = `Bonne nuit ${n} 🌙`
+let timeGreet = ''
+if (hour >= 5 && hour < 12) timeGreet = `Bonjour ${n} ☀️`
+else if (hour >= 12 && hour < 18) timeGreet = `Bonjour ${n} 🌿`
+else if (hour >= 18 && hour < 22) timeGreet = `Bonsoir ${n} 🕯️`
+else timeGreet = `Bonne nuit ${n} 🌙`
 
-  if (leaMemory?.lastChapter && leaMemory?.lastSession) {
-    const lastDate = new Date(leaMemory.lastSession)
-    const today    = new Date()
-    const diffDays = Math.floor((today - lastDate) / 86400000)
-    const dayStr   = diffDays === 0 ? "tout à l'heure" : diffDays === 1 ? 'hier' : `il y a ${diffDays} jours`
+if (leaMemory?.lastChapter && leaMemory?.lastSession) {
+const lastDate = new Date(leaMemory.lastSession)
+const today = new Date()
+const diffDays = Math.floor((today - lastDate) / 86400000)
+const dayStr = diffDays === 0 ? "tout à l'heure" : diffDays === 1 ? 'hier' : `il y a ${diffDays} jours`
 
-    return `${timeGreet} — ${dayStr} tu travaillais sur "${leaMemory.lastChapter}". Comment tu te sens aujourd'hui pour reprendre ?`
-  }
+return `${timeGreet} — ${dayStr} tu travaillais sur "${leaMemory.lastChapter}". Comment tu te sens aujourd'hui pour reprendre ?`
+}
 
-  if (currentChapter) {
-    return `${timeGreet} — je vois que tu travailles sur "${currentChapter.title}". Je suis là quand tu veux. Dis-moi comment tu te sens.`
-  }
+if (currentChapter) {
+return `${timeGreet} — je vois que tu travailles sur "${currentChapter.title}". Je suis là quand tu veux. Dis-moi comment tu te sens.`
+}
 
-  return `${timeGreet} — je suis là pour t'accompagner. Dis-moi comment tu te sens, ou pose-moi une question.`
+return `${timeGreet} — je suis là pour t'accompagner. Dis-moi comment tu te sens, ou pose-moi une question.`
 }
 
 // ─── Prompts d'inspiration fixes (90 prompts, 12 catégories) ──
 export const INSPIRATION_PROMPTS = [
-  { cat: 'Enfance', q: "Quel est le premier souvenir que tu as d'un endroit qui te faisait te sentir en sécurité ?" },
-  { cat: 'Enfance', q: "Y a-t-il une odeur ou un son d'enfance qui te ramène instantanément quelque part ?" },
-  { cat: 'Enfance', q: "Raconte un matin d'enfance dont tu te souviens avec une précision étrange." },
-  { cat: 'Enfance', q: "Quel jeu ou rituel inventais-tu seule que personne d'autre ne connaissait ?" },
-  { cat: 'Enfance', q: "Quel adulte de ton enfance t'a semblé mystérieux ou incompréhensible ?" },
-  { cat: 'Enfance', q: "Y avait-il une peur d'enfance que tu n'osais pas nommer à voix haute ?" },
-  { cat: 'Enfance', q: "Quel objet possédais-tu enfant que tu aurais voulu garder pour toujours ?" },
-  { cat: 'Enfance', q: "Comment imaginais-tu ta vie d'adulte à 8 ou 10 ans ?" },
-  { cat: 'Enfance', q: "Y a-t-il une phrase qu'on répétait chez toi et qui t'a longtemps suivie ?" },
-  { cat: 'Enfance', q: "Quel souvenir de repas, de table ou de cuisine revient souvent ?" },
+{ cat: 'Enfance', q: "Quel est le premier souvenir que tu as d'un endroit qui te faisait te sentir en sécurité ?" },
+{ cat: 'Enfance', q: "Y a-t-il une odeur ou un son d'enfance qui te ramène instantanément quelque part ?" },
+{ cat: 'Enfance', q: "Raconte un matin d'enfance dont tu te souviens avec une précision étrange." },
+{ cat: 'Enfance', q: "Quel jeu ou rituel inventais-tu seule que personne d'autre ne connaissait ?" },
+{ cat: 'Enfance', q: "Quel adulte de ton enfance t'a semblé mystérieux ou incompréhensible ?" },
+{ cat: 'Enfance', q: "Y avait-il une peur d'enfance que tu n'osais pas nommer à voix haute ?" },
+{ cat: 'Enfance', q: "Quel objet possédais-tu enfant que tu aurais voulu garder pour toujours ?" },
+{ cat: 'Enfance', q: "Comment imaginais-tu ta vie d'adulte à 8 ou 10 ans ?" },
+{ cat: 'Enfance', q: "Y a-t-il une phrase qu'on répétait chez toi et qui t'a longtemps suivie ?" },
+{ cat: 'Enfance', q: "Quel souvenir de repas, de table ou de cuisine revient souvent ?" },
 
-  { cat: 'Personnes', q: "Qui t'a dit un jour quelque chose que tu n'as jamais oublié ?" },
-  { cat: 'Personnes', q: "Pense à quelqu'un qui a changé ta vie sans le savoir. Comment te souviens-tu de lui ?" },
-  { cat: 'Personnes', q: "Y a-t-il quelqu'un que tu as perdu de vue et dont tu te demandes encore ce qu'il est devenu ?" },
-  { cat: 'Personnes', q: "Qui dans ta vie t'a appris quelque chose d'essentiel, sans jamais prononcer le mot 'leçon' ?" },
-  { cat: 'Personnes', q: "Décris quelqu'un que tu as mal jugé au départ — et ce qui t'a fait changer d'avis." },
-  { cat: 'Personnes', q: "Y a-t-il quelqu'un que tu as blessé sans le vouloir, et que tu voudrais peut-être retrouver ?" },
-  { cat: 'Personnes', q: "Qui te connaît mieux que quiconque ? Comment cette personne te voit-elle ?" },
-  { cat: 'Personnes', q: "Quel visage revient souvent dans tes souvenirs sans que tu comprennes vraiment pourquoi ?" },
-  { cat: 'Personnes', q: "Y a-t-il quelqu'un dans ta famille dont tu n'as pas assez entendu l'histoire ?" },
-  { cat: 'Personnes', q: "Qui t'a témoigné une confiance inattendue à un moment où tu en avais besoin ?" },
+{ cat: 'Personnes', q: "Qui t'a dit un jour quelque chose que tu n'as jamais oublié ?" },
+{ cat: 'Personnes', q: "Pense à quelqu'un qui a changé ta vie sans le savoir. Comment te souviens-tu de lui ?" },
+{ cat: 'Personnes', q: "Y a-t-il quelqu'un que tu as perdu de vue et dont tu te demandes encore ce qu'il est devenu ?" },
+{ cat: 'Personnes', q: "Qui dans ta vie t'a appris quelque chose d'essentiel, sans jamais prononcer le mot 'leçon' ?" },
+{ cat: 'Personnes', q: "Décris quelqu'un que tu as mal jugé au départ — et ce qui t'a fait changer d'avis." },
+{ cat: 'Personnes', q: "Y a-t-il quelqu'un que tu as blessé sans le vouloir, et que tu voudrais peut-être retrouver ?" },
+{ cat: 'Personnes', q: "Qui te connaît mieux que quiconque ? Comment cette personne te voit-elle ?" },
+{ cat: 'Personnes', q: "Quel visage revient souvent dans tes souvenirs sans que tu comprennes vraiment pourquoi ?" },
+{ cat: 'Personnes', q: "Y a-t-il quelqu'un dans ta famille dont tu n'as pas assez entendu l'histoire ?" },
+{ cat: 'Personnes', q: "Qui t'a témoigné une confiance inattendue à un moment où tu en avais besoin ?" },
 
-  { cat: 'Moments', q: "Quelle est la journée où tu as ressenti pour la première fois que tu étais adulte ?" },
-  { cat: 'Moments', q: "Y a-t-il un moment où tu as dû être forte alors que tu aurais voulu t'effondrer ?" },
-  { cat: 'Moments', q: "Décris une attente — une salle, une gare, un couloir — et ce que tu ressentais." },
-  { cat: 'Moments', q: "Quel moment de ta vie aimerais-tu revivre, non pas pour le changer, mais juste pour le ressentir encore ?" },
-  { cat: 'Moments', q: "Y a-t-il eu un moment de silence qui t'a tout dit sans un mot ?" },
-  { cat: 'Moments', q: "Quelle est la dernière fois que tu as ri aux larmes ? Avec qui, et pourquoi ?" },
-  { cat: 'Moments', q: "Décris un moment où le temps a semblé s'arrêter — en bien ou en mal." },
-  { cat: 'Moments', q: "Y a-t-il un moment où tu as su, sans l'ombre d'un doute, que tu avais pris la bonne décision ?" },
-  { cat: 'Moments', q: "Quel repas, quelle fête ou quelle réunion de famille resterait dans ta mémoire même si tout le reste disparaissait ?" },
-  { cat: 'Moments', q: "Raconte une nuit — une seule — qui a tout changé." },
+{ cat: 'Moments', q: "Quelle est la journée où tu as ressenti pour la première fois que tu étais adulte ?" },
+{ cat: 'Moments', q: "Y a-t-il un moment où tu as dû être forte alors que tu aurais voulu t'effondrer ?" },
+{ cat: 'Moments', q: "Décris une attente — une salle, une gare, un couloir — et ce que tu ressentais." },
+{ cat: 'Moments', q: "Quel moment de ta vie aimerais-tu revivre, non pas pour le changer, mais juste pour le ressentir encore ?" },
+{ cat: 'Moments', q: "Y a-t-il eu un moment de silence qui t'a tout dit sans un mot ?" },
+{ cat: 'Moments', q: "Quelle est la dernière fois que tu as ri aux larmes ? Avec qui, et pourquoi ?" },
+{ cat: 'Moments', q: "Décris un moment où le temps a semblé s'arrêter — en bien ou en mal." },
+{ cat: 'Moments', q: "Y a-t-il un moment où tu as su, sans l'ombre d'un doute, que tu avais pris la bonne décision ?" },
+{ cat: 'Moments', q: "Quel repas, quelle fête ou quelle réunion de famille resterait dans ta mémoire même si tout le reste disparaissait ?" },
+{ cat: 'Moments', q: "Raconte une nuit — une seule — qui a tout changé." },
 
-  { cat: 'Lieux', q: "Y a-t-il un endroit dans le monde qui ressemble exactement à ce que tu ressens quand tu es bien ?" },
-  { cat: 'Lieux', q: "Quel lieu de ton enfance n'existe peut-être plus, mais vit encore en toi ?" },
-  { cat: 'Lieux', q: "Décris la maison où tu te sentais le plus chez toi — même si ce n'était pas la tienne." },
-  { cat: 'Lieux', q: "Y a-t-il un endroit où tu retournes en pensée quand tu as besoin de calme ?" },
-  { cat: 'Lieux', q: "Quel trajet — à pied, en voiture, en train — te revient souvent en mémoire ?" },
-  { cat: 'Lieux', q: "Décris un endroit que tu as découvert par hasard et que tu as voulu garder pour toi." },
-  { cat: 'Lieux', q: "Y a-t-il un lieu que tu évites encore aujourd'hui parce qu'il garde trop de mémoire ?" },
-  { cat: 'Lieux', q: "Quel paysage as-tu regardé un jour si longtemps que tu penses pouvoir le redessiner de mémoire ?" },
+{ cat: 'Lieux', q: "Y a-t-il un endroit dans le monde qui ressemble exactement à ce que tu ressens quand tu es bien ?" },
+{ cat: 'Lieux', q: "Quel lieu de ton enfance n'existe peut-être plus, mais vit encore en toi ?" },
+{ cat: 'Lieux', q: "Décris la maison où tu te sentais le plus chez toi — même si ce n'était pas la tienne." },
+{ cat: 'Lieux', q: "Y a-t-il un endroit où tu retournes en pensée quand tu as besoin de calme ?" },
+{ cat: 'Lieux', q: "Quel trajet — à pied, en voiture, en train — te revient souvent en mémoire ?" },
+{ cat: 'Lieux', q: "Décris un endroit que tu as découvert par hasard et que tu as voulu garder pour toi." },
+{ cat: 'Lieux', q: "Y a-t-il un lieu que tu évites encore aujourd'hui parce qu'il garde trop de mémoire ?" },
+{ cat: 'Lieux', q: "Quel paysage as-tu regardé un jour si longtemps que tu penses pouvoir le redessiner de mémoire ?" },
 
-  { cat: 'Émotions', q: "Quelle est l'émotion la plus difficile à expliquer aux autres que tu ressens parfois ?" },
-  { cat: 'Émotions', q: "Y a-t-il une colère que tu as longtemps tenue enfermée ? Qu'est-ce qu'elle cachait ?" },
-  { cat: 'Émotions', q: "Décris une jalousie que tu as ressentie et dont tu comprends maintenant la vraie source." },
-  { cat: 'Émotions', q: "Quelle est la peur qui t'a coûté le plus — non pas en la vivant, mais en l'évitant ?" },
-  { cat: 'Émotions', q: "Y a-t-il une fierté que tu n'as jamais osé exprimer complètement ?" },
-  { cat: 'Émotions', q: "Décris un deuil — pas forcément une mort — quelque chose que tu as dû lâcher." },
-  { cat: 'Émotions', q: "Quelle émotion as-tu appris à reconnaître en toi sur le tard ?" },
-  { cat: 'Émotions', q: "Y a-t-il un sentiment que tu ressentais enfant et que tu ne sais plus tout à fait nommer maintenant ?" },
+{ cat: 'Émotions', q: "Quelle est l'émotion la plus difficile à expliquer aux autres que tu ressens parfois ?" },
+{ cat: 'Émotions', q: "Y a-t-il une colère que tu as longtemps tenue enfermée ? Qu'est-ce qu'elle cachait ?" },
+{ cat: 'Émotions', q: "Décris une jalousie que tu as ressentie et dont tu comprends maintenant la vraie source." },
+{ cat: 'Émotions', q: "Quelle est la peur qui t'a coûté le plus — non pas en la vivant, mais en l'évitant ?" },
+{ cat: 'Émotions', q: "Y a-t-il une fierté que tu n'as jamais osé exprimer complètement ?" },
+{ cat: 'Émotions', q: "Décris un deuil — pas forcément une mort — quelque chose que tu as dû lâcher." },
+{ cat: 'Émotions', q: "Quelle émotion as-tu appris à reconnaître en toi sur le tard ?" },
+{ cat: 'Émotions', q: "Y a-t-il un sentiment que tu ressentais enfant et que tu ne sais plus tout à fait nommer maintenant ?" },
 
-  { cat: 'Corps', q: "Comment ton corps a-t-il gardé la mémoire de certaines épreuves ?" },
-  { cat: 'Corps', q: "Y a-t-il un geste que tes mains font encore par habitude et qui vient de très loin ?" },
-  { cat: 'Corps', q: "Comment ta relation à ton corps a-t-elle changé avec les années ?" },
-  { cat: 'Corps', q: "Y a-t-il une fatigue ou une douleur que tu as portée si longtemps qu'elle t'a appris quelque chose ?" },
-  { cat: 'Corps', q: "Quel soin ou rituel du quotidien a compté davantage que son apparence banale ?" },
-  { cat: 'Corps', q: "Décris la sensation physique d'un moment de bonheur intense — où tu le sentais dans le corps." },
+{ cat: 'Corps', q: "Comment ton corps a-t-il gardé la mémoire de certaines épreuves ?" },
+{ cat: 'Corps', q: "Y a-t-il un geste que tes mains font encore par habitude et qui vient de très loin ?" },
+{ cat: 'Corps', q: "Comment ta relation à ton corps a-t-elle changé avec les années ?" },
+{ cat: 'Corps', q: "Y a-t-il une fatigue ou une douleur que tu as portée si longtemps qu'elle t'a appris quelque chose ?" },
+{ cat: 'Corps', q: "Quel soin ou rituel du quotidien a compté davantage que son apparence banale ?" },
+{ cat: 'Corps', q: "Décris la sensation physique d'un moment de bonheur intense — où tu le sentais dans le corps." },
 
-  { cat: 'Objets', q: "Quel objet possèdes-tu depuis longtemps et que tu n'arriverais pas à jeter ?" },
-  { cat: 'Objets', q: "Y a-t-il un cadeau reçu dont la valeur n'était pas dans l'objet mais dans ce qu'il signifiait ?" },
-  { cat: 'Objets', q: "Quel livre, disque ou film a changé quelque chose en toi au moment précis où tu l'as découvert ?" },
-  { cat: 'Objets', q: "Y a-t-il un objet que tu regrettes d'avoir perdu, cassé ou donné ?" },
-  { cat: 'Objets', q: "Quel vêtement gardes-tu en mémoire pour ce qu'il représentait, pas pour ce qu'il était ?" },
-  { cat: 'Objets', q: "Si tu devais choisir cinq objets pour raconter ta vie à quelqu'un qui ne te connaît pas, lesquels choisirais-tu ?" },
+{ cat: 'Objets', q: "Quel objet possèdes-tu depuis longtemps et que tu n'arriverais pas à jeter ?" },
+{ cat: 'Objets', q: "Y a-t-il un cadeau reçu dont la valeur n'était pas dans l'objet mais dans ce qu'il signifiait ?" },
+{ cat: 'Objets', q: "Quel livre, disque ou film a changé quelque chose en toi au moment précis où tu l'as découvert ?" },
+{ cat: 'Objets', q: "Y a-t-il un objet que tu regrettes d'avoir perdu, cassé ou donné ?" },
+{ cat: 'Objets', q: "Quel vêtement gardes-tu en mémoire pour ce qu'il représentait, pas pour ce qu'il était ?" },
+{ cat: 'Objets', q: "Si tu devais choisir cinq objets pour raconter ta vie à quelqu'un qui ne te connaît pas, lesquels choisirais-tu ?" },
 
-  { cat: 'Rêves', q: "Quel rêve as-tu gardé secret longtemps ? Pourquoi secret ?" },
-  { cat: 'Rêves', q: "Y a-t-il quelque chose que tu voulais faire et que tu as mis de côté — pas abandonné, juste mis de côté ?" },
-  { cat: 'Rêves', q: "Quel rêve de jeunesse t'a guidée sans que tu le réalises vraiment à l'époque ?" },
-  { cat: 'Rêves', q: "Y a-t-il un rêve que tu as réalisé et qui t'a surprise par ce qu'il t'a réellement apporté ?" },
-  { cat: 'Rêves', q: "Qu'est-ce que tu aurais voulu oser plus tôt ?" },
-  { cat: 'Rêves', q: "Si tu pouvais transmettre une seule chose à quelqu'un qui commence sa vie, ce serait quoi ?" },
+{ cat: 'Rêves', q: "Quel rêve as-tu gardé secret longtemps ? Pourquoi secret ?" },
+{ cat: 'Rêves', q: "Y a-t-il quelque chose que tu voulais faire et que tu as mis de côté — pas abandonné, juste mis de côté ?" },
+{ cat: 'Rêves', q: "Quel rêve de jeunesse t'a guidée sans que tu le réalises vraiment à l'époque ?" },
+{ cat: 'Rêves', q: "Y a-t-il un rêve que tu as réalisé et qui t'a surprise par ce qu'il t'a réellement apporté ?" },
+{ cat: 'Rêves', q: "Qu'est-ce que tu aurais voulu oser plus tôt ?" },
+{ cat: 'Rêves', q: "Si tu pouvais transmettre une seule chose à quelqu'un qui commence sa vie, ce serait quoi ?" },
 
-  { cat: 'Tournants', q: "Quelle décision a changé le cours de ta vie, même si elle semblait anodine sur le moment ?" },
-  { cat: 'Tournants', q: "Y a-t-il une version de toi que tu as dû laisser derrière toi pour avancer ?" },
-  { cat: 'Tournants', q: "Quel refus — un travail, une relation, un endroit — s'est révélé être une chance ?" },
-  { cat: 'Tournants', q: "Y a-t-il eu un avant et un après dans ta vie ? Comment décrirais-tu la ligne entre les deux ?" },
-  { cat: 'Tournants', q: "Quelle rencontre imprévue a bifurqué ta trajectoire ?" },
-  { cat: 'Tournants', q: "Y a-t-il une chose que tu as faite par obligation et qui est devenue quelque chose d'essentiel ?" },
-  { cat: 'Tournants', q: "Quel moment t'a fait comprendre ce que tu ne voulais plus jamais vivre ?" },
-  { cat: 'Tournants', q: "Comment décrirais-tu la personne que tu es devenue par rapport à celle que tu pensais devenir ?" },
+{ cat: 'Tournants', q: "Quelle décision a changé le cours de ta vie, même si elle semblait anodine sur le moment ?" },
+{ cat: 'Tournants', q: "Y a-t-il une version de toi que tu as dû laisser derrière toi pour avancer ?" },
+{ cat: 'Tournants', q: "Quel refus — un travail, une relation, un endroit — s'est révélé être une chance ?" },
+{ cat: 'Tournants', q: "Y a-t-il eu un avant et un après dans ta vie ? Comment décrirais-tu la ligne entre les deux ?" },
+{ cat: 'Tournants', q: "Quelle rencontre imprévue a bifurqué ta trajectoire ?" },
+{ cat: 'Tournants', q: "Y a-t-il une chose que tu as faite par obligation et qui est devenue quelque chose d'essentiel ?" },
+{ cat: 'Tournants', q: "Quel moment t'a fait comprendre ce que tu ne voulais plus jamais vivre ?" },
+{ cat: 'Tournants', q: "Comment décrirais-tu la personne que tu es devenue par rapport à celle que tu pensais devenir ?" },
 
-  { cat: 'Secrets', q: "Y a-t-il quelque chose que tu as fait et dont tu n'as jamais parlé — pas par honte, mais parce que les mots manquaient ?" },
-  { cat: 'Secrets', q: "Quelle vérité sur toi as-tu mis longtemps à te dire à toi-même ?" },
-  { cat: 'Secrets', q: "Y a-t-il quelque chose que tu as su avant tout le monde, et que tu as gardé pour toi ?" },
-  { cat: 'Secrets', q: "Quelle est la chose que tu portes et que très peu de gens connaissent vraiment ?" },
-  { cat: 'Secrets', q: "Y a-t-il quelque chose dont tu es fière mais que tu n'oses pas revendiquer ?" },
-  { cat: 'Secrets', q: "Qu'est-ce que tu aurais aimé pouvoir dire à quelqu'un et que tu n'as jamais dit ?" },
+{ cat: 'Secrets', q: "Y a-t-il quelque chose que tu as fait et dont tu n'as jamais parlé — pas par honte, mais parce que les mots manquaient ?" },
+{ cat: 'Secrets', q: "Quelle vérité sur toi as-tu mis longtemps à te dire à toi-même ?" },
+{ cat: 'Secrets', q: "Y a-t-il quelque chose que tu as su avant tout le monde, et que tu as gardé pour toi ?" },
+{ cat: 'Secrets', q: "Quelle est la chose que tu portes et que très peu de gens connaissent vraiment ?" },
+{ cat: 'Secrets', q: "Y a-t-il quelque chose dont tu es fière mais que tu n'oses pas revendiquer ?" },
+{ cat: 'Secrets', q: "Qu'est-ce que tu aurais aimé pouvoir dire à quelqu'un et que tu n'as jamais dit ?" },
 
-  { cat: 'Joie', q: "Décris un moment de bonheur simple — si simple qu'il serait facile de l'oublier." },
-  { cat: 'Joie', q: "Qu'est-ce qui te fait encore rire de la même façon qu'à 15 ans ?" },
-  { cat: 'Joie', q: "Y a-t-il une joie que tu accueilles mieux maintenant qu'avant ?" },
-  { cat: 'Joie', q: "Décris une surprise heureuse — quelque chose que tu n'attendais pas du tout." },
-  { cat: 'Joie', q: "Quel moment de ta vie, en y repensant, te redonne de l'énergie ?" },
-  { cat: 'Joie', q: "Y a-t-il quelque chose de tout petit — un détail, un instant — qui te rend heureuse à coup sûr ?" },
+{ cat: 'Joie', q: "Décris un moment de bonheur simple — si simple qu'il serait facile de l'oublier." },
+{ cat: 'Joie', q: "Qu'est-ce qui te fait encore rire de la même façon qu'à 15 ans ?" },
+{ cat: 'Joie', q: "Y a-t-il une joie que tu accueilles mieux maintenant qu'avant ?" },
+{ cat: 'Joie', q: "Décris une surprise heureuse — quelque chose que tu n'attendais pas du tout." },
+{ cat: 'Joie', q: "Quel moment de ta vie, en y repensant, te redonne de l'énergie ?" },
+{ cat: 'Joie', q: "Y a-t-il quelque chose de tout petit — un détail, un instant — qui te rend heureuse à coup sûr ?" },
 
-  { cat: 'Liberté', q: "Qu'est-ce qui te donne aujourd'hui le sentiment d'être libre ?" },
-  { cat: 'Liberté', q: "Y a-t-il quelque chose dont tu t'es libérée progressivement, sans t'en apercevoir ?" },
-  { cat: 'Liberté', q: "Quelle est la chose la plus courageuse que tu aies faite pour toi seule ?" },
-  { cat: 'Liberté', q: "À quel moment de ta vie as-tu décidé de ne plus attendre la permission de quelqu'un ?" },
-  { cat: 'Liberté', q: "Y a-t-il quelque chose que tu fais aujourd'hui qui aurait surpris la version de toi d'il y a dix ans ?" },
-  { cat: 'Liberté', q: "Qu'est-ce que tu as appris à dire non — et qu'est-ce que ce non t'a ouvert ?" },
+{ cat: 'Liberté', q: "Qu'est-ce qui te donne aujourd'hui le sentiment d'être libre ?" },
+{ cat: 'Liberté', q: "Y a-t-il quelque chose dont tu t'es libérée progressivement, sans t'en apercevoir ?" },
+{ cat: 'Liberté', q: "Quelle est la chose la plus courageuse que tu aies faite pour toi seule ?" },
+{ cat: 'Liberté', q: "À quel moment de ta vie as-tu décidé de ne plus attendre la permission de quelqu'un ?" },
+{ cat: 'Liberté', q: "Y a-t-il quelque chose que tu fais aujourd'hui qui aurait surpris la version de toi d'il y a dix ans ?" },
+{ cat: 'Liberté', q: "Qu'est-ce que tu as appris à dire non — et qu'est-ce que ce non t'a ouvert ?" },
 ]
 
 // ─── Mémoire Léa — extraction de fait notable (background) ───────
 export function buildMemoryExtractPrompt({ userText, assistantText }) {
-  const u = (userText || '').slice(0, 600)
-  const a = (assistantText || '').slice(0, 600)
-  return `Voici un échange entre Caroline et Léa :
+const u = (userText || '').slice(0, 600)
+const a = (assistantText || '').slice(0, 600)
+return `Voici un échange entre Caroline et Léa :
 
 Caroline : "${u}"
 Léa : "${a}"
@@ -376,7 +379,7 @@ Réponds UNIQUEMENT par la phrase ou par "RIEN". Aucune autre formulation.`
 
 // ─── DicoCaro — Akinator Soft (legacy, conservé pour rollback) ────
 export function buildAkinatorSoftPrompt({ nature, mouvement, registre, contexte }) {
-  return `Caroline cherche un mot précis. Voici ses indices :
+return `Caroline cherche un mot précis. Voici ses indices :
 - Nature du concept : ${nature}
 - Implique du mouvement ou une action : ${mouvement || 'non précisé'}
 - Registre visé : ${registre || 'courant'}
@@ -394,14 +397,14 @@ Ton : précis, chaleureux, jamais condescendant.`
 
 // ─── DicoCaro — Akinator Turn (devinette pas-à-pas, JSON strict) ─
 export function buildAkinatorTurnPrompt({ history }) {
-  const turn = (history?.length || 0) + 1
-  const historyText = (history && history.length)
-    ? history.map((h, i) =>
-        `Tour ${i + 1}\n  Question : ${h.question}\n  Réponse de Caroline : ${h.answer}`
-      ).join('\n')
-    : '(aucun tour précédent — c\'est le tour 1)'
+const turn = (history?.length || 0) + 1
+const historyText = (history && history.length)
+? history.map((h, i) =>
+`Tour ${i + 1}\n Question : ${h.question}\n Réponse de Caroline : ${h.answer}`
+).join('\n')
+: '(aucun tour précédent — c\'est le tour 1)'
 
-  return `Tu joues à un Akinator lexical avec Caroline pour l'aider à trouver un mot français qu'elle a sur le bout de la langue. Contexte : autobiographie, récit personnel.
+return `Tu joues à un Akinator lexical avec Caroline pour l'aider à trouver un mot français qu'elle a sur le bout de la langue. Contexte : autobiographie, récit personnel.
 
 Historique des tours :
 ${historyText}
@@ -432,7 +435,7 @@ CRITIQUE : ta sortie doit être un JSON valide parsable directement. Aucun carac
 
 // ─── DicoCaro — Prédictif (mots que Caroline va peut-être chercher) ─
 export function buildPredictivePrompt(chapterContent) {
-  return `Voici ce que Caroline est en train d'écrire dans son autobiographie :
+return `Voici ce que Caroline est en train d'écrire dans son autobiographie :
 
 "${(chapterContent || '').slice(0, 1000)}"
 
