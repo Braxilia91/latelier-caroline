@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
+
+import Modal from '../ui/Modal'
 import { Mic, MicOff, Check, X } from 'lucide-react'
 import { useVoice } from '../../hooks/useVoice'
 
@@ -33,8 +35,12 @@ export default function DictationModal({ onClose, onInsert }) {
   }
 
   return (
-    <div className="modal-bg" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal-box">
+    <Modal
+      onClose={onClose}
+      ariaLabel="Dictée vocale"
+      overlayClassName="modal-bg"
+      modalClassName="modal-box"
+    >
         <button className="modal-close" onClick={onClose} aria-label="Fermer la dictée"><X size={16} /></button>
         <h2 className="modal-title">🎤 Dicter</h2>
 
@@ -99,11 +105,9 @@ export default function DictationModal({ onClose, onInsert }) {
             </div>
           </>
         )}
-      </div>
-    </div>
+    </Modal>
   )
 }
-
 const styles = {
   warn: {
     background: '#FFF3E0', border: '1px solid #FFB74D',

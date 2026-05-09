@@ -40,8 +40,15 @@ export default function PackOpeningModal({ onClose }) {
     return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3) }
   }, [])
 
+  // L4-3 — Escape ferme la scène d'accueil
+  useEffect(() => {
+    const handler = (e) => { if (e.key === 'Escape') onClose?.() }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [onClose])
+
   return (
-    <div style={S.overlay}>
+    <div style={S.overlay} role="dialog" aria-modal="true" aria-label="Bienvenue">
       <div style={S.glow} />
 
       <div style={S.content}>

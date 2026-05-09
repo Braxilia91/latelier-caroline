@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import Modal from '../ui/Modal'
 import { X, Save, AlertTriangle, RefreshCw, Wifi, Download, Lock } from 'lucide-react'
 
 // ── Constantes ───────────────────────────────────────────────────
@@ -124,8 +125,12 @@ export default function SettingsModal({ state, chapters = [], vracIdeas = [], na
   }
 
   return (
-    <div style={S.overlay} onClick={e => e.target === e.currentTarget && onClose()}>
-      <div style={S.modal}>
+    <Modal
+      onClose={onClose}
+      ariaLabel="Réglages"
+      overlayStyle={S.overlay}
+      modalStyle={S.modal}
+    >
         {/* Header */}
         <div style={S.hdr}>
           <span style={S.hdrTitle}>Réglages</span>
@@ -252,11 +257,9 @@ export default function SettingsModal({ state, chapters = [], vracIdeas = [], na
             <Save size={14} /> Enregistrer
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   )
 }
-
 // ── Styles ───────────────────────────────────────────────────────
 const S = {
   overlay: {

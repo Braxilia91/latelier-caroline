@@ -1,4 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
+
+import Modal from '../ui/Modal'
 import { X, BookOpen, Search, HelpCircle, Lightbulb, Globe, Wand2 } from 'lucide-react'
 
 const TABS = [
@@ -229,8 +231,12 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
     && !(tab === 'conseil' && councilDone)
 
   return (
-    <div style={S.overlay} onClick={e => e.target === e.currentTarget && onClose()}>
-      <div style={S.modal}>
+    <Modal
+      onClose={onClose}
+      ariaLabel="Dictionnaire DicoCaro"
+      overlayStyle={S.overlay}
+      modalStyle={S.modal}
+    >
 
         <div style={S.hdr}>
           <div style={S.hdrLeft}>
@@ -551,12 +557,9 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
             )}
           </div>
         )}
-
-      </div>
-    </div>
+    </Modal>
   )
 }
-
 const S = {
   overlay: {
     position: 'fixed', inset: 0, background: 'rgba(45,38,30,.55)',

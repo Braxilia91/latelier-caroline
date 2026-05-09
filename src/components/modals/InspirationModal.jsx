@@ -1,4 +1,6 @@
 import { useState, useMemo } from 'react'
+
+import Modal from '../ui/Modal'
 import { X, RefreshCw, ArrowRight } from 'lucide-react'
 import { INSPIRATION_PROMPTS } from '../../lib/prompts'
 
@@ -26,8 +28,12 @@ export default function InspirationModal({ onClose, onSendToCoach, hasKey }) {
   }
 
   return (
-    <div className="modal-bg" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal-box">
+    <Modal
+      onClose={onClose}
+      ariaLabel="Inspiration"
+      overlayClassName="modal-bg"
+      modalClassName="modal-box"
+    >
         <button className="modal-close" onClick={onClose} aria-label="Fermer l'inspiration"><X size={16} /></button>
         <h2 className="modal-title">💡 Inspiration du moment</h2>
 
@@ -73,11 +79,9 @@ export default function InspirationModal({ onClose, onSendToCoach, hasKey }) {
         <div style={styles.hint}>
           {pool.length} question{pool.length > 1 ? 's' : ''}{cat !== 'Toutes' ? ` · ${cat}` : ''} · {safeIdx + 1}/{pool.length}
         </div>
-      </div>
-    </div>
+    </Modal>
   )
 }
-
 const styles = {
   catRow: {
     display: 'flex', gap: 6, flexWrap: 'wrap',

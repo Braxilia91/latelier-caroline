@@ -1,4 +1,6 @@
 import { useState } from 'react'
+
+import Modal from '../ui/Modal'
 import { X, Plus, Lightbulb, Send, Trash2, CheckCircle } from 'lucide-react'
 
 const TAGS = ['idée', 'scène', 'souvenir', 'émotion', 'dialogue', 'titre']
@@ -53,8 +55,12 @@ export default function VracModal({
   })
 
   return (
-    <div style={S.overlay} onClick={e => e.target === e.currentTarget && onClose()}>
-      <div style={S.modal}>
+    <Modal
+      onClose={onClose}
+      ariaLabel="Boîte à idées"
+      overlayStyle={S.overlay}
+      modalStyle={S.modal}
+    >
         {/* Header */}
         <div style={S.hdr}>
           <div style={S.hdrLeft}>
@@ -158,11 +164,9 @@ export default function VracModal({
             )
           })}
         </div>
-      </div>
-    </div>
+    </Modal>
   )
 }
-
 const S = {
   overlay: {
     position: 'fixed', inset: 0,

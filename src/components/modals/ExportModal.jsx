@@ -1,4 +1,6 @@
 import { useState } from 'react'
+
+import Modal from '../ui/Modal'
 import { X, Download, FileText } from 'lucide-react'
 import { exportAllData } from '../../lib/db'
 
@@ -45,8 +47,12 @@ export default function ExportModal({ chapters, name, onClose }) {
   const totalWords = chapters.reduce((a, c) => a + (c.content?.split(/\s+/).filter(Boolean).length ?? 0), 0)
 
   return (
-    <div className="modal-bg" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal-box">
+    <Modal
+      onClose={onClose}
+      ariaLabel="Export"
+      overlayClassName="modal-bg"
+      modalClassName="modal-box"
+    >
         <button className="modal-close" onClick={onClose} aria-label="Fermer l'export"><X size={16} /></button>
         <h2 className="modal-title">📥 Exporter mon histoire</h2>
 
@@ -80,11 +86,9 @@ export default function ExportModal({ chapters, name, onClose }) {
         <p style={styles.note}>
           Le fichier .json contient tous tes textes, chapitres et paramètres. Garde-le précieusement — il te permettra de tout restaurer.
         </p>
-      </div>
-    </div>
+    </Modal>
   )
 }
-
 const styles = {
   stats: {
     display: 'flex', gap: 10, alignItems: 'center',

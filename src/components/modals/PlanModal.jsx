@@ -1,4 +1,6 @@
 import { useState } from 'react'
+
+import Modal from '../ui/Modal'
 import { X, BookOpen, ChevronDown, ChevronUp, Check } from 'lucide-react'
 
 export default function PlanModal({ chapters, onClose, updateChapter }) {
@@ -25,8 +27,12 @@ export default function PlanModal({ chapters, onClose, updateChapter }) {
   const toggleExpand = (id) => setExpanded(prev => ({ ...prev, [id]: !prev[id] }))
 
   return (
-    <div style={S.overlay} onClick={e => e.target === e.currentTarget && onClose()}>
-      <div style={S.modal}>
+    <Modal
+      onClose={onClose}
+      ariaLabel="Plan du livre"
+      overlayStyle={S.overlay}
+      modalStyle={S.modal}
+    >
 
         {/* Header */}
         <div style={S.hdr}>
@@ -122,11 +128,9 @@ export default function PlanModal({ chapters, onClose, updateChapter }) {
           </span>
           <button style={S.closeFooterBtn} onClick={onClose}>Fermer</button>
         </div>
-      </div>
-    </div>
+    </Modal>
   )
 }
-
 const S = {
   overlay: {
     position: 'fixed', inset: 0,
