@@ -115,7 +115,14 @@ export async function speakWithOpenAI({ openAiKey, text, voice = 'nova', speed =
       speed: Math.max(0.5, Math.min(2.0, speed)),
     }),
   })
-  if (!res.ok) throw new Error('TTS échoué')
+  if (!res.ok) {
+    let detail = ''
+    try { detail = (await res.text()).slice(0, 300) } catch {}
+    const err = new Error(`TTS échoué [HTTP ${res.status}]${detail ? ' — ' + detail : ''}`)
+    err.status = res.status
+    err.body = detail
+    throw err
+  }
   const blob = await res.blob()
   const url = URL.createObjectURL(blob)
   const audio = new Audio(url)
