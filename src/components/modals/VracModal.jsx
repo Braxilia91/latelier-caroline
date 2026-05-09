@@ -37,6 +37,15 @@ export default function VracModal({
     onClose()
   }
 
+  // L4-1 — Confirmation avant suppression définitive d'une idée
+  const handleRemove = (idea) => {
+    const preview = (idea.text || '').slice(0, 60).replace(/\s+/g, ' ')
+    const ok = window.confirm(
+      `Supprimer cette idée ?\n\n« ${preview}${idea.text.length > 60 ? '…' : ''} »\n\nCette action est irréversible.`
+    )
+    if (ok) removeVracIdea(idea.id)
+  }
+
   const displayed = vracIdeas.filter(v => {
     if (filter === 'unused') return !v.used
     if (filter === 'used')   return v.used
@@ -141,7 +150,7 @@ export default function VracModal({
                       <Send size={12} /> Envoyer à Léa
                     </button>
                   )}
-                  <button style={S.deleteBtn} onClick={() => removeVracIdea(idea.id)}>
+                  <button style={S.deleteBtn} onClick={() => handleRemove(idea)}>
                     <Trash2 size={12} />
                   </button>
                 </div>
