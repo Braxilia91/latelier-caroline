@@ -14,7 +14,6 @@ const AKINATOR_SYSTEM_PROMPT = `Tu joues à un jeu de devinette lexicale en fran
 
 const MEMORY_SYSTEM_PROMPT = `Tu es chargée d'extraire UN fait notable d'un échange entre Caroline et Léa, pour la mémoire long-terme de Léa. Tu réponds par 1 phrase courte (max 18 mots) qui résume un fait personnel concret, une émotion partagée, un souvenir évoqué, ou une décision narrative — PAS un compliment générique ni une métaphore. Si rien de notable, réponds exactement "RIEN".`
 
-
 export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, leaVoice, addMessage, chatHistory, carolineProfile, leaMemory, updateLeaMemory }) {
   const [loading,    setLoading]    = useState(false)
   const [streaming,  setStreaming]  = useState('')
@@ -95,17 +94,22 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
     if (audioRef.current) {
       try { audioRef.current.playbackRate = clamped } catch (_) {}
     }
-    // Browser : utt.rate ne peut pas changer en live, sera appliqué au prochain message
     setTtsState(state => ({ ...state, speed: clamped }))
   }, [])
 
   // ── Envoyer un message à Léa ──────────────────────────────
-  const sendMessage = useCallback(async (userText, { type = 'chat', extraSystem } = {}) => {
+  const sendMessage = useCallback(async (
+    userText,
+    { type = 'chat', extraSystem, uiMessage = userText, hideUserMessage = false } = {}
+  ) => {
     if (!apiKey) return null
     setLoading(true); setStreaming('')
 
     const userMsg = { role: 'user', content: userText }
-    addMessage({ role: 'user', content: userText })
+
+    if (!hideUserMessage && uiMessage) {
+      addMessage({ role: 'user', content: uiMessage })
+    }
 
     const history = [...chatHistory.slice(-20), userMsg].map(m => ({
       role: m.role,
@@ -124,13 +128,10 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
       addMessage({ role: 'assistant', content: full })
 
       if (updateLeaMemory && full && type === 'chat') {
-        // Mise à jour synchrone des champs simples
         updateLeaMemory({
           lastSession: new Date().toISOString(),
           lastChapter: currentChapter?.title || null,
         })
-        // Extraction asynchrone d'un keyPoint en arrière-plan (non bloquant)
-        // — évite de retarder la réponse à Caroline
         extractKeyPointInBackground({
           apiKey,
           userText,
@@ -152,10 +153,6 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
             audioRef.current = audio
             try { audio.playbackRate = speedRef.current } catch (_) {}
 
-            // addEventListener + AbortController pour cleanup propre.
-            // Plus robuste que onplay/onpause/onended directs : si une nouvelle
-            // lecture démarre avant la fin de l'ancienne, le AbortController
-            // précédent (stocké sur audio.__ttsAbort) annule les listeners orphelins.
             try { audio.__ttsAbort?.abort() } catch (_) {}
             const ac = new AbortController()
             audio.__ttsAbort = ac
@@ -165,8 +162,6 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
             audio.addEventListener('ended', () => setTtsState({ playing: false, paused: false, speed: speedRef.current, mode: null }), opts)
             audio.addEventListener('error', () => setTtsState({ playing: false, paused: false, speed: speedRef.current, mode: null }), opts)
 
-            // Set immédiat au cas où l'event 'play' soit déjà fired
-            // (audio.play() est appelé dans speakWithOpenAI, donc avant qu'on attache ici).
             setTtsState({ playing: true, paused: false, speed: speedRef.current, mode: 'openai' })
           } catch (_) {
             speakBrowserManaged(full)
@@ -200,9 +195,17 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
   }, [sendMessage])
 
   const injectVrac = useCallback(async (idea) => {
+    const safeText = (idea?.text || '').trim()
+    const shortLabel = safeText
+      ? `J’aimerais partir de cette idée : « ${safeText} ».`
+      : "J’aimerais partir d’une idée de ma boîte à idées."
+
     return sendMessage(
       buildVracInjectPrompt({ idea, chapterTitle: currentChapter?.title }),
-      { type: 'vrac' }
+      {
+        type: 'vrac',
+        uiMessage: shortLabel,
+      }
     )
   }, [sendMessage, currentChapter])
 
@@ -231,7 +234,6 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
     )
   }, [sendMessage])
 
-  // Legacy — conservé pour rollback. Plus appelé depuis l'UI à partir de Livraison 2.
   const startAkinatorSoft = useCallback(async (answers) => {
     return sendMessage(
       buildAkinatorSoftPrompt(answers),
@@ -239,7 +241,6 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
     )
   }, [sendMessage])
 
-  // Akinator pas-à-pas (Livraison 2) — court-circuite sendMessage : aucune injection dans le chat global.
   const askAkinatorTurn = useCallback(async (history) => {
     if (!apiKey) {
       return { type: 'error', message: 'Mot de passe Léa manquant — configure-le dans les réglages.' }
@@ -280,9 +281,6 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
 }
 
 // ─── Extraction de keyPoint en arrière-plan (mémoire Léa) ──
-// Appelle Claude avec un prompt minimaliste pour résumer 1 fait notable.
-// Stocke dans leaMemory.keyPoints (FIFO 10).
-// Échec silencieux : la mémoire est un nice-to-have, pas critique.
 async function extractKeyPointInBackground({ apiKey, userText, assistantText, updateLeaMemory }) {
   if (!apiKey) return
   try {
@@ -298,7 +296,6 @@ async function extractKeyPointInBackground({ apiKey, userText, assistantText, up
     const point = (summary || '').trim()
     if (!point || point === 'RIEN' || point.length < 6 || point.length > 200) return
 
-    // FIFO 10 — pas de doublons exacts
     updateLeaMemory((prev) => {
       const existing = (prev?.keyPoints || []).filter(p => p !== point)
       return {
@@ -308,15 +305,14 @@ async function extractKeyPointInBackground({ apiKey, userText, assistantText, up
   } catch (_) { /* silencieux — la mémoire n'est pas critique */ }
 }
 
-// ─── Parser tolérant Akinator ─────────────────────────────────
 function parseAkinatorResponse(raw) {
   if (!raw || typeof raw !== 'string') {
     return { type: 'error', message: "Léa n'a rien renvoyé — réessaie." }
   }
 
   let cleaned = raw.trim()
-    .replace(/^```(?:json)?\s*/i, '')
-    .replace(/\s*```\s*$/, '')
+    .replace(/^```(?:json)?\\s*/i, '')
+    .replace(/\\s*```\\s*$/, '')
     .trim()
 
   const tryParse = (txt) => {
@@ -349,7 +345,7 @@ function parseAkinatorResponse(raw) {
   const direct = tryParse(cleaned)
   if (direct) return direct
 
-  const match = cleaned.match(/\{[\s\S]*\}/)
+  const match = cleaned.match(/\\{[\\s\\S]*\\}/)
   if (match) {
     const fallback = tryParse(match[0])
     if (fallback) return fallback
@@ -358,7 +354,6 @@ function parseAkinatorResponse(raw) {
   return { type: 'error', message: "Léa a répondu dans un format inattendu — réessaie." }
 }
 
-// ─── Humanisation des erreurs Léa ────────────────────────────
 function mapCoachError(err) {
   const msg = (err?.message || '').toLowerCase()
   if (!navigator.onLine || msg.includes('failed to fetch') || msg.includes('networkerror') || msg.includes('load failed')) {
