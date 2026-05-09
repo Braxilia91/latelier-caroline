@@ -64,7 +64,7 @@ export default function VracModal({
               <div style={S.hdrSub}>Pose tes idées pêle-mêle — Léa les utilisera au bon moment</div>
             </div>
           </div>
-          <button style={S.closeBtn} onClick={onClose}><X size={18} /></button>
+          <button style={S.closeBtn} onClick={onClose} aria-label="Fermer la boîte à idées"><X size={18} /></button>
         </div>
 
         {/* Form d'ajout */}
@@ -150,7 +150,7 @@ export default function VracModal({
                       <Send size={12} /> Envoyer à Léa
                     </button>
                   )}
-                  <button style={S.deleteBtn} onClick={() => handleRemove(idea)}>
+                  <button style={S.deleteBtn} onClick={() => handleRemove(idea)} aria-label="Supprimer cette idée">
                     <Trash2 size={12} />
                   </button>
                 </div>

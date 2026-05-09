@@ -240,7 +240,7 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
               <div style={S.hdrSub}>Ton dictionnaire personnel avec Léa</div>
             </div>
           </div>
-          <button style={S.closeBtn} onClick={onClose}><X size={18} /></button>
+          <button style={S.closeBtn} onClick={onClose} aria-label="Fermer le dictionnaire"><X size={18} /></button>
         </div>
 
         <div style={S.tabsWrap}>

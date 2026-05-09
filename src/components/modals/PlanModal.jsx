@@ -37,7 +37,7 @@ export default function PlanModal({ chapters, onClose, updateChapter }) {
               <div style={S.hdrSub}>{sorted.length} chapitre{sorted.length > 1 ? 's' : ''} · {totalWords.toLocaleString('fr-FR')} mots au total</div>
             </div>
           </div>
-          <button style={S.closeBtn} onClick={onClose}><X size={18} /></button>
+          <button style={S.closeBtn} onClick={onClose} aria-label="Fermer le plan"><X size={18} /></button>
         </div>
 
         {/* Liste */}

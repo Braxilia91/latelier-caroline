@@ -129,7 +129,7 @@ export default function SettingsModal({ state, chapters = [], vracIdeas = [], na
         {/* Header */}
         <div style={S.hdr}>
           <span style={S.hdrTitle}>Réglages</span>
-          <button style={S.closeBtn} onClick={onClose}><X size={16} /></button>
+          <button style={S.closeBtn} onClick={onClose} aria-label="Fermer les réglages"><X size={16} /></button>
         </div>
 
         <div style={S.body}>

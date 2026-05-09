@@ -35,7 +35,7 @@ export default function DictationModal({ onClose, onInsert }) {
   return (
     <div className="modal-bg" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="modal-box">
-        <button className="modal-close" onClick={onClose}><X size={16} /></button>
+        <button className="modal-close" onClick={onClose} aria-label="Fermer la dictée"><X size={16} /></button>
         <h2 className="modal-title">🎤 Dicter</h2>
 
         {!supported && (
