@@ -150,7 +150,7 @@ export default function SettingsModal({ state, chapters = [], vracIdeas = [], na
               <label style={S.label}>Mot de passe Léa <span style={S.badge}>active le coach</span></label>
               <input style={S.input} type="password" value={apiKey}
                 onChange={e => setApiKey(e.target.value)} placeholder="Le mot que Mourad t'a donné…" />
-              <p style={S.hint}>🔒 Stocké sur cet appareil uniquement. Ce mot active Léa via un serveur sécurisé — sans lui, elle reste silencieuse.</p>
+              <p style={S.hint}>🔒 Stocké sur cet appareil uniquement. Ce mot de passe active les réponses de Léa et sa voix via un serveur sécurisé — les vraies clés API ne transitent jamais sur ton appareil.</p>
             </div>
 
             {apiKey && (
