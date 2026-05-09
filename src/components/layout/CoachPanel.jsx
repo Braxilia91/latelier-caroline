@@ -33,6 +33,20 @@ export default function CoachPanel({
     await findThread(currentChapter.content)
   }
 
+  // L4-1 — Confirmation avant action destructive (effacement du chat)
+  const handleClearChat = () => {
+    if (!coach.clearChat) return
+    if (chatHistory.length === 0) {
+      // Rien à effacer — pas de pop-up inutile
+      coach.clearChat()
+      return
+    }
+    const ok = window.confirm(
+      'Effacer toute la conversation avec Léa ?\n\nCette action est irréversible — tes échanges seront perdus.'
+    )
+    if (ok) coach.clearChat()
+  }
+
   const playerVisible = voiceOn && (ttsState?.playing || ttsState?.paused)
   const SPEEDS = [0.75, 1.0, 1.25, 1.5]
 
@@ -62,7 +76,7 @@ export default function CoachPanel({
           <button style={styles.iconBtn} onClick={toggleVoice} title={voiceOn ? 'Couper la voix' : 'Activer la voix'}>
             {voiceOn ? <Volume2 size={15} /> : <VolumeX size={15} />}
           </button>
-          <button style={styles.iconBtn} onClick={coach.clearChat} title="Effacer la conversation">
+          <button style={styles.iconBtn} onClick={handleClearChat} title="Effacer la conversation">
             <Trash2 size={15} />
           </button>
         </div>
