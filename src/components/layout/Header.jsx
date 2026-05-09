@@ -1,19 +1,21 @@
+import { useRef, useEffect } from 'react'
 import { Feather, Mic, BookOpen, Download, Settings, Lightbulb, Search, Music, Menu, Leaf } from 'lucide-react'
+import useClickAway from '../../hooks/useClickAway'
 
 const MOODS = [
   { value: 'joyeuse',     emoji: '☀️', label: 'Belle humeur' },
-  { value: 'pensive',     emoji: '🌧️', label: 'Pensive' },
-  { value: 'courageuse',  emoji: '💪', label: 'Courageuse' },
-  { value: 'nostalgique', emoji: '🍂', label: 'Nostalgique' },
-  { value: 'fatiguée',    emoji: '🌙', label: 'Fatiguée' },
-  { value: 'créative',    emoji: '✨', label: 'Créative' },
+  { value: 'pensive',     emoji: '🌧️', label: 'Pensive'      },
+  { value: 'courageuse',  emoji: '💪', label: 'Courageuse'   },
+  { value: 'nostalgique', emoji: '🍂', label: 'Nostalgique'  },
+  { value: 'fatiguée',    emoji: '🌙', label: 'Fatiguée'     },
+  { value: 'créative',    emoji: '✨', label: 'Créative'     },
 ]
 
 const SOUNDS = [
-  { value: null,    emoji: '🔇', label: 'Silence' },
-  { value: 'pluie', emoji: '🌧', label: 'Pluie douce' },
-  { value: 'cafe',  emoji: '☕', label: 'Café feutré' },
-  { value: 'feu',   emoji: '🔥', label: 'Feu calme' },
+  { value: null,    emoji: '🔇', label: 'Silence'      },
+  { value: 'pluie', emoji: '🌧', label: 'Pluie douce'  },
+  { value: 'cafe',  emoji: '☕', label: 'Café feutré'  },
+  { value: 'feu',   emoji: '🔥', label: 'Feu calme'    },
   { value: 'foret', emoji: '🌿', label: 'Forêt légère' },
 ]
 
@@ -28,8 +30,25 @@ export default function Header({
   // ── Mobile drawers ──
   isMobile, onMenuClick, onCoachClick,
 }) {
-
   const currentMood = MOODS.find(m => m.value === moodToday)
+
+  // ── Refs pour clickaway ──────────────────────────────────────
+  const moodContainerRef    = useRef(null)
+  const ambientContainerRef = useRef(null)
+
+  useClickAway(moodContainerRef,    () => setMoodOpen(false))
+  useClickAway(ambientContainerRef, () => setAmbientOpen(false))
+
+  // ── Escape global ────────────────────────────────────────────
+  useEffect(() => {
+    function onKeyDown(e) {
+      if (e.key !== 'Escape') return
+      if (moodOpen)    setMoodOpen(false)
+      if (ambientOpen) setAmbientOpen(false)
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [moodOpen, ambientOpen, setMoodOpen, setAmbientOpen])
 
   return (
     <header style={styles.hdr}>
@@ -55,7 +74,7 @@ export default function Header({
       {/* Centre — humeur + streak (caché sur mobile) */}
       {!isMobile && (
         <div style={styles.center}>
-          <div style={{ position: 'relative' }}>
+          <div ref={moodContainerRef} style={{ position: 'relative' }}>
             <button
               style={styles.moodBtn}
               onClick={() => { setMoodOpen(o => !o); setAmbientOpen(false) }}
@@ -95,15 +114,15 @@ export default function Header({
 
       {/* Actions droite */}
       <div style={styles.actions}>
-        <BtnH icon={<Lightbulb size={16} />} label="Inspiration" onClick={onInspir} isMobile={isMobile} />
-        <BtnH icon={<Search size={16} />}     label="Vocabulaire" onClick={onVocab}   isMobile={isMobile} />
-        <BtnH icon={<Mic size={16} />}        label="Dicter"      onClick={onDictate} isMobile={isMobile} />
-        <BtnH icon={<BookOpen size={16} />}   label="Plan"        onClick={onPlan}    isMobile={isMobile} />
-        <BtnH icon={<Download size={16} />}   label="Exporter"    onClick={onExport}  isMobile={isMobile} />
-        <BtnH icon={<Settings size={16} />}   label="Réglages"    onClick={onSettings} isMobile={isMobile} />
+        <BtnH icon={<Lightbulb size={16} />} label="Inspiration" onClick={onInspir}   isMobile={isMobile} />
+        <BtnH icon={<Search   size={16} />} label="Vocabulaire" onClick={onVocab}    isMobile={isMobile} />
+        <BtnH icon={<Mic      size={16} />} label="Dicter"      onClick={onDictate}  isMobile={isMobile} />
+        <BtnH icon={<BookOpen size={16} />} label="Plan"         onClick={onPlan}     isMobile={isMobile} />
+        <BtnH icon={<Download size={16} />} label="Exporter"    onClick={onExport}   isMobile={isMobile} />
+        <BtnH icon={<Settings size={16} />} label="Réglages"    onClick={onSettings} isMobile={isMobile} />
 
         {/* ── Ambiance sonore ── */}
-        <div style={{ position: 'relative' }}>
+        <div ref={ambientContainerRef} style={{ position: 'relative' }}>
           <button
             style={{
               ...styles.hdrBtn,
@@ -306,7 +325,6 @@ const styles = {
     background: '#6B8F71',
     display: 'inline-block',
   },
-  // ── Ambient dropdown ────────────────────────────────────────
   ambientDrop: {
     position: 'absolute', top: '110%', right: 0,
     background: 'var(--paper)',
