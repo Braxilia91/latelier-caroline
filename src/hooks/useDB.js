@@ -251,6 +251,14 @@ export function useAppState() {
     })
   }, [])
 
+  // LOT 4C.3 — Reset complet de la mémoire de Léa.
+  // updateLeaMemory ignore les valeurs null (garde-fou anti corruption),
+  // donc on a besoin d'une fonction dédiée pour le reset utilisateur.
+  const resetLeaMemory = useCallback(async () => {
+    setLeaMemoryState(null)
+    await setKV('lea_memory', null)
+  }, [])
+
   // ─── Streak / sessions ───────────────────────────────────────
   // Lock anti-race : si recordSession est appelé plusieurs fois en parallèle
   // (par ex. via useAutoSave → updateChapter → recordSession), un seul exécute.
@@ -393,7 +401,7 @@ export function useAppState() {
     createChapter, updateChapter, removeChapter, restoreChapter, reorderChapters,
     chatHistory, addMessage, clearChat, removeMessage,
     carolineProfile, setCarolineProfile,
-    leaMemory, updateLeaMemory,
+    leaMemory, updateLeaMemory, resetLeaMemory,
     vracIdeas, unusedVrac, addVracIdea, markVracUsed, removeVracIdea,
     syncToken, setSyncToken, syncStatus, syncMessage, lastSyncedAt, syncNow,
     editorFont, setEditorFont, editorTheme, setEditorTheme, editorWidth, setEditorWidth,

@@ -67,7 +67,7 @@ function ToggleGroup({ options, value, onChange }) {
 }
 
 // ── Modal principal ──────────────────────────────────────────────
-export default function SettingsModal({ state, chapters = [], vracIdeas = [], name = '', onClose, onSave, onReset }) {
+export default function SettingsModal({ state, chapters = [], vracIdeas = [], name = '', onClose, onSave, onReset, onOpenMemory }) {
   // Section 1 — Profil
   const [sName, setSName] = useState(state.name || '')
   const [apiKey, setApiKey] = useState(state.apiKey || '')
@@ -234,6 +234,30 @@ export default function SettingsModal({ state, chapters = [], vracIdeas = [], na
               <RefreshCw size={13} />
               {state.syncStatus === 'syncing' ? 'Synchronisation…' : 'Synchroniser maintenant'}
             </button>
+          </Section>
+
+          {/* ── Section : Mémoire de Léa (LOT 4C.3) ─────────────── */}
+          <Section title="Mémoire de Léa" icon={<span style={S.secIcon}>🧠</span>}>
+            <div style={S.actionRow}>
+              <div>
+                <div style={S.actionTitle}>Ce que Léa se rappelle</div>
+                <div style={S.actionDesc}>
+                  Voir, supprimer ou effacer les souvenirs que Léa retient de vos échanges.
+                </div>
+              </div>
+              <button
+                style={S.actionBtn}
+                onClick={() => {
+                  if (!onOpenMemory) return
+                  // Pattern: ferme SettingsModal puis ouvre LeaMemoryModal après un micro-délai
+                  // (le state `modal` ne porte qu'une valeur — sinon les 2 modales se chevauchent)
+                  onClose()
+                  setTimeout(onOpenMemory, 50)
+                }}
+              >
+                Ouvrir
+              </button>
+            </div>
           </Section>
 
           {/* ── Section 4 : Sécurité ───────────────────────────── */}

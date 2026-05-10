@@ -22,6 +22,8 @@ const VracModal = lazy(() => import('./components/modals/VracModal'))
 const DicoCaroModal = lazy(() => import('./components/modals/DicoCaroModal'))
 const PlanModal = lazy(() => import('./components/modals/PlanModal'))
 const PackOpeningModal = lazy(() => import('./components/modals/PackOpeningModal'))
+// LOT 4C.3 — Mémoire de Léa : modale dédiée pour visibilité + contrôle utilisateur
+const LeaMemoryModal = lazy(() => import('./components/modals/LeaMemoryModal'))
 
 function AppSkeleton() {
   const pulse = {
@@ -330,6 +332,13 @@ function AppInner() {
           }}
           chapters={db.chapters} vracIdeas={db.vracIdeas} name={db.name}
           onClose={() => setModal(null)} onSave={handleSaveSettings} onReset={db.resetAllData}
+          onOpenMemory={() => setModal('memory')}
+        />}
+        {modal === 'memory' && <LeaMemoryModal
+          leaMemory={db.leaMemory}
+          updateLeaMemory={db.updateLeaMemory}
+          resetLeaMemory={db.resetLeaMemory}
+          onClose={() => setModal(null)}
         />}
         {modal === 'inspir' && <InspirationModal onClose={() => setModal(null)} onSendToCoach={coach.sendMessage} hasKey={!!db.apiKey} />}
         {modal === 'export' && <ExportModal chapters={db.chapters} name={db.name} onClose={() => setModal(null)} />}
