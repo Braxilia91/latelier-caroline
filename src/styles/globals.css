@@ -38,6 +38,9 @@
   --z-modal: 100;
   --z-toast: 200;
   --z-header: 50;
+
+  /* LOT 3.5 — Échelle du chat Léa (multiplicateur appliqué via JS dans App.jsx) */
+  --chat-scale: 1;
 }
 
 /* ─── Reset ──────────────────────────────────────────────── */
@@ -234,20 +237,21 @@ textarea:focus {
 @media (max-width: 768px) {
   :root { --sidebar-w: 0px; --coach-w: 0px; }
 
-  /* LOT 3 — Lisibilité mobile : base body + bulles chat + input chat */
+  /* LOT 3 + 3.5 — Lisibilité mobile : base body + bulles chat + input chat
+     multipliées par var(--chat-scale) pour permettre l'échelle utilisateur. */
   body { font-size: 16px; }
 
   .chat-bubble-user,
   .chat-bubble-lea {
-    font-size: .95rem !important;
+    font-size: calc(.95rem * var(--chat-scale, 1)) !important;
     line-height: 1.6 !important;
   }
-  .chat-input        { font-size: .95rem !important; }
-  .chat-welcome-text { font-size: .92rem !important; }
+  .chat-input        { font-size: calc(.95rem * var(--chat-scale, 1)) !important; }
+  .chat-welcome-text { font-size: calc(.92rem * var(--chat-scale, 1)) !important; }
 
-  /* LOT 3.2 — Boutons raccourcis chat plus gros sur mobile */
+  /* LOT 3.2 + 3.5 — Boutons raccourcis chat plus gros sur mobile, scalables */
   .chat-shortcut {
-    font-size: .85rem !important;
+    font-size: calc(.85rem * var(--chat-scale, 1)) !important;
     padding: 9px 13px !important;
   }
 }
