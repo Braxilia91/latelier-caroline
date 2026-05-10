@@ -346,7 +346,7 @@ function AppInner() {
 
       {!isMobile && (
         <div style={{
-          position: 'fixed', bottom: 16, right: 16,
+          position: 'fixed', bottom: 16, right: 'calc(var(--coach-w) + 16px)',
           display: 'flex', alignItems: 'center', gap: 6, padding: '5px 12px',
           background: isOnline ? 'rgba(61,107,69,.12)' : 'rgba(180,83,9,.12)',
           border: `1px solid ${isOnline ? '#6B8F71' : '#C4956A'}`,
