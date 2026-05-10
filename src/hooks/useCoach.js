@@ -126,6 +126,11 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
         onChunk: (text) => setStreaming(text),
       })
       addMessage({ role: 'assistant', content: full })
+      // LOT 3.6 — Reset immédiat pour éviter coexistence bulle finale + bulle streaming
+      // pendant que la branche TTS tourne (peut prendre plusieurs secondes).
+      // Le finally reste comme safety net.
+      setStreaming('')
+      setLoading(false)
 
       if (updateLeaMemory && full && type === 'chat') {
         updateLeaMemory({
@@ -316,8 +321,8 @@ function parseAkinatorResponse(raw) {
   }
 
   let cleaned = raw.trim()
-    .replace(/^```(?:json)?\\s*/i, '')
-    .replace(/\\s*```\\s*$/, '')
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/\s*```\s*$/, '')
     .trim()
 
   const tryParse = (txt) => {
@@ -350,7 +355,7 @@ function parseAkinatorResponse(raw) {
   const direct = tryParse(cleaned)
   if (direct) return direct
 
-  const match = cleaned.match(/\\{[\\s\\S]*\\}/)
+  const match = cleaned.match(/\{[\s\S]*\}/)
   if (match) {
     const fallback = tryParse(match[0])
     if (fallback) return fallback
