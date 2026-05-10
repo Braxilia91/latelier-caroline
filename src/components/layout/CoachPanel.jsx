@@ -37,7 +37,6 @@ export default function CoachPanel({
   const handleClearChat = () => {
     if (!coach.clearChat) return
     if (chatHistory.length === 0) {
-      // Rien à effacer — pas de pop-up inutile
       coach.clearChat()
       return
     }
@@ -50,7 +49,6 @@ export default function CoachPanel({
   const playerVisible = voiceOn && (ttsState?.playing || ttsState?.paused)
   const SPEEDS = [0.75, 1.0, 1.25, 1.5]
 
-  // Style calculé selon mode (desktop inline / mobile drawer fixed slide-right)
   const computedStyle = isMobile
     ? {
         ...styles.panelBase,
@@ -162,10 +160,11 @@ export default function CoachPanel({
       <div style={styles.shortcuts}>
         {currentChapter?.content && (
           <>
-            <button style={styles.shortBtn} onClick={handleFindThread} disabled={loading} title="Léa résume et relance l'écriture">
+            <button className="chat-shortcut" style={styles.shortBtn} onClick={handleFindThread} disabled={loading} title="Léa résume et relance l'écriture">
               <Scissors size={12} /> Retrouver le fil
             </button>
             <button
+              className="chat-shortcut"
               style={styles.shortBtn}
               onClick={() => sendMessage(LEA_COMMANDS.RELIRE(currentChapter.content))}
               disabled={loading}
@@ -174,6 +173,7 @@ export default function CoachPanel({
               <BookOpen size={12} /> Relire
             </button>
             <button
+              className="chat-shortcut"
               style={{ ...styles.shortBtn, ...styles.doubtBtn }}
               onClick={() => expressDoubt(currentChapter.content)}
               disabled={loading}
@@ -184,6 +184,7 @@ export default function CoachPanel({
           </>
         )}
         <button
+          className="chat-shortcut"
           style={{ ...styles.shortBtn, ...styles.vracBtn }}
           onClick={onOpenVrac}
           title="Dépose tes idées pêle-mêle"
@@ -282,14 +283,14 @@ const styles = {
     background: 'linear-gradient(135deg, var(--brown), var(--gold))',
     color: '#fff', borderRadius: '14px 14px 4px 14px',
     padding: '9px 13px',
-    maxWidth: '85%',
+    maxWidth: '92%',
     fontFamily: "'Nunito', sans-serif", fontSize: '.83rem', lineHeight: 1.5,
   },
   leaBubble: {
     background: 'var(--cream)', border: '1px solid var(--border-l)',
     borderRadius: '4px 14px 14px 14px',
     padding: '9px 13px',
-    maxWidth: '85%',
+    maxWidth: '92%',
     fontFamily: "'Lora', serif", fontStyle: 'italic',
     fontSize: '.83rem', lineHeight: 1.6, color: 'var(--ink)',
     whiteSpace: 'pre-wrap',
@@ -345,11 +346,11 @@ const styles = {
     borderTop: '1px solid var(--border-l)',
   },
   shortBtn: {
-    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
-    padding: '5px 8px',
+    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+    padding: '7px 11px',
     background: 'var(--cream)', border: '1.5px solid var(--border-l)',
     borderRadius: 8,
-    fontSize: '.67rem', fontWeight: 700,
+    fontSize: '.78rem', fontWeight: 700,
     fontFamily: "'Nunito', sans-serif",
     color: 'var(--brown)', cursor: 'pointer',
     transition: 'all .15s',
