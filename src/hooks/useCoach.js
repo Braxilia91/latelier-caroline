@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useMemo } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { askClaude, speakWithOpenAI, normalizeForNarrationFR } from '../lib/claude'
 import {
   buildSystemPrompt, buildCorrectionPrompt,
@@ -14,6 +14,51 @@ const AKINATOR_SYSTEM_PROMPT = `Tu joues à un jeu de devinette lexicale en fran
 
 const MEMORY_SYSTEM_PROMPT = `Tu es chargée d'extraire UN fait notable d'un échange entre Caroline et Léa, pour la mémoire long-terme de Léa. Tu réponds par 1 phrase courte (max 18 mots) qui résume un fait personnel concret, une émotion partagée, un souvenir évoqué, ou une décision narrative — PAS un compliment générique ni une métaphore. Si rien de notable, réponds exactement "RIEN".`
 
+// LOT 2.3 — Segmentation des longs messages pour TTS.
+// Bénéfices : mute plus réactif (max ~MAX_SEGMENT_CHARS), dépassement
+// éventuel de la limite OpenAI 4096 chars, respiration naturelle entre
+// segments. Anti-régression : si message tient dans 1 segment, on
+// garde le path single-audio existant (commit 2.2).
+const MAX_SEGMENT_CHARS = 500
+
+function splitIntoSegments(text) {
+  if (!text) return []
+  const trimmed = String(text).trim()
+  if (!trimmed) return []
+  if (trimmed.length <= MAX_SEGMENT_CHARS) return [trimmed]
+
+  const parts = trimmed.split(/(?<=[.!?…])\s+/).filter(Boolean)
+  const segments = []
+  let current = ''
+
+  for (const part of parts) {
+    if (part.length > MAX_SEGMENT_CHARS) {
+      // Phrase démesurément longue : split brutal par mots
+      if (current) { segments.push(current); current = '' }
+      const words = part.split(/\s+/)
+      let chunk = ''
+      for (const w of words) {
+        if (chunk.length + w.length + 1 <= MAX_SEGMENT_CHARS) {
+          chunk = chunk ? `${chunk} ${w}` : w
+        } else {
+          if (chunk) segments.push(chunk)
+          chunk = w
+        }
+      }
+      if (chunk) segments.push(chunk)
+      continue
+    }
+    if (current.length + part.length + 1 <= MAX_SEGMENT_CHARS) {
+      current = current ? `${current} ${part}` : part
+    } else {
+      segments.push(current)
+      current = part
+    }
+  }
+  if (current) segments.push(current)
+  return segments
+}
+
 export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, leaVoice, addMessage, chatHistory, carolineProfile, leaMemory, updateLeaMemory }) {
   const [loading,    setLoading]    = useState(false)
   const [streaming,  setStreaming]  = useState('')
@@ -25,6 +70,15 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
   const audioRef       = useRef(null)
   const browserUttRef  = useRef(null)
   const speedRef       = useRef(1.0)
+  // LOT 2.3 — refs pour la queue de segments
+  const voiceOnRef     = useRef(true)   // suivi du voiceOn pour les callbacks
+  const ttsChainRef    = useRef(null)   // id de la chaîne courante (Symbol unique)
+
+  // LOT 2.3 — synchronise voiceOnRef avec voiceOn (utilisé dans listeners 'ended'
+  // pour décider si on enchaîne le segment suivant).
+  useEffect(() => {
+    voiceOnRef.current = voiceOn
+  }, [voiceOn])
 
   const systemPrompt = useMemo(() => buildSystemPrompt({
     name,
@@ -47,6 +101,8 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
       try { window.speechSynthesis.cancel() } catch (_) {}
     }
     browserUttRef.current = null
+    // LOT 2.3 — abort la chaîne de segments en cours
+    ttsChainRef.current = null
     setTtsState(s => ({ playing: false, paused: false, speed: s.speed, mode: null }))
   }, [])
 
@@ -150,33 +206,111 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
       if (voiceOn && full) {
         stopAllTts()
         if (openAiKey) {
-          try {
-            const audio = await speakWithOpenAI({
-              openAiKey,
-              text: full,
-              voice: leaVoice,
-              speed: speedRef.current,
-            })
-            audioRef.current = audio
-            try { audio.playbackRate = speedRef.current } catch (_) {}
+          // LOT 2.3 — segmentation
+          const segments = splitIntoSegments(full)
 
-            try { audio.__ttsAbort?.abort() } catch (_) {}
-            const ac = new AbortController()
-            audio.__ttsAbort = ac
-            const opts = { signal: ac.signal }
-            audio.addEventListener('play',  () => setTtsState({ playing: true,  paused: false, speed: speedRef.current, mode: 'openai' }), opts)
-            audio.addEventListener('pause', () => setTtsState(s => ({ ...s, playing: false, paused: true })), opts)
-            audio.addEventListener('ended', () => setTtsState({ playing: false, paused: false, speed: speedRef.current, mode: null }), opts)
-            audio.addEventListener('error', () => setTtsState({ playing: false, paused: false, speed: speedRef.current, mode: null }), opts)
+          if (segments.length <= 1) {
+            // Path court (anti-régression) : single audio + listeners directs
+            try {
+              const audio = await speakWithOpenAI({
+                openAiKey,
+                text: segments[0] || full,
+                voice: leaVoice,
+                speed: speedRef.current,
+              })
+              audioRef.current = audio
+              try { audio.playbackRate = speedRef.current } catch (_) {}
 
-            setTtsState({ playing: true, paused: false, speed: speedRef.current, mode: 'openai' })
-          } catch (ttsErr) {
-            console.warn('[TTS] OpenAI échec, fallback navigateur', {
-              status: ttsErr?.status ?? null,
-              message: ttsErr?.message || String(ttsErr),
-              body: ttsErr?.body || null,
-            })
-            speakBrowserManaged(full)
+              try { audio.__ttsAbort?.abort() } catch (_) {}
+              const ac = new AbortController()
+              audio.__ttsAbort = ac
+              const opts = { signal: ac.signal }
+              audio.addEventListener('play',  () => setTtsState({ playing: true,  paused: false, speed: speedRef.current, mode: 'openai' }), opts)
+              audio.addEventListener('pause', () => setTtsState(s => ({ ...s, playing: false, paused: true })), opts)
+              audio.addEventListener('ended', () => setTtsState({ playing: false, paused: false, speed: speedRef.current, mode: null }), opts)
+              audio.addEventListener('error', () => setTtsState({ playing: false, paused: false, speed: speedRef.current, mode: null }), opts)
+
+              setTtsState({ playing: true, paused: false, speed: speedRef.current, mode: 'openai' })
+            } catch (ttsErr) {
+              console.warn('[TTS] OpenAI échec, fallback navigateur', {
+                status: ttsErr?.status ?? null,
+                message: ttsErr?.message || String(ttsErr),
+                body: ttsErr?.body || null,
+              })
+              speakBrowserManaged(full)
+            }
+          } else {
+            // Path long : queue de segments. Une nouvelle chaîne invalide
+            // toute chaîne précédente (chainId via Symbol).
+            const chainId = Symbol('tts-chain')
+            ttsChainRef.current = chainId
+            let i = 0
+
+            const playNext = async () => {
+              if (ttsChainRef.current !== chainId || !voiceOnRef.current || i >= segments.length) {
+                // Fin de chaîne (terminée ou abortée)
+                setTtsState(s => s.mode === 'openai'
+                  ? { playing: false, paused: false, speed: s.speed, mode: null }
+                  : s)
+                return
+              }
+              const segment = segments[i++]
+
+              let audio
+              try {
+                audio = await speakWithOpenAI({
+                  openAiKey,
+                  text: segment,
+                  voice: leaVoice,
+                  speed: speedRef.current,
+                })
+              } catch (ttsErr) {
+                if (ttsChainRef.current !== chainId) return
+                console.warn('[TTS] segment OpenAI échec, fallback navigateur', {
+                  status: ttsErr?.status ?? null,
+                  message: ttsErr?.message || String(ttsErr),
+                  body: ttsErr?.body || null,
+                  segmentIndex: i - 1,
+                  segmentsTotal: segments.length,
+                })
+                // Fallback navigateur sur le segment courant ; on stoppe la chaîne
+                // (le navigateur ne supporte pas un chaînage propre ici).
+                speakBrowserManaged(segment)
+                ttsChainRef.current = null
+                return
+              }
+
+              // Si chaîne abortée pendant l'await, ne pas démarrer cet audio
+              if (ttsChainRef.current !== chainId) {
+                try { audio.pause() } catch (_) {}
+                return
+              }
+
+              audioRef.current = audio
+              try { audio.playbackRate = speedRef.current } catch (_) {}
+
+              try { audio.__ttsAbort?.abort() } catch (_) {}
+              const ac = new AbortController()
+              audio.__ttsAbort = ac
+              const opts = { signal: ac.signal }
+              audio.addEventListener('play',  () => setTtsState({ playing: true,  paused: false, speed: speedRef.current, mode: 'openai' }), opts)
+              audio.addEventListener('pause', () => setTtsState(s => ({ ...s, playing: false, paused: true })), opts)
+              audio.addEventListener('error', () => {
+                ttsChainRef.current = null
+                setTtsState({ playing: false, paused: false, speed: speedRef.current, mode: null })
+              }, opts)
+              audio.addEventListener('ended', () => {
+                if (ttsChainRef.current === chainId && voiceOnRef.current) {
+                  playNext()
+                } else {
+                  setTtsState({ playing: false, paused: false, speed: speedRef.current, mode: null })
+                }
+              }, opts)
+
+              setTtsState({ playing: true, paused: false, speed: speedRef.current, mode: 'openai' })
+            }
+
+            playNext()
           }
         } else {
           speakBrowserManaged(full)
