@@ -13,7 +13,7 @@ export default function CoachPanel({
 
   const {
     loading, streaming, voiceOn, toggleVoice, sendMessage,
-    findThread, expressDoubt,
+    findThread, expressDoubt, removeMessage,
     ttsState, ttsPlay, ttsPause, ttsStop, ttsSetSpeed,
   } = coach
 
@@ -44,6 +44,15 @@ export default function CoachPanel({
       'Effacer toute la conversation avec Léa ?\n\nCette action est irréversible — tes échanges seront perdus.'
     )
     if (ok) coach.clearChat()
+  }
+
+  // LOT 4C.2 — Suppression d'un message individuel (avec garde-fou loading)
+  const handleDeleteMessage = (id) => {
+    if (loading) return                 // garde-fou défense en profondeur
+    if (id == null) return
+    if (!removeMessage) return
+    const ok = window.confirm('Supprimer ce message ?')
+    if (ok) removeMessage(id)
   }
 
   const playerVisible = voiceOn && (ttsState?.playing || ttsState?.paused)
@@ -92,7 +101,7 @@ export default function CoachPanel({
         )}
         {chatHistory.map((msg, i) => (
           <div
-            key={msg.timestamp || msg.id || `${msg.role}-${i}-${String(msg.content).slice(0, 12)}`}
+            key={msg.id ?? msg.timestamp ?? `${msg.role}-${i}-${String(msg.content).slice(0, 12)}`}
             style={msg.role === 'user' ? styles.userMsg : styles.leaMsg}
           >
             {msg.role === 'assistant' && <div style={styles.leaAvatar}>L</div>}
@@ -102,6 +111,23 @@ export default function CoachPanel({
             >
               {msg.content}
             </div>
+            {/* LOT 4C.2 — Bouton supprimer (visible si id DB connu, désactivé pendant loading) */}
+            {msg.id != null && (
+              <button
+                type="button"
+                style={{
+                  ...styles.delBubbleBtn,
+                  opacity: loading ? 0.2 : (isMobile ? 1.0 : 0.65),
+                  cursor: loading ? 'not-allowed' : 'pointer',
+                }}
+                onClick={() => handleDeleteMessage(msg.id)}
+                disabled={loading}
+                title="Supprimer ce message"
+                aria-label="Supprimer ce message"
+              >
+                <Trash2 size={11} />
+              </button>
+            )}
           </div>
         ))}
         {(loading || streaming) && (
@@ -308,6 +334,21 @@ const styles = {
     color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center',
     fontFamily: "'Cormorant Garamond', serif",
     fontSize: '.9rem', fontWeight: 600, flexShrink: 0,
+  },
+  // LOT 4C.2 — bouton supprimer message (opacité gérée inline pour adaptation mobile/desktop)
+  delBubbleBtn: {
+    background: 'transparent',
+    border: 'none',
+    color: '#A09070',
+    padding: 4,
+    marginLeft: 4,
+    transition: 'opacity .15s, color .15s, background .15s',
+    flexShrink: 0,
+    borderRadius: 6,
+    alignSelf: 'flex-start',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   // ── Player TTS ───────────────────────────────────────────────
   player: {
