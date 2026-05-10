@@ -225,6 +225,8 @@ export default function CoachPanel({
   )
 }
 
+// LOT 3.5 — Toutes les fontSize du chat sont multipliées par var(--chat-scale).
+// Default --chat-scale = 1 (taille actuelle). Réglable via SettingsModal.
 const styles = {
   panelBase: {
     background: 'var(--paper)',
@@ -275,7 +277,8 @@ const styles = {
   welcomeIcon: { fontSize: '1.4rem', marginBottom: 6 },
   welcomeText: {
     fontFamily: "'Lora', serif", fontStyle: 'italic',
-    fontSize: '.82rem', color: 'var(--ink-l)', lineHeight: 1.6,
+    fontSize: 'calc(.82rem * var(--chat-scale, 1))',
+    color: 'var(--ink-l)', lineHeight: 1.6,
   },
   userMsg: { display: 'flex', justifyContent: 'flex-end' },
   leaMsg: { display: 'flex', gap: 8, alignItems: 'flex-start' },
@@ -284,7 +287,9 @@ const styles = {
     color: '#fff', borderRadius: '14px 14px 4px 14px',
     padding: '9px 13px',
     maxWidth: '92%',
-    fontFamily: "'Nunito', sans-serif", fontSize: '.83rem', lineHeight: 1.5,
+    fontFamily: "'Nunito', sans-serif",
+    fontSize: 'calc(.83rem * var(--chat-scale, 1))',
+    lineHeight: 1.5,
   },
   leaBubble: {
     background: 'var(--cream)', border: '1px solid var(--border-l)',
@@ -292,7 +297,8 @@ const styles = {
     padding: '9px 13px',
     maxWidth: '92%',
     fontFamily: "'Lora', serif", fontStyle: 'italic',
-    fontSize: '.83rem', lineHeight: 1.6, color: 'var(--ink)',
+    fontSize: 'calc(.83rem * var(--chat-scale, 1))',
+    lineHeight: 1.6, color: 'var(--ink)',
     whiteSpace: 'pre-wrap',
   },
   leaAvatar: {
@@ -350,7 +356,8 @@ const styles = {
     padding: '7px 11px',
     background: 'var(--cream)', border: '1.5px solid var(--border-l)',
     borderRadius: 8,
-    fontSize: '.78rem', fontWeight: 700,
+    fontSize: 'calc(.78rem * var(--chat-scale, 1))',
+    fontWeight: 700,
     fontFamily: "'Nunito', sans-serif",
     color: 'var(--brown)', cursor: 'pointer',
     transition: 'all .15s',
@@ -374,7 +381,8 @@ const styles = {
     padding: '8px 11px',
     border: '1.5px solid var(--border-l)',
     borderRadius: 10,
-    fontFamily: "'Nunito', sans-serif", fontSize: '.82rem',
+    fontFamily: "'Nunito', sans-serif",
+    fontSize: 'calc(.82rem * var(--chat-scale, 1))',
     background: 'var(--cream)', color: 'var(--ink)',
     outline: 'none', resize: 'none',
     lineHeight: 1.5,
