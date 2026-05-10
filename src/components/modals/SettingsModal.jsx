@@ -10,10 +10,12 @@ const VOICES = [
   { value: 'alloy', label: 'Alloy — Neutre' },
 ]
 
+// LOT 3.3 — XL exposé dans l'UI (moteur préparé en LOT 3.2 dans WritingArea.FONT_SIZES.xl)
 const FONT_SIZES = [
-  { value: 's', label: 'S', desc: 'Compact' },
-  { value: 'm', label: 'M', desc: 'Confort' },
-  { value: 'l', label: 'L', desc: 'Grand' },
+  { value: 's',  label: 'S',  desc: 'Compact' },
+  { value: 'm',  label: 'M',  desc: 'Confort' },
+  { value: 'l',  label: 'L',  desc: 'Grand' },
+  { value: 'xl', label: 'XL', desc: 'Très grand' },
 ]
 const THEMES = [
   { value: 'jour', label: '☀️ Jour', desc: 'Fond ivoire clair' },
