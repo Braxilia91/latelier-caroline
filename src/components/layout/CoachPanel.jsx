@@ -87,7 +87,7 @@ export default function CoachPanel({
         {chatHistory.length === 0 && !loading && (
           <div style={styles.welcome}>
             <div style={styles.welcomeIcon}>🌿</div>
-            <p style={styles.welcomeText}>
+            <p className="chat-welcome-text" style={styles.welcomeText}>
               {welcomeMsg || `Je suis là pour t'aider à écrire. Dis-moi comment tu te sens, ou pose-moi une question.`}
             </p>
           </div>
@@ -98,7 +98,10 @@ export default function CoachPanel({
             style={msg.role === 'user' ? styles.userMsg : styles.leaMsg}
           >
             {msg.role === 'assistant' && <div style={styles.leaAvatar}>L</div>}
-            <div style={msg.role === 'user' ? styles.userBubble : styles.leaBubble}>
+            <div
+              className={msg.role === 'user' ? 'chat-bubble-user' : 'chat-bubble-lea'}
+              style={msg.role === 'user' ? styles.userBubble : styles.leaBubble}
+            >
               {msg.content}
             </div>
           </div>
@@ -106,7 +109,7 @@ export default function CoachPanel({
         {(loading || streaming) && (
           <div style={styles.leaMsg}>
             <div style={styles.leaAvatar}>L</div>
-            <div style={styles.leaBubble}>
+            <div className="chat-bubble-lea" style={styles.leaBubble}>
               {streaming || (
                 <div className="typing">
                   <span /><span /><span />
@@ -202,6 +205,7 @@ export default function CoachPanel({
         <div style={styles.inputWrap}>
           <textarea
             ref={inputRef}
+            className="chat-input"
             style={styles.input}
             value={input}
             onChange={e => setInput(e.target.value)}
