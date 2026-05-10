@@ -159,6 +159,13 @@ function AppInner() {
     }
   }, [db.editorTheme])
 
+  // LOT 3.5 — Applique l'échelle du chat Léa sur la racine HTML
+  // Les éléments du coach panel utilisent calc(... * var(--chat-scale))
+  useEffect(() => {
+    const v = (typeof db.chatScale === 'number' && db.chatScale > 0) ? db.chatScale : 1
+    document.documentElement.style.setProperty('--chat-scale', String(v))
+  }, [db.chatScale])
+
   useEffect(() => {
     if (!isMobile) {
       setSidebarOpen(false)
@@ -193,8 +200,6 @@ function AppInner() {
   })
 
   // ── Auto-ouvre le drawer CoachPanel sur mobile quand Léa répond ──
-  // Fix bug: appel depuis DicoCaroModal/Vrac/Inspiration → drawer Coach fermé
-  // → réponse invisible. Quand coach.loading passe à true sur mobile, on ouvre.
   useEffect(() => {
     if (isMobile && coach.loading && !coachOpen) {
       setCoachOpen(true)
@@ -210,7 +215,7 @@ function AppInner() {
     toast(`Bienvenue ${name} ! Ton atelier est prêt 🌿`, 'success')
   }
 
-  const handleSaveSettings = async ({ name, apiKey, openAiKey, leaVoice, syncToken, editorFont, editorTheme, editorWidth }) => {
+  const handleSaveSettings = async ({ name, apiKey, openAiKey, leaVoice, syncToken, editorFont, editorTheme, editorWidth, chatScale }) => {
     await db.setName(name)
     await db.setApiKey(apiKey)
     await db.setOaiKey(openAiKey)
@@ -219,6 +224,7 @@ function AppInner() {
     if (editorFont !== undefined) await db.setEditorFont(editorFont)
     if (editorTheme !== undefined) await db.setEditorTheme(editorTheme)
     if (editorWidth !== undefined) await db.setEditorWidth(editorWidth)
+    if (chatScale  !== undefined) await db.setChatScale(chatScale)   // LOT 3.5
     toast('Réglages sauvegardés ✓', 'success')
   }
 
@@ -320,6 +326,7 @@ function AppInner() {
             syncToken: db.syncToken, syncStatus: db.syncStatus, syncMessage: db.syncMessage,
             lastSyncedAt: db.lastSyncedAt, syncNow: db.syncNow,
             editorFont: db.editorFont, editorTheme: db.editorTheme, editorWidth: db.editorWidth,
+            chatScale: db.chatScale,
           }}
           chapters={db.chapters} vracIdeas={db.vracIdeas} name={db.name}
           onClose={() => setModal(null)} onSave={handleSaveSettings} onReset={db.resetAllData}
