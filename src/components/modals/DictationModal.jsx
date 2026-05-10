@@ -77,8 +77,23 @@ export default function DictationModal({ onClose, onInsert }) {
                 {listening ? 'Parle maintenant… clique pour arrêter' : 'Clique pour commencer à dicter'}
               </p>
               {listening && (
-                <div style={styles.pulse}>
-                  <span /><span /><span />
+                <div style={styles.pulse} aria-hidden="true">
+                  <style>{`
+                    @keyframes dictationPulseDot {
+                      0%, 100% { transform: scale(1);   opacity: .35; }
+                      50%      { transform: scale(1.4); opacity: 1; }
+                    }
+                    .dictation-pulse-dot {
+                      width: 8px; height: 8px; border-radius: 50%;
+                      background: #C0392B;
+                      animation: dictationPulseDot 1.1s ease-in-out infinite;
+                    }
+                    .dictation-pulse-dot:nth-child(2) { animation-delay: .15s; }
+                    .dictation-pulse-dot:nth-child(3) { animation-delay: .30s; }
+                  `}</style>
+                  <span className="dictation-pulse-dot" />
+                  <span className="dictation-pulse-dot" />
+                  <span className="dictation-pulse-dot" />
                 </div>
               )}
             </div>
