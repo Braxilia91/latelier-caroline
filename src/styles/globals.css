@@ -223,9 +223,29 @@ a { color: var(--brown); }
 .typing span:nth-child(2) { animation-delay: .2s; }
 .typing span:nth-child(3) { animation-delay: .4s; }
 
+/* ─── Focus visible (LOT 3 — caret + halo desktop visible) ── */
+/* S'applique sur tous les input/textarea de l'app, sauf ceux
+   qui ont leur propre style outline (.fg input/textarea géré au-dessus). */
+input:focus,
+textarea:focus {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
 /* ─── Responsive ─────────────────────────────────────────── */
 @media (max-width: 768px) {
   :root { --sidebar-w: 0px; --coach-w: 0px; }
+
+  /* LOT 3 — Lisibilité mobile : base body + bulles chat + input chat */
+  body { font-size: 16px; }
+
+  .chat-bubble-user,
+  .chat-bubble-lea {
+    font-size: .95rem !important;
+    line-height: 1.6 !important;
+  }
+  .chat-input        { font-size: .95rem !important; }
+  .chat-welcome-text { font-size: .92rem !important; }
 }
 
 /* ─── Thème Soir ─────────────────────────────────────────── */
