@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useMemo } from 'react'
-import { askClaude, speakWithOpenAI, cleanForTTS } from '../lib/claude'
+import { askClaude, speakWithOpenAI, normalizeForNarrationFR } from '../lib/claude'
 import {
   buildSystemPrompt, buildCorrectionPrompt,
   buildVocabPrompt, buildThreadPrompt,
@@ -51,7 +51,7 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
   const speakBrowserManaged = useCallback((text) => {
     if (typeof window === 'undefined' || !window.speechSynthesis) return
     try { window.speechSynthesis.cancel() } catch (_) {}
-    const cleaned = cleanForTTS(text || '').slice(0, 500)
+    const cleaned = normalizeForNarrationFR(text || '').slice(0, 500)
     if (!cleaned) return
     const utt = new SpeechSynthesisUtterance(cleaned)
     utt.lang = 'fr-FR'
