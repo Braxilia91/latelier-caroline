@@ -17,7 +17,9 @@ const MEMORY_SYSTEM_PROMPT = `Tu es chargée d'extraire UN fait notable d'un éc
 export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, leaVoice, addMessage, chatHistory, carolineProfile, leaMemory, updateLeaMemory }) {
   const [loading,    setLoading]    = useState(false)
   const [streaming,  setStreaming]  = useState('')
-  const [voiceOn,    setVoiceOn]    = useState(false)
+  // LOT 2.2 — HP ON par défaut. Mute dynamique inchangé : toggleVoice
+  // appelle stopAllTts() quand on bascule à false (déjà géré).
+  const [voiceOn,    setVoiceOn]    = useState(true)
   const [ttsState,   setTtsState]   = useState({ playing: false, paused: false, speed: 1.0, mode: null })
 
   const audioRef       = useRef(null)
