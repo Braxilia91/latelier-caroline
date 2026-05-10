@@ -1,4 +1,9 @@
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
+
+// LOT 4D.1 — Wake Lock support detection (Web Wake Lock API)
+const WAKE_LOCK_SUPPORTED = typeof navigator !== 'undefined'
+  && 'wakeLock' in navigator
+  && typeof navigator.wakeLock?.request === 'function'
 
 export function useVoice({ onResult }) {
   const [listening,  setListening]  = useState(false)
@@ -7,9 +12,15 @@ export function useVoice({ onResult }) {
   const [supported,  setSupported]  = useState(
     !!(window.SpeechRecognition || window.webkitSpeechRecognition)
   )
+  // LOT 4D.1 — état Wake Lock pour feedback UX (bandeau si non dispo / refusé)
+  // 'idle' (jamais tenté) | 'acquired' (actif) | 'released' (relâché normalement)
+  // | 'unsupported' (API absente du navigateur) | 'denied' (OS a refusé : batterie, etc.)
+  const [wakeLockState, setWakeLockState] = useState(WAKE_LOCK_SUPPORTED ? 'idle' : 'unsupported')
+
   const recognitionRef = useRef(null)
   const listeningRef   = useRef(false) // miroir stable — évite la stale closure dans onend
   const lastFinalRef   = useRef('')    // déduplication : évite d'émettre 2× le même final consécutif
+  const wakeLockRef    = useRef(null)  // LOT 4D.1 — référence WakeLockSentinel pour pouvoir release
 
   const setListeningSync = useCallback((val) => {
     listeningRef.current = val
@@ -22,6 +33,48 @@ export function useVoice({ onResult }) {
     lastFinalRef.current = ''
   }, [])
 
+  // LOT 4D.1 — Acquérir le verrou écran (empêche la mise en veille pendant la dictée)
+  // Tolérant : si refusé/non supporté on continue la dictée, juste on ne tient pas l'écran allumé.
+  const acquireWakeLock = useCallback(async () => {
+    if (!WAKE_LOCK_SUPPORTED) { setWakeLockState('unsupported'); return }
+    try {
+      const sentinel = await navigator.wakeLock.request('screen')
+      wakeLockRef.current = sentinel
+      setWakeLockState('acquired')
+      // Si l'OS relâche (passage en background, batterie faible…), on est notifié
+      sentinel.addEventListener('release', () => {
+        wakeLockRef.current = null
+        // On ne passe à 'released' que si on n'est plus en écoute (sinon visibilitychange tentera de ré-acquérir)
+        if (!listeningRef.current) setWakeLockState('released')
+      })
+    } catch (_) {
+      wakeLockRef.current = null
+      setWakeLockState('denied')
+    }
+  }, [])
+
+  // LOT 4D.1 — Libérer le verrou écran proprement
+  const releaseWakeLock = useCallback(async () => {
+    const sentinel = wakeLockRef.current
+    wakeLockRef.current = null
+    if (sentinel) {
+      try { await sentinel.release() } catch (_) {}
+    }
+    setWakeLockState(prev => (prev === 'unsupported' ? 'unsupported' : 'released'))
+  }, [])
+
+  // LOT 4D.1 — Quand l'app revient au premier plan ET qu'on est encore en dictée,
+  // ré-acquérir le verrou (l'OS le libère auto en background).
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible' && listeningRef.current && !wakeLockRef.current) {
+        acquireWakeLock()
+      }
+    }
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => document.removeEventListener('visibilitychange', onVisibility)
+  }, [acquireWakeLock])
+
   const stop = useCallback(() => {
     const rec = recognitionRef.current
     if (rec) {
@@ -32,7 +85,9 @@ export function useVoice({ onResult }) {
     listeningRef.current = false
     setListening(false)
     resetSessionState()
-  }, [resetSessionState])
+    // LOT 4D.1 — release wake lock à l'arrêt (volontaire ou erreur)
+    releaseWakeLock()
+  }, [resetSessionState, releaseWakeLock])
 
   const start = useCallback(() => {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition
@@ -40,6 +95,8 @@ export function useVoice({ onResult }) {
 
     setErrorMsg('')
     resetSessionState()
+    // LOT 4D.1 — tente le wake lock avant de démarrer la reco (non bloquant)
+    acquireWakeLock()
     const rec = new SR()
     rec.lang            = 'fr-FR'
     rec.continuous      = true
@@ -90,11 +147,11 @@ export function useVoice({ onResult }) {
 
     recognitionRef.current = rec
     try { rec.start() } catch (_) { setListeningSync(false) }
-  }, [onResult, stop, setListeningSync, resetSessionState])
+  }, [onResult, stop, setListeningSync, resetSessionState, acquireWakeLock])
 
   const toggle = useCallback(() => {
     listening ? stop() : start()
   }, [listening, start, stop])
 
-  return { listening, interim, errorMsg, supported, toggle, start, stop }
+  return { listening, interim, errorMsg, supported, toggle, start, stop, wakeLockState }
 }
