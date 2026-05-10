@@ -17,6 +17,14 @@ const FONT_SIZES = [
   { value: 'l',  label: 'L',  desc: 'Grand' },
   { value: 'xl', label: 'XL', desc: 'Très grand' },
 ]
+
+// LOT 3.5 — Échelle du chat Léa (multiplie toutes les tailles du coach panel via --chat-scale)
+const CHAT_SCALES = [
+  { value: 1,    label: 'Compact', desc: 'Taille actuelle' },
+  { value: 1.15, label: 'Confort', desc: '+15 %' },
+  { value: 1.3,  label: 'Grand',   desc: '+30 %' },
+]
+
 const THEMES = [
   { value: 'jour', label: '☀️ Jour', desc: 'Fond ivoire clair' },
   { value: 'soir', label: '🌙 Soir', desc: 'Tons dorés apaisés' },
@@ -66,9 +74,11 @@ export default function SettingsModal({ state, chapters = [], vracIdeas = [], na
   const [voice, setVoice] = useState(state.leaVoice || 'nova')
 
   // Section 2 — Écriture
-  const [editorFont, setEditorFont] = useState(state.editorFont || 'm')
+  const [editorFont, setEditorFont]   = useState(state.editorFont || 'm')
   const [editorTheme, setEditorTheme] = useState(state.editorTheme || 'jour')
   const [editorWidth, setEditorWidth] = useState(state.editorWidth || 'confort')
+  // LOT 3.5
+  const [chatScale, setChatScale]     = useState(typeof state.chatScale === 'number' && state.chatScale > 0 ? state.chatScale : 1)
 
   // Section 3 — Sync
   const [syncTok, setSyncTok] = useState(state.syncToken || '')
@@ -90,6 +100,7 @@ export default function SettingsModal({ state, chapters = [], vracIdeas = [], na
       leaVoice: voice,
       syncToken: syncTok,
       editorFont, editorTheme, editorWidth,
+      chatScale,                                  // LOT 3.5
     })
     onClose()
   }
@@ -180,6 +191,11 @@ export default function SettingsModal({ state, chapters = [], vracIdeas = [], na
             <div style={S.fg}>
               <label style={S.label}>Thème visuel</label>
               <ToggleGroup options={THEMES} value={editorTheme} onChange={setEditorTheme} />
+            </div>
+            {/* LOT 3.5 — Échelle du chat Léa */}
+            <div style={S.fg}>
+              <label style={S.label}>Taille du chat avec Léa</label>
+              <ToggleGroup options={CHAT_SCALES} value={chatScale} onChange={setChatScale} />
             </div>
           </Section>
 
