@@ -32,10 +32,12 @@ export function useAppState() {
   const [lastSyncedAt,   setLastSyncedAt]   = useState(null)
   const [vracIdeas,      setVracIdeas]      = useState([])    // boîte à idées
   // ── Préférences d'affichage ──────────────────────────────────
-  const [editorFont,     setEditorFontState]  = useState('m')       // s | m | l
+  const [editorFont,     setEditorFontState]  = useState('m')       // s | m | l | xl
   const [editorTheme,    setEditorThemeState] = useState('jour')     // jour | soir | bougie
   const [editorWidth,    setEditorWidthState] = useState('confort')  // confort | full
   const [firstLaunch,    setFirstLaunchState] = useState(false)      // true = scène pack opening à afficher
+  // LOT 3.5 — Échelle du chat Léa (multiplicateur appliqué via CSS var --chat-scale)
+  const [chatScale,      setChatScaleState]   = useState(1)          // 1 (Compact) | 1.15 (Confort) | 1.3 (Grand)
   // ── Ambiance sonore ─────────────────────────────────────────
   const [ambientSound,   setAmbientSoundState]  = useState(null)    // null | 'pluie'|'cafe'|'feu'|'foret'
   const [ambientVolume,  setAmbientVolumeState] = useState(0.28)    // 0–1
@@ -60,7 +62,7 @@ export function useAppState() {
         console.info('[Storage] Mode non-persistant. Le navigateur peut évincer les données en cas de pression mémoire.')
       }
 
-      const [n, k, oai, lv, st, sess, last, mood, chs, chat, prof, mem, vrac, stok, lsa, ef, et, ew, fls, snd, vol] = await Promise.all([
+      const [n, k, oai, lv, st, sess, last, mood, chs, chat, prof, mem, vrac, stok, lsa, ef, et, ew, fls, snd, vol, cs] = await Promise.all([
         getKV('name',             ''),
         getKV('apiKey',           ''),
         getKV('openAiKey',        ''),
@@ -82,6 +84,7 @@ export function useAppState() {
         getKV('firstLaunchSeen',  false),
         getKV('ambientSound',     null),
         getKV('ambientVolume',    0.28),
+        getKV('chatScale',        1),     // LOT 3.5
       ])
 
       setNameState(n); setApiKeyState(k); setOAIKey(oai); setLeaVoice(lv)
@@ -104,6 +107,7 @@ export function useAppState() {
       setFirstLaunchState(!fls)   // firstLaunch = true si jamais vu
       setAmbientSoundState(snd)
       setAmbientVolumeState(vol)
+      setChatScaleState(typeof cs === 'number' && cs > 0 ? cs : 1)   // LOT 3.5 — fallback safe
       setReady(true)
 
       // Quota check en arrière-plan — non bloquant
@@ -135,6 +139,12 @@ export function useAppState() {
   const setEditorFont  = useCallback(async (v) => { setEditorFontState(v);  await setKV('editorFont',  v) }, [])
   const setEditorTheme = useCallback(async (v) => { setEditorThemeState(v); await setKV('editorTheme', v) }, [])
   const setEditorWidth = useCallback(async (v) => { setEditorWidthState(v); await setKV('editorWidth', v) }, [])
+  // LOT 3.5 — Échelle du chat Léa
+  const setChatScale   = useCallback(async (v) => {
+    const safe = typeof v === 'number' && v > 0 ? v : 1
+    setChatScaleState(safe)
+    await setKV('chatScale', safe)
+  }, [])
 
   // ── Ambiance sonore ──────────────────────────────────────────
   const setAmbientSound  = useCallback(async (v) => { setAmbientSoundState(v);  await setKV('ambientSound',  v) }, [])
@@ -377,6 +387,7 @@ export function useAppState() {
     vracIdeas, unusedVrac, addVracIdea, markVracUsed, removeVracIdea,
     syncToken, setSyncToken, syncStatus, syncMessage, lastSyncedAt, syncNow,
     editorFont, setEditorFont, editorTheme, setEditorTheme, editorWidth, setEditorWidth,
+    chatScale, setChatScale,
     firstLaunch, markFirstLaunchSeen,
     ambientSound, setAmbientSound, ambientVolume, setAmbientVolume,
     storageWarning, dismissStorageWarning: () => setStorageWarning(null),
