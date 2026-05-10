@@ -8,7 +8,8 @@ const THEMES = {
   soir:   { bg: '#F5EDD8', areaBg: '#EFE4C8', text: '#2A1A0E', caret: '#A0793D' },
   bougie: { bg: '#1C1208', areaBg: '#140D04', text: '#E8D5B8', caret: '#C4956A' },
 }
-const FONT_SIZES = { s: '0.9rem', m: '1.05rem', l: '1.25rem' }
+// LOT 3.2 — XL ajouté côté moteur. UI Settings (S/M/L/XL) à finaliser dans LOT 3.3.
+const FONT_SIZES = { s: '0.9rem', m: '1.05rem', l: '1.25rem', xl: '1.5rem' }
 const WIDTHS     = { confort: '680px', full: '100%' }
 
 export default function WritingArea({ chapter, updateChapter, recordSession, onDictateInline,
