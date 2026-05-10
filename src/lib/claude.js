@@ -44,6 +44,66 @@ export function cleanForTTS(text) {
     .trim()
 }
 
+// ─── Lexique de prononciation FR ────────────────────────────────
+// LOT 2.1 — Ciblé sur sigles, abréviations et symboles qui sonnent
+// mal en TTS française (tts-1-hd nova). Pas de remplacement
+// d'anglicismes courants (parking, weekend…) : la voix FR les rend
+// déjà acceptablement avec un accent francisé.
+// Format : { regex_string: replacement }. Tous appliqués avec flag 'g'.
+const FR_LEXICON = {
+  // Sigles techniques (lettres séparées pour épellation forcée)
+  '\\bIA\\b': 'I A',
+  '\\bAI\\b': 'A I',
+  '\\bOpenAI\\b': 'Open A I',
+  '\\bAPI\\b': 'A P I',
+  '\\bTTS\\b': 'T T S',
+  '\\bPDF\\b': 'P D F',
+  '\\bURL\\b': 'U R L',
+  '\\bPWA\\b': 'P W A',
+  '\\bSAP\\b': 'S A P',
+  '\\bCRM\\b': 'C R M',
+  '\\bRGPD\\b': 'R G P D',
+  '\\bOK\\b': 'okay',
+  // Abréviations courantes
+  '\\betc\\.?(?=\\s|$)': 'etcetera',
+  '\\bvs\\.?(?=\\s|$)': 'versus',
+  '\\bM\\.\\s': 'Monsieur ',
+  '\\bMme\\.?\\s': 'Madame ',
+  '\\bMlle\\.?\\s': 'Mademoiselle ',
+  '\\bDr\\.?\\s': 'Docteur ',
+  '\\bSt\\.?\\s': 'Saint ',
+  '\\bSte\\.?\\s': 'Sainte ',
+  // Symboles
+  '&': ' et ',
+  '%': ' pour cent',
+  '€': ' euros',
+  '\\$': ' dollars',
+  '£': ' livres',
+  // Caractères qui cassent la fluidité de narration
+  '\\s—\\s': ', ',
+  '\\s–\\s': ', ',
+  '…': ', ',
+  '\\s;\\s': ', ',
+}
+
+function applyFrLexicon(text) {
+  if (!text) return ''
+  let out = text
+  for (const [pattern, replacement] of Object.entries(FR_LEXICON)) {
+    out = out.replace(new RegExp(pattern, 'g'), replacement)
+  }
+  // Cleanup espaces multiples créés par les remplacements
+  return out.replace(/\s+/g, ' ').trim()
+}
+
+// LOT 2.1 — Composition par-dessus cleanForTTS, jamais en remplacement.
+// cleanForTTS reste la baseline (markdown/emoji/bullets) ; le lexique
+// FR vient ensuite. Si le lexique casse un cas, on peut le retirer
+// sans toucher à cleanForTTS.
+export function normalizeForNarrationFR(text) {
+  return applyFrLexicon(cleanForTTS(text))
+}
+
 export async function askClaude({ apiKey, systemPrompt, messages, maxTokens = 600, onChunk }) {
   if (!apiKey) throw new Error('Mot de passe Léa manquant')
 
@@ -98,9 +158,10 @@ export async function askClaude({ apiKey, systemPrompt, messages, maxTokens = 60
 // ─── TTS (voix de Léa via OpenAI proxy) ─────────────────────────
 // Nettoyage du texte + speed param (0.5 - 2.0 selon préférence)
 // Modèle tts-1-hd pour qualité supérieure (× 2 coût mais accents français mieux)
+// LOT 2.1 — passe désormais par normalizeForNarrationFR (cleanForTTS + lexique FR)
 export async function speakWithOpenAI({ openAiKey, text, voice = 'nova', speed = 1.0, hd = true }) {
   if (!openAiKey) throw new Error('Mot de passe Léa manquant')
-  const cleanText = cleanForTTS(text).slice(0, 4096)
+  const cleanText = normalizeForNarrationFR(text).slice(0, 4096)
   if (!cleanText) throw new Error('Texte vide après nettoyage')
   const res = await fetch(TTS_PROXY, {
     method: 'POST',
