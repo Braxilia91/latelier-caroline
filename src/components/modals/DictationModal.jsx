@@ -68,7 +68,10 @@ export default function DictationModal({ onClose, onInsert }) {
                 onClick={toggle}
                 aria-label={listening ? 'Arrêter' : 'Commencer à dicter'}
               >
-                {listening ? <MicOff size={28} /> : <Mic size={28} />}
+                {/* Icône reflète l'ÉTAT (pas l'action) :
+                    écoute active = Mic ouvert (cohérent avec micActive rouge + pulse)
+                    inactif       = MicOff (= micro fermé) */}
+                {listening ? <Mic size={28} /> : <MicOff size={28} />}
               </button>
               <p style={styles.micHint}>
                 {listening ? 'Parle maintenant… clique pour arrêter' : 'Clique pour commencer à dicter'}
