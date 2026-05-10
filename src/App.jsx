@@ -292,7 +292,7 @@ function AppInner() {
           editorFont={db.editorFont} editorTheme={db.editorTheme} editorWidth={db.editorWidth}
         />
         <CoachPanel
-          coach={{ ...coach, clearChat: db.clearChat }}
+          coach={{ ...coach, clearChat: db.clearChat, removeMessage: db.removeMessage }}
           hasKey={!!db.apiKey}
           isOnline={isOnline}
           currentChapter={db.currentChapter}

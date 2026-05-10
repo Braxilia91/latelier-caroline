@@ -146,7 +146,8 @@ export async function addChatMessage(msg) {
       ...msg,
       timestamp: new Date().toISOString(),
     })
-    req.onsuccess = () => resolve()
+    // LOT 4C.2 — retourne l'id auto-incrémenté pour permettre la suppression unitaire
+    req.onsuccess = (e) => resolve(e.target.result)
     req.onerror   = (e) => reject(e.target.error)
   })
 }
@@ -155,6 +156,17 @@ export async function clearChatHistory() {
   await openDB()
   return new Promise((resolve, reject) => {
     const req = tx('chat', 'readwrite').clear()
+    req.onsuccess = () => resolve()
+    req.onerror   = (e) => reject(e.target.error)
+  })
+}
+
+// LOT 4C.2 — Suppression d'un message individuel par id auto-incrémenté
+export async function deleteChatMessage(id) {
+  if (id == null) return
+  await openDB()
+  return new Promise((resolve, reject) => {
+    const req = tx('chat', 'readwrite').delete(id)
     req.onsuccess = () => resolve()
     req.onerror   = (e) => reject(e.target.error)
   })

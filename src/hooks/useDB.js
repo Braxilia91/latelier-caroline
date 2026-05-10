@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   getKV, setKV,
   getChapters, saveChapter, deleteChapter, restoreChapter as dbRestoreChapter,
-  getChatHistoryRecent, addChatMessage, clearChatHistory,
+  getChatHistoryRecent, addChatMessage, clearChatHistory, deleteChatMessage,
   getVrac, addVrac, updateVrac, deleteVrac,
   exportAllData, resetAllData, importSnapshot, getStorageEstimate,
 } from '../lib/db'
@@ -333,16 +333,26 @@ export function useAppState() {
   // Évite la croissance unbounded de la RAM sur sessions longues.
   const CHAT_RAM_CAP = 200
   const addMessage = useCallback(async (msg) => {
-    await addChatMessage(msg)
+    // LOT 4C.2 — capture l'id auto-incrémenté retourné par IndexedDB
+    // pour permettre la suppression unitaire des messages ajoutés en session.
+    const id = await addChatMessage(msg)
     setChatHistory(prev => {
-      const next = [...prev, msg]
+      const next = [...prev, { ...msg, id }]
       return next.length > CHAT_RAM_CAP ? next.slice(-CHAT_RAM_CAP) : next
     })
+    return id
   }, [])
 
   const clearChat = useCallback(async () => {
     await clearChatHistory()
     setChatHistory([])
+  }, [])
+
+  // LOT 4C.2 — Suppression unitaire d'un message du chat (DB + state miroir)
+  const removeMessage = useCallback(async (id) => {
+    if (id == null) return
+    await deleteChatMessage(id)
+    setChatHistory(prev => prev.filter(m => m.id !== id))
   }, [])
 
   // ─── Vrac — boîte à idées ────────────────────────────────────
@@ -381,7 +391,7 @@ export function useAppState() {
     chapters, currentId, setCurrentId,
     currentChapter, totalWords,
     createChapter, updateChapter, removeChapter, restoreChapter, reorderChapters,
-    chatHistory, addMessage, clearChat,
+    chatHistory, addMessage, clearChat, removeMessage,
     carolineProfile, setCarolineProfile,
     leaMemory, updateLeaMemory,
     vracIdeas, unusedVrac, addVracIdea, markVracUsed, removeVracIdea,
