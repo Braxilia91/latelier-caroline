@@ -39,7 +39,27 @@ export default function DictationModal({ onClose, onInsert }) {
       overlayClassName="modal-bg"
       modalClassName="modal-box"
     >
-      <button className="modal-close" onClick={onClose} aria-label="Fermer la dictée"><X size={16} /></button>
+      {/* Animation de halo utilisée uniquement quand listening === true */}
+      <style>{`
+        @keyframes dictationMicHalo {
+          0%, 100% {
+            transform: scale(1);
+            box-shadow:
+              0 0 0 0 rgba(192,57,43,0.00),
+              0 4px 22px rgba(192,57,43,0.40);
+          }
+          50% {
+            transform: scale(1.08);
+            box-shadow:
+              0 0 0 14px rgba(192,57,43,0.18),
+              0 6px 30px rgba(192,57,43,0.60);
+          }
+        }
+      `}</style>
+
+      <button className="modal-close" onClick={onClose} aria-label="Fermer la dictée">
+        <X size={16} />
+      </button>
       <h2 className="modal-title">🎤 Dicter</h2>
 
       {!supported && (
@@ -70,27 +90,6 @@ export default function DictationModal({ onClose, onInsert }) {
             <p style={styles.micHint}>
               {listening ? 'Parle maintenant… clique pour arrêter' : 'Clique pour commencer à dicter'}
             </p>
-
-            {listening && (
-              <div style={styles.pulse} aria-hidden="true">
-                <style>{`
-                  @keyframes dictationPulseDot {
-                    0%, 100% { transform: scale(1); opacity: .35; }
-                    50% { transform: scale(1.4); opacity: 1; }
-                  }
-                  .dictation-pulse-dot {
-                    width: 8px;
-                    height: 8px;
-                    border-radius: 50%;
-                    background: #C0392B;
-                    animation: dictationPulseDot 1.1s ease-in-out infinite;
-                  }
-                `}</style>
-                <span className="dictation-pulse-dot" style={{ animationDelay: '0s' }} />
-                <span className="dictation-pulse-dot" style={{ animationDelay: '.15s' }} />
-                <span className="dictation-pulse-dot" style={{ animationDelay: '.30s' }} />
-              </div>
-            )}
           </div>
 
           <div style={styles.textBox}>
@@ -122,7 +121,7 @@ export default function DictationModal({ onClose, onInsert }) {
 
 const styles = {
   warn: {
-    background: '#FFF3E0', border: '1px solid #FFB74D',
+    background: '#FFF3E0', border: '1px solid '#FFB74D',
     borderRadius: 10, padding: 14,
     fontSize: '.82rem', color: '#E65100', lineHeight: 1.6,
     marginBottom: 12,
@@ -139,6 +138,8 @@ const styles = {
     background: 'linear-gradient(135deg, #C0392B, #E74C3C)',
     borderColor: '#C0392B', color: '#fff',
     boxShadow: '0 4px 24px rgba(192,57,43,.4)',
+    animation: 'dictationMicHalo 1.05s ease-in-out infinite',
+    transformOrigin: 'center center',
   },
   micHint: { fontSize: '.8rem', color: '#9C8878', textAlign: 'center' },
   pulse: { display: 'flex', gap: 5, alignItems: 'center' },
