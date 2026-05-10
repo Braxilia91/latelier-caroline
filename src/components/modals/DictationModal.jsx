@@ -7,7 +7,6 @@ import { useVoice } from '../../hooks/useVoice'
 export default function DictationModal({ onClose, onInsert }) {
   const [accumulated, setAccumulated] = useState('')
 
-  // Callback stable — accumulateur React propre, sans window.__dictAcc__
   const handleResult = useCallback((text) => {
     setAccumulated(prev => prev + text)
   }, [])
@@ -16,7 +15,6 @@ export default function DictationModal({ onClose, onInsert }) {
     onResult: handleResult,
   })
 
-  // Stop propre à la fermeture — stop est stable (useCallback [])
   useEffect(() => {
     return () => { stop() }
   }, [stop])
@@ -41,91 +39,87 @@ export default function DictationModal({ onClose, onInsert }) {
       overlayClassName="modal-bg"
       modalClassName="modal-box"
     >
-        <button className="modal-close" onClick={onClose} aria-label="Fermer la dictée"><X size={16} /></button>
-        <h2 className="modal-title">🎤 Dicter</h2>
+      <button className="modal-close" onClick={onClose} aria-label="Fermer la dictée"><X size={16} /></button>
+      <h2 className="modal-title">🎤 Dicter</h2>
 
-        {!supported && (
-          <div style={styles.warn}>
-            La dictée vocale n'est pas disponible sur ce navigateur.<br />
-            Utilise <strong>Chrome</strong> ou <strong>Edge</strong>.
-          </div>
-        )}
+      {!supported && (
+        <div style={styles.warn}>
+          La dictée vocale n'est pas disponible sur ce navigateur.<br />
+          Utilise <strong>Chrome</strong> ou <strong>Edge</strong>.
+        </div>
+      )}
 
-        {supported && (
-          <>
-            {/* Erreur permission ou micro indisponible */}
-            {errorMsg && (
-              <div style={styles.warn}>{errorMsg}</div>
+      {supported && (
+        <>
+          {errorMsg && (
+            <div style={styles.warn}>{errorMsg}</div>
+          )}
+
+          <div style={styles.micWrap}>
+            <button
+              style={{
+                ...styles.micBtn,
+                ...(listening ? styles.micActive : {}),
+              }}
+              onClick={toggle}
+              aria-label={listening ? 'Arrêter' : 'Commencer à dicter'}
+            >
+              {listening ? <Mic size={28} /> : <MicOff size={28} />}
+            </button>
+
+            <p style={styles.micHint}>
+              {listening ? 'Parle maintenant… clique pour arrêter' : 'Clique pour commencer à dicter'}
+            </p>
+
+            {listening && (
+              <div style={styles.pulse} aria-hidden="true">
+                <style>{`
+                  @keyframes dictationPulseDot {
+                    0%, 100% { transform: scale(1); opacity: .35; }
+                    50% { transform: scale(1.4); opacity: 1; }
+                  }
+                  .dictation-pulse-dot {
+                    width: 8px;
+                    height: 8px;
+                    border-radius: 50%;
+                    background: #C0392B;
+                    animation: dictationPulseDot 1.1s ease-in-out infinite;
+                  }
+                `}</style>
+                <span className="dictation-pulse-dot" style={{ animationDelay: '0s' }} />
+                <span className="dictation-pulse-dot" style={{ animationDelay: '.15s' }} />
+                <span className="dictation-pulse-dot" style={{ animationDelay: '.30s' }} />
+              </div>
             )}
+          </div>
 
-            {/* Bouton micro */}
-            <div style={styles.micWrap}>
-              <button
-                style={{
-                  ...styles.micBtn,
-                  ...(listening ? styles.micActive : {}),
-                }}
-                onClick={toggle}
-                aria-label={listening ? 'Arrêter' : 'Commencer à dicter'}
-              >
-                {/* Icône reflète l'ÉTAT (pas l'action) :
-                    écoute active = Mic ouvert (cohérent avec micActive rouge + pulse)
-                    inactif       = MicOff (= micro fermé) */}
-                {listening ? <Mic size={28} /> : <MicOff size={28} />}
-              </button>
-              <p style={styles.micHint}>
-                {listening ? 'Parle maintenant… clique pour arrêter' : 'Clique pour commencer à dicter'}
-              </p>
-              {listening && (
-                <div style={styles.pulse} aria-hidden="true">
-                  <style>{`
-                    @keyframes dictationPulseDot {
-                      0%, 100% { transform: scale(1);   opacity: .35; }
-                      50%      { transform: scale(1.4); opacity: 1; }
-                    }
-                    .dictation-pulse-dot {
-                      width: 8px; height: 8px; border-radius: 50%;
-                      background: #C0392B;
-                      animation: dictationPulseDot 1.1s ease-in-out infinite;
-                    }
-                    .dictation-pulse-dot:nth-child(2) { animation-delay: .15s; }
-                    .dictation-pulse-dot:nth-child(3) { animation-delay: .30s; }
-                  `}</style>
-                  <span className="dictation-pulse-dot" />
-                  <span className="dictation-pulse-dot" />
-                  <span className="dictation-pulse-dot" />
-                </div>
-              )}
-            </div>
+          <div style={styles.textBox}>
+            {accumulated
+              ? <>{accumulated}<span style={styles.interim}>{interim}</span></>
+              : interim
+                ? <span style={styles.interim}>{interim}</span>
+                : <span style={styles.placeholder}>Le texte dicté apparaîtra ici…</span>
+            }
+          </div>
 
-            {/* Texte transcrit — interim affiché une seule fois, en gris */}
-            <div style={styles.textBox}>
-              {accumulated
-                ? <>{accumulated}<span style={styles.interim}>{interim}</span></>
-                : interim
-                  ? <span style={styles.interim}>{interim}</span>
-                  : <span style={styles.placeholder}>Le texte dicté apparaîtra ici…</span>
-              }
-            </div>
-
-            {/* Actions */}
-            <div style={styles.actions}>
-              <button style={styles.clearBtn} onClick={handleClear}>
-                Effacer
-              </button>
-              <button
-                style={{ ...styles.insertBtn, opacity: displayText.trim() ? 1 : .5 }}
-                onClick={handleInsert}
-                disabled={!displayText.trim()}
-              >
-                <Check size={16} /> Insérer dans le chapitre
-              </button>
-            </div>
-          </>
-        )}
+          <div style={styles.actions}>
+            <button style={styles.clearBtn} onClick={handleClear}>
+              Effacer
+            </button>
+            <button
+              style={{ ...styles.insertBtn, opacity: displayText.trim() ? 1 : .5 }}
+              onClick={handleInsert}
+              disabled={!displayText.trim()}
+            >
+              <Check size={16} /> Insérer dans le chapitre
+            </button>
+          </div>
+        </>
+      )}
     </Modal>
   )
 }
+
 const styles = {
   warn: {
     background: '#FFF3E0', border: '1px solid #FFB74D',
