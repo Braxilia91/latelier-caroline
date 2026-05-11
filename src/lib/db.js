@@ -307,14 +307,51 @@ export function isValidSnapshot(data) {
 }
 
 /**
+ * LOT 4F.1 — Convertit un export "ancien format" en snapshot moderne v3.
+ * Détecte les exports minimaux antérieurs (sans `version`, avec `vracIdeas` ou `vrac`).
+ * Retourne le snapshot moderne si conversion possible, sinon retourne l'input tel quel
+ * (laisse isValidSnapshot rejeter si vraiment invalide).
+ */
+function normalizeLegacyExport(data) {
+  if (!data || typeof data !== 'object') return data
+  // Déjà au format moderne (version présente)
+  if (typeof data.version === 'number') return data
+  // Détection legacy : chapters[] + (vracIdeas[] ou vrac[]) sans version
+  if (Array.isArray(data.chapters) && (Array.isArray(data.vracIdeas) || Array.isArray(data.vrac))) {
+    const vracSrc = Array.isArray(data.vracIdeas) ? data.vracIdeas : data.vrac
+    return {
+      version: 3,
+      syncedAt: data.exportedAt || new Date().toISOString(),
+      chapters: data.chapters,
+      vrac: (vracSrc || []).map(v => ({
+        id:        v.id        || `vrac_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        text:      v.text      || '',
+        tag:       v.tag       || 'idée',
+        chapterId: v.chapterId ?? null,
+        used:      !!v.used,
+        createdAt: v.createdAt || new Date().toISOString(),
+      })),
+      chat: [],
+      kv: {
+        name: data.name || '',
+      },
+    }
+  }
+  return data
+}
+
+/**
  * Écrase les données locales avec un snapshot distant.
  * Retourne false si le snapshot est invalide — jamais de corruption silencieuse.
  * Les clés sensibles (apiKey, openAiKey) ne sont jamais remplacées.
  * NB : le store 'fragments' n'est pas inclus dans le snapshot pour l'instant
  * (sera ajouté dans une livraison ultérieure quand le format sera stabilisé).
+ *
+ * LOT 4F.1 — Tolère les anciens exports JSON via normalizeLegacyExport.
  */
 export async function importSnapshot(snapshot) {
-  if (!isValidSnapshot(snapshot)) {
+  const data = normalizeLegacyExport(snapshot)
+  if (!isValidSnapshot(data)) {
     console.error('[Sync] Snapshot invalide — import annulé', snapshot)
     return false
   }
@@ -326,7 +363,7 @@ export async function importSnapshot(snapshot) {
     req.onsuccess = () => resolve()
     req.onerror   = (e) => reject(e.target.error)
   })
-  for (const ch of (snapshot.chapters || [])) {
+  for (const ch of (data.chapters || [])) {
     await saveChapter(ch)
   }
 
@@ -336,7 +373,7 @@ export async function importSnapshot(snapshot) {
     req.onsuccess = () => resolve()
     req.onerror   = (e) => reject(e.target.error)
   })
-  const kv = snapshot.kv || {}
+  const kv = data.kv || {}
   for (const [key, value] of Object.entries(kv)) {
     if (KV_KEYS_SYNC.includes(key) && value !== undefined) {
       await setKV(key, value)
@@ -344,7 +381,7 @@ export async function importSnapshot(snapshot) {
   }
 
   // ── Vrac items ───────────────────────────────────────────────
-  for (const idea of (snapshot.vrac || [])) {
+  for (const idea of (data.vrac || [])) {
     await new Promise((resolve, reject) => {
       const req = tx('vrac', 'readwrite').put(idea)
       req.onsuccess = () => resolve()
@@ -355,13 +392,13 @@ export async function importSnapshot(snapshot) {
   // ── Chat history (sync) ─────────────────────────────────────
   // Si le snapshot contient chat, on remplace l'historique local par le distant
   // (last-write-wins par snapshot, pas par message — simple et lisible)
-  if (Array.isArray(snapshot.chat)) {
+  if (Array.isArray(data.chat)) {
     await new Promise((resolve, reject) => {
       const req = tx('chat', 'readwrite').clear()
       req.onsuccess = () => resolve()
       req.onerror   = (e) => reject(e.target.error)
     })
-    for (const msg of snapshot.chat.slice(-500)) {
+    for (const msg of data.chat.slice(-500)) {
       await new Promise((resolve, reject) => {
         // On laisse IndexedDB générer l'id auto-incrémenté
         const { id, ...rest } = msg
@@ -373,7 +410,7 @@ export async function importSnapshot(snapshot) {
   }
 
   // Marquer le moment du dernier import
-  await setKV('lastSyncedAt', snapshot.syncedAt || new Date().toISOString())
+  await setKV('lastSyncedAt', data.syncedAt || new Date().toISOString())
   return true
 }
 
@@ -394,6 +431,55 @@ export async function exportAllData() {
     chat, leaMemory,
     exportedAt: new Date().toISOString(),
     version: 3,
+  }
+}
+
+// ─── LOT 4F.1 — Sauvegarde locale complète au format importable ───
+/**
+ * Construit un snapshot complet de l'app au MÊME format que `importSnapshot` attend.
+ * = ce qu'on exporte peut être réimporté tel quel, sans conversion.
+ *
+ * Inclut : chapitres, vrac, chat (500 derniers), KV non-sensible.
+ * Exclut : apiKey, openAiKey (sécurité).
+ */
+export async function buildLocalBackup() {
+  const [
+    chapters, vrac, chat,
+    name, leaVoice, streak, sessions, lastSession, moodToday, moodValue,
+    profile, leaMemory, lastSyncedAt,
+  ] = await Promise.all([
+    getChapters(),
+    getVrac(),
+    getChatHistoryRecent(500),
+    getKV('name',             ''),
+    getKV('leaVoice',         'nova'),
+    getKV('streak',           0),
+    getKV('sessions',         0),
+    getKV('lastSession',      ''),
+    getKV('moodToday',        ''),
+    getKV('moodValue',        ''),
+    getKV('caroline_profile', null),
+    getKV('lea_memory',       null),
+    getKV('lastSyncedAt',     null),
+  ])
+  return {
+    version:  3,
+    syncedAt: new Date().toISOString(),
+    chapters,
+    vrac,
+    chat,
+    kv: {
+      name,
+      leaVoice,
+      streak,
+      sessions,
+      lastSession,
+      moodToday,
+      moodValue,
+      caroline_profile: profile,
+      lea_memory:       leaMemory,
+      lastSyncedAt,
+    },
   }
 }
 
