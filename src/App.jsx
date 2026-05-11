@@ -253,11 +253,34 @@ function AppInner() {
     })
   }, [db, toast])
 
+  // Sync au boot (existant)
   useEffect(() => {
     if (db.ready && db.syncToken && import.meta.env.VITE_SYNC_WORKER_URL) {
       db.syncNow()
     }
   }, [db.ready]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // LOT 4F.1 — Auto-sync silencieuse toutes les 5 min si token configuré
+  useEffect(() => {
+    if (!db.ready || !db.syncToken || !import.meta.env.VITE_SYNC_WORKER_URL) return
+    const intervalId = setInterval(() => {
+      db.syncNow()
+    }, 5 * 60 * 1000)   // 5 minutes
+    return () => clearInterval(intervalId)
+  }, [db.ready, db.syncToken]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // LOT 4F.1 — Sync best-effort à la mise en arrière-plan / fermeture
+  // (visibilitychange est plus fiable que beforeunload sur PWA installée)
+  useEffect(() => {
+    if (!db.ready || !db.syncToken || !import.meta.env.VITE_SYNC_WORKER_URL) return
+    const handler = () => {
+      if (document.hidden) {
+        db.syncNow()  // fire-and-forget, pas d'await
+      }
+    }
+    document.addEventListener('visibilitychange', handler)
+    return () => document.removeEventListener('visibilitychange', handler)
+  }, [db.ready, db.syncToken]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!db.ready) return <AppSkeleton />
   if (!db.isSetup) return <Onboarding onComplete={handleSetupComplete} />
@@ -333,6 +356,8 @@ function AppInner() {
           chapters={db.chapters} vracIdeas={db.vracIdeas} name={db.name}
           onClose={() => setModal(null)} onSave={handleSaveSettings} onReset={db.resetAllData}
           onOpenMemory={() => setModal('memory')}
+          onImport={db.importFromFile}             /* LOT 4F.1 */
+          buildLocalBackup={db.buildLocalBackup}   /* LOT 4F.1 */
         />}
         {modal === 'memory' && <LeaMemoryModal
           leaMemory={db.leaMemory}
@@ -360,24 +385,72 @@ function AppInner() {
         )}
       </Suspense>
 
-      {!isMobile && (
-        <div style={{
-          position: 'fixed', bottom: 16, right: 'calc(var(--coach-w) + 16px)',
-          display: 'flex', alignItems: 'center', gap: 6, padding: '5px 12px',
-          background: isOnline ? 'rgba(61,107,69,.12)' : 'rgba(180,83,9,.12)',
-          border: `1px solid ${isOnline ? '#6B8F71' : '#C4956A'}`,
-          borderRadius: 20,
-          fontSize: '.68rem', fontWeight: 600, fontFamily: "'Nunito', sans-serif",
-          color: isOnline ? '#3D6B45' : '#92400E',
-          zIndex: 500, pointerEvents: 'none', transition: 'all .4s ease',
-        }}>
-          <span style={{
-            width: 6, height: 6, borderRadius: '50%',
-            background: isOnline ? '#6B8F71' : '#C4956A', flexShrink: 0,
-          }} />
-          {isOnline ? 'En ligne' : 'Hors ligne — sauvegardé localement'}
-        </div>
-      )}
+      {/* LOT 4F.1 — Indicateur permanent de l'état de sauvegarde (desktop only) */}
+      {!isMobile && (() => {
+        const hasToken = !!db.syncToken
+        const lastSync = db.lastSyncedAt ? new Date(db.lastSyncedAt) : null
+        const ageMin   = lastSync ? Math.floor((Date.now() - lastSync.getTime()) / 60000) : null
+
+        // Détermine l'état + le libellé
+        let state = 'ok'
+        let label = ''
+
+        if (!isOnline) {
+          state = 'warn'
+          label = 'Hors ligne — sauvegardé localement'
+        } else if (!hasToken) {
+          state = 'warn'
+          label = '⚠ Sauvegarde en ligne inactive — Configure dans Réglages'
+        } else if (!lastSync) {
+          state = 'warn'
+          label = '⚠ Première sauvegarde en attente'
+        } else if (ageMin < 1) {
+          label = '✓ Sauvegardé à l\'instant'
+        } else if (ageMin < 60) {
+          label = `✓ Sauvegardé il y a ${ageMin} min`
+        } else if (ageMin < 60 * 24) {
+          const h = Math.floor(ageMin / 60)
+          label = `✓ Sauvegardé il y a ${h} h`
+        } else {
+          const d = Math.floor(ageMin / (60 * 24))
+          state = 'warn'
+          label = `⚠ Pas de sauvegarde depuis ${d} jour${d > 1 ? 's' : ''}`
+        }
+
+        const colors = state === 'ok'
+          ? { bg: 'rgba(61,107,69,.12)',  border: '#6B8F71', text: '#3D6B45', dot: '#6B8F71' }
+          : { bg: 'rgba(180,83,9,.12)',   border: '#C4956A', text: '#92400E', dot: '#C4956A' }
+
+        const isClickable = isOnline && !hasToken   // CTA "Configure" si pas de token
+
+        return (
+          <div
+            onClick={isClickable ? () => setModal('settings') : undefined}
+            style={{
+              position: 'fixed', bottom: 16, right: 'calc(var(--coach-w) + 16px)',
+              display: 'flex', alignItems: 'center', gap: 6, padding: '5px 12px',
+              background: colors.bg,
+              border: `1px solid ${colors.border}`,
+              borderRadius: 20,
+              fontSize: '.68rem', fontWeight: 600, fontFamily: "'Nunito', sans-serif",
+              color: colors.text,
+              zIndex: 500,
+              pointerEvents: isClickable ? 'auto' : 'none',
+              cursor: isClickable ? 'pointer' : 'default',
+              transition: 'all .4s ease',
+              userSelect: 'none',
+            }}
+            role={isClickable ? 'button' : undefined}
+            aria-label={isClickable ? 'Ouvrir les réglages de sauvegarde' : undefined}
+          >
+            <span style={{
+              width: 6, height: 6, borderRadius: '50%',
+              background: colors.dot, flexShrink: 0,
+            }} />
+            {label}
+          </div>
+        )
+      })()}
     </div>
   )
 }
