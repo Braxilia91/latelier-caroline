@@ -5,6 +5,7 @@ import {
   getChatHistoryRecent, addChatMessage, clearChatHistory, deleteChatMessage,
   getVrac, addVrac, updateVrac, deleteVrac,
   exportAllData, resetAllData, importSnapshot, getStorageEstimate,
+  buildLocalBackup,
 } from '../lib/db'
 import { pushSnapshot, pullSnapshot, buildSnapshot, whoWins } from '../lib/sync'
 
@@ -380,6 +381,48 @@ export function useAppState() {
     setVracIdeas(prev => prev.filter(v => v.id !== id))
   }, [])
 
+  // ─── LOT 4F.1 — Import d'une sauvegarde depuis fichier ──────
+  /**
+   * Lit un fichier JSON sélectionné par l'utilisateur, valide,
+   * importe via importSnapshot, puis rafraîchit le state React.
+   *
+   * Tolère les anciens formats (rétrocompatibilité via normalizeLegacyExport).
+   * Ne throw jamais — retourne { ok, message } pour affichage UI.
+   */
+  const importFromFile = useCallback(async (file) => {
+    if (!file) return { ok: false, message: 'Aucun fichier sélectionné' }
+    try {
+      const text = await file.text()
+      let parsed
+      try { parsed = JSON.parse(text) }
+      catch { return { ok: false, message: 'Fichier JSON invalide' } }
+
+      const ok = await importSnapshot(parsed)
+      if (!ok) return { ok: false, message: 'Format de sauvegarde non reconnu ou corrompu' }
+
+      // Rafraîchit le state React depuis IndexedDB après import
+      const [chs, v, ch, prof, mem, lsa] = await Promise.all([
+        getChapters(),
+        getVrac(),
+        getChatHistoryRecent(200),
+        getKV('caroline_profile', null),
+        getKV('lea_memory',       null),
+        getKV('lastSyncedAt',     null),
+      ])
+      setChapters(chs)
+      if (chs.length > 0) setCurrentId(chs[0].id)
+      setVracIdeas(v)
+      setChatHistory(ch)
+      setProfileState(prof)
+      setLeaMemoryState(mem)
+      setLastSyncedAt(lsa)
+
+      return { ok: true, message: 'Sauvegarde importée avec succès' }
+    } catch (err) {
+      return { ok: false, message: err.message || 'Erreur lors de l\'import' }
+    }
+  }, [])
+
   // ─── Dérivés ──────────────────────────────────────────────────
   const currentChapter = chapters.find(c => c.id === currentId) ?? null
   const isSetup        = name.trim().length > 0
@@ -410,5 +453,7 @@ export function useAppState() {
     ambientSound, setAmbientSound, ambientVolume, setAmbientVolume,
     storageWarning, dismissStorageWarning: () => setStorageWarning(null),
     exportAllData, resetAllData, importSnapshot,
+    // LOT 4F.1 — Sauvegarde locale Phase 0
+    importFromFile, buildLocalBackup,
   }
 }
