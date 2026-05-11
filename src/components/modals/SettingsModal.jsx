@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import Modal from '../ui/Modal'
-import { X, Save, AlertTriangle, RefreshCw, Wifi, Download, Lock } from 'lucide-react'
+import { X, Save, AlertTriangle, RefreshCw, Wifi, Download, Upload, Lock } from 'lucide-react'
 
 // ── Constantes ───────────────────────────────────────────────────
 const VOICES = [
@@ -67,7 +67,12 @@ function ToggleGroup({ options, value, onChange }) {
 }
 
 // ── Modal principal ──────────────────────────────────────────────
-export default function SettingsModal({ state, chapters = [], vracIdeas = [], name = '', onClose, onSave, onReset, onOpenMemory }) {
+export default function SettingsModal({
+  state, chapters = [], vracIdeas = [], name = '',
+  onClose, onSave, onReset, onOpenMemory,
+  // LOT 4F.1 — Sauvegarde Phase 0
+  onImport, buildLocalBackup,
+}) {
   // Section 1 — Profil
   const [sName, setSName] = useState(state.name || '')
   const [apiKey, setApiKey] = useState(state.apiKey || '')
@@ -86,6 +91,10 @@ export default function SettingsModal({ state, chapters = [], vracIdeas = [], na
   // Section 4 — Sécurité
   const [confirmReset, setConfirmReset] = useState(false)
   const [exportDone, setExportDone] = useState(false)
+
+  // LOT 4F.1 — Import sauvegarde
+  const fileInputRef = useRef(null)
+  const [importing, setImporting] = useState(false)
 
   const tokenChanged = state.syncToken && syncTok && syncTok !== state.syncToken
   const tokenValid = syncTok.length === 0 || syncTok.length >= 20
@@ -116,25 +125,67 @@ export default function SettingsModal({ state, chapters = [], vracIdeas = [], na
     }
   }
 
-  // ── Export JSON ───────────────────────────────────────────────
-  const handleExport = () => {
-    const data = {
-      exportedAt: new Date().toISOString(),
-      name: name || sName,
-      chapters: (chapters || []).map(({ id, title, content, createdAt, updatedAt }) =>
-        ({ id, title, content, createdAt, updatedAt })),
-      vracIdeas: (vracIdeas || []).map(({ id, text, createdAt }) => ({ id, text, createdAt })),
+  // ── LOT 4F.1 — Export JSON (format complet importable) ───────
+  const handleExport = async () => {
+    try {
+      // Si buildLocalBackup dispo (LOT 4F.1) → snapshot complet ; sinon fallback minimal
+      const data = buildLocalBackup
+        ? await buildLocalBackup()
+        : {
+            exportedAt: new Date().toISOString(),
+            name: name || sName,
+            chapters: (chapters || []).map(({ id, title, content, createdAt, updatedAt }) =>
+              ({ id, title, content, createdAt, updatedAt })),
+            vracIdeas: (vracIdeas || []).map(({ id, text, createdAt }) => ({ id, text, createdAt })),
+          }
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      const date = new Date().toISOString().slice(0, 10)
+      a.href = url
+      a.download = `atelier-caroline-backup-${date}.json`
+      a.click()
+      URL.revokeObjectURL(url)
+      setExportDone(true)
+      setTimeout(() => setExportDone(false), 3000)
+    } catch (err) {
+      alert('Échec de l\'export : ' + (err.message || 'erreur inconnue'))
     }
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    const date = new Date().toISOString().slice(0, 10)
-    a.href = url
-    a.download = `atelier-caroline-backup-${date}.json`
-    a.click()
-    URL.revokeObjectURL(url)
-    setExportDone(true)
-    setTimeout(() => setExportDone(false), 3000)
+  }
+
+  // ── LOT 4F.1 — Import depuis fichier JSON ────────────────────
+  const handleImportClick = () => {
+    fileInputRef.current?.click()
+  }
+
+  const handleFileSelected = async (e) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''   // reset pour permettre la re-sélection du même fichier
+    if (!file) return
+
+    const confirmed = window.confirm(
+      '⚠️ Attention\n\n' +
+      'Cela va remplacer TES DONNÉES ACTUELLES par celles du fichier :\n' +
+      '• Chapitres\n' +
+      '• Idées vrac\n' +
+      '• Historique du chat\n' +
+      '• Profil et mémoire de Léa\n\n' +
+      'Cette action est irréversible. Continuer ?'
+    )
+    if (!confirmed) return
+
+    setImporting(true)
+    try {
+      const result = await onImport?.(file)
+      if (result?.ok) {
+        alert('✓ Sauvegarde restaurée avec succès.\n\nL\'application va redémarrer pour rafraîchir.')
+        window.location.reload()
+      } else {
+        alert('✗ Échec de l\'import : ' + (result?.message || 'erreur inconnue'))
+      }
+    } finally {
+      setImporting(false)
+    }
   }
 
   return (
@@ -199,11 +250,12 @@ export default function SettingsModal({ state, chapters = [], vracIdeas = [], na
             </div>
           </Section>
 
-          {/* ── Section 3 : Synchronisation ────────────────────── */}
-          <Section title="Synchronisation" icon={<Wifi size={13} color="#8B6445" />}>
+          {/* ── Section 3 : Sauvegarde en ligne (LOT 4F.1) ────── */}
+          <Section title="Sauvegarde en ligne" icon={<Wifi size={13} color="#8B6445" />}>
             <p style={S.syncTxt}>
-              Choisis un mot secret <strong>(20+ caractères)</strong> — le même sur tous tes appareils.
-              Tes chapitres seront synchronisés automatiquement. Ne le partage pas.
+              Tes données sont enregistrées dans le cloud et restaurables si tu changes d'appareil ou
+              si ton navigateur est nettoyé. Choisis un mot secret <strong>(20+ caractères)</strong> —
+              le même sur tous tes appareils. Ne le partage pas.
             </p>
             <input
               style={{ ...S.input, borderColor: !tokenValid ? '#E87070' : undefined }}
@@ -216,12 +268,12 @@ export default function SettingsModal({ state, chapters = [], vracIdeas = [], na
             )}
             {tokenChanged && (
               <div style={S.warnBox}>
-                ⚠️ Changer le mot secret déconnecte la sync existante. Tes données locales sont conservées,
-                mais la synchronisation repartira de zéro avec le nouveau mot secret.
+                ⚠️ Changer le mot secret déconnecte la sauvegarde existante. Tes données locales sont conservées,
+                mais la sauvegarde en ligne repartira de zéro avec le nouveau mot secret.
               </div>
             )}
             {state.syncStatus === 'ok' && state.lastSyncedAt && (
-              <p style={S.okMsg}>✓ Dernière sync : {new Date(state.lastSyncedAt).toLocaleString('fr-FR')}</p>
+              <p style={S.okMsg}>✓ Dernière sauvegarde : {new Date(state.lastSyncedAt).toLocaleString('fr-FR')}</p>
             )}
             {state.syncStatus === 'error' && state.syncMessage && (
               <p style={S.errMsg}>⚠ {state.syncMessage}</p>
@@ -232,7 +284,7 @@ export default function SettingsModal({ state, chapters = [], vracIdeas = [], na
               onClick={() => { handleSave(); state.syncNow?.() }}
             >
               <RefreshCw size={13} />
-              {state.syncStatus === 'syncing' ? 'Synchronisation…' : 'Synchroniser maintenant'}
+              {state.syncStatus === 'syncing' ? 'Sauvegarde…' : 'Sauvegarder maintenant'}
             </button>
           </Section>
 
@@ -263,11 +315,41 @@ export default function SettingsModal({ state, chapters = [], vracIdeas = [], na
           {/* ── Section 4 : Sécurité ───────────────────────────── */}
           <Section title="Sécurité & données" icon={<Lock size={13} color="#8B6445" />}>
 
+            {/* LOT 4F.1 — Import JSON */}
+            <div style={S.actionRow}>
+              <div>
+                <div style={S.actionTitle}>Importer une sauvegarde</div>
+                <div style={S.actionDesc}>
+                  Restaure tes données depuis un fichier JSON exporté précédemment.
+                  Remplace les données actuelles.
+                </div>
+              </div>
+              <button
+                style={S.actionBtn}
+                onClick={handleImportClick}
+                disabled={importing || !onImport}
+              >
+                <Upload size={13} />
+                {importing ? 'Import…' : 'Importer'}
+              </button>
+            </div>
+            {/* Input file caché — déclenché par handleImportClick */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".json,application/json"
+              onChange={handleFileSelected}
+              style={{ display: 'none' }}
+              aria-hidden="true"
+            />
+
             {/* Export JSON */}
             <div style={S.actionRow}>
               <div>
                 <div style={S.actionTitle}>Exporter une sauvegarde</div>
-                <div style={S.actionDesc}>Télécharge tes chapitres et idées en JSON horodaté.</div>
+                <div style={S.actionDesc}>
+                  Télécharge tes chapitres, idées, chat et profil en JSON horodaté.
+                </div>
               </div>
               <button style={{ ...S.actionBtn, ...(exportDone ? S.actionBtnOk : {}) }} onClick={handleExport}>
                 <Download size={13} />
