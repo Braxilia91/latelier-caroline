@@ -6,14 +6,12 @@ import { useMediaQuery } from './hooks/useMediaQuery'
 import { ToastProvider, useToast } from './components/ui/Toast'
 import { buildWelcomeMessage } from './lib/prompts'
 
-// ── Imports critiques (chemin de rendu initial) ──────────────────
 import Onboarding from './components/onboarding/Onboarding'
 import Header from './components/layout/Header'
 import Sidebar from './components/layout/Sidebar'
 import WritingArea from './components/writing/WritingArea'
 import CoachPanel from './components/layout/CoachPanel'
 
-// ── Modaux : chargés à la demande uniquement ─────────────────────
 const DictationModal = lazy(() => import('./components/modals/DictationModal'))
 const SettingsModal = lazy(() => import('./components/modals/SettingsModal'))
 const InspirationModal = lazy(() => import('./components/modals/InspirationModal'))
@@ -22,7 +20,6 @@ const VracModal = lazy(() => import('./components/modals/VracModal'))
 const DicoCaroModal = lazy(() => import('./components/modals/DicoCaroModal'))
 const PlanModal = lazy(() => import('./components/modals/PlanModal'))
 const PackOpeningModal = lazy(() => import('./components/modals/PackOpeningModal'))
-// LOT 4C.3 — Mémoire de Léa : modale dédiée pour visibilité + contrôle utilisateur
 const LeaMemoryModal = lazy(() => import('./components/modals/LeaMemoryModal'))
 
 function AppSkeleton() {
@@ -161,8 +158,6 @@ function AppInner() {
     }
   }, [db.editorTheme])
 
-  // LOT 3.5 — Applique l'échelle du chat Léa sur la racine HTML
-  // Les éléments du coach panel utilisent calc(... * var(--chat-scale))
   useEffect(() => {
     const v = (typeof db.chatScale === 'number' && db.chatScale > 0) ? db.chatScale : 1
     document.documentElement.style.setProperty('--chat-scale', String(v))
@@ -201,7 +196,6 @@ function AppInner() {
     updateLeaMemory: db.updateLeaMemory,
   })
 
-  // ── Auto-ouvre le drawer CoachPanel sur mobile quand Léa répond ──
   useEffect(() => {
     if (isMobile && coach.loading && !coachOpen) {
       setCoachOpen(true)
@@ -226,7 +220,7 @@ function AppInner() {
     if (editorFont !== undefined) await db.setEditorFont(editorFont)
     if (editorTheme !== undefined) await db.setEditorTheme(editorTheme)
     if (editorWidth !== undefined) await db.setEditorWidth(editorWidth)
-    if (chatScale  !== undefined) await db.setChatScale(chatScale)   // LOT 3.5
+    if (chatScale  !== undefined) await db.setChatScale(chatScale)
     toast('Réglages sauvegardés ✓', 'success')
   }
 
@@ -253,7 +247,7 @@ function AppInner() {
     })
   }, [db, toast])
 
-  // Sync au boot (existant)
+  // Sync au boot
   useEffect(() => {
     if (db.ready && db.syncToken && import.meta.env.VITE_SYNC_WORKER_URL) {
       db.syncNow()
@@ -265,17 +259,16 @@ function AppInner() {
     if (!db.ready || !db.syncToken || !import.meta.env.VITE_SYNC_WORKER_URL) return
     const intervalId = setInterval(() => {
       db.syncNow()
-    }, 5 * 60 * 1000)   // 5 minutes
+    }, 5 * 60 * 1000)
     return () => clearInterval(intervalId)
   }, [db.ready, db.syncToken]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // LOT 4F.1 — Sync best-effort à la mise en arrière-plan / fermeture
-  // (visibilitychange est plus fiable que beforeunload sur PWA installée)
+  // LOT 4F.1 — Sync best-effort sur visibilitychange
   useEffect(() => {
     if (!db.ready || !db.syncToken || !import.meta.env.VITE_SYNC_WORKER_URL) return
     const handler = () => {
       if (document.hidden) {
-        db.syncNow()  // fire-and-forget, pas d'await
+        db.syncNow()
       }
     }
     document.addEventListener('visibilitychange', handler)
@@ -356,8 +349,8 @@ function AppInner() {
           chapters={db.chapters} vracIdeas={db.vracIdeas} name={db.name}
           onClose={() => setModal(null)} onSave={handleSaveSettings} onReset={db.resetAllData}
           onOpenMemory={() => setModal('memory')}
-          onImport={db.importFromFile}             /* LOT 4F.1 */
-          buildLocalBackup={db.buildLocalBackup}   /* LOT 4F.1 */
+          onImport={db.importFromFile}
+          buildLocalBackup={db.buildLocalBackup}
         />}
         {modal === 'memory' && <LeaMemoryModal
           leaMemory={db.leaMemory}
@@ -391,7 +384,6 @@ function AppInner() {
         const lastSync = db.lastSyncedAt ? new Date(db.lastSyncedAt) : null
         const ageMin   = lastSync ? Math.floor((Date.now() - lastSync.getTime()) / 60000) : null
 
-        // Détermine l'état + le libellé
         let state = 'ok'
         let label = ''
 
@@ -421,7 +413,7 @@ function AppInner() {
           ? { bg: 'rgba(61,107,69,.12)',  border: '#6B8F71', text: '#3D6B45', dot: '#6B8F71' }
           : { bg: 'rgba(180,83,9,.12)',   border: '#C4956A', text: '#92400E', dot: '#C4956A' }
 
-        const isClickable = isOnline && !hasToken   // CTA "Configure" si pas de token
+        const isClickable = isOnline && !hasToken
 
         return (
           <div
