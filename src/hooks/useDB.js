@@ -1,399 +1,455 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
-import {
-  getKV, setKV,
-  getChapters, saveChapter, deleteChapter, restoreChapter as dbRestoreChapter,
-  getChatHistoryRecent, addChatMessage, clearChatHistory, deleteChatMessage,
-  getVrac, addVrac, updateVrac, deleteVrac,
-  exportAllData, resetAllData, importSnapshot, getStorageEstimate,
-  buildLocalBackup,
-} from '../lib/db'
-import { pushSnapshot, pullSnapshot, buildSnapshot, whoWins } from '../lib/sync'
+import { useState, useCallback, useEffect, useRef, lazy, Suspense } from 'react'
+import './styles/globals.css'
+import { useAppState } from './hooks/useDB'
+import { useCoach } from './hooks/useCoach'
+import { useMediaQuery } from './hooks/useMediaQuery'
+import { ToastProvider, useToast } from './components/ui/Toast'
+import { buildWelcomeMessage } from './lib/prompts'
 
-export function useAppState() {
-  const [ready,          setReady]          = useState(false)
-  const [name,           setNameState]      = useState('')
-  const [apiKey,         setApiKeyState]    = useState('')
-  const [openAiKey,      setOAIKey]         = useState('')
-  const [leaVoice,       setLeaVoice]       = useState('nova')
-  const [streak,         setStreakState]    = useState(0)
-  const [sessions,       setSessionsState]  = useState(0)
-  const [lastSession,    setLastSession]    = useState('')
-  const [moodToday,      setMoodTodayState] = useState('')
-  const [chapters,       setChapters]       = useState([])
-  const chaptersRef = useRef([])
-  const [currentId,      setCurrentId]      = useState(null)
-  const currentIdRef = useRef(null)
-  const [chatHistory,    setChatHistory]    = useState([])
-  const [carolineProfile, setProfileState] = useState(null)
-  const [leaMemory,      setLeaMemoryState] = useState(null)
-  const [syncToken,      setSyncTokenState] = useState('')
-  const [syncStatus,     setSyncStatus]     = useState('idle')
-  const [syncMessage,    setSyncMessage]    = useState('')
-  const [lastSyncedAt,   setLastSyncedAt]   = useState(null)
-  const [vracIdeas,      setVracIdeas]      = useState([])
-  const [editorFont,     setEditorFontState]  = useState('m')
-  const [editorTheme,    setEditorThemeState] = useState('jour')
-  const [editorWidth,    setEditorWidthState] = useState('confort')
-  const [firstLaunch,    setFirstLaunchState] = useState(false)
-  const [chatScale,      setChatScaleState]   = useState(1)
-  const [ambientSound,   setAmbientSoundState]  = useState(null)
-  const [ambientVolume,  setAmbientVolumeState] = useState(0.28)
-  const [storageWarning, setStorageWarning] = useState(null)
-  const recordSessionLockRef = useRef(false)
-  const lastSessionRef = useRef('')
+import Onboarding from './components/onboarding/Onboarding'
+import Header from './components/layout/Header'
+import Sidebar from './components/layout/Sidebar'
+import WritingArea from './components/writing/WritingArea'
+import CoachPanel from './components/layout/CoachPanel'
+
+const DictationModal = lazy(() => import('./components/modals/DictationModal'))
+const SettingsModal = lazy(() => import('./components/modals/SettingsModal'))
+const InspirationModal = lazy(() => import('./components/modals/InspirationModal'))
+const ExportModal = lazy(() => import('./components/modals/ExportModal'))
+const VracModal = lazy(() => import('./components/modals/VracModal'))
+const DicoCaroModal = lazy(() => import('./components/modals/DicoCaroModal'))
+const PlanModal = lazy(() => import('./components/modals/PlanModal'))
+const PackOpeningModal = lazy(() => import('./components/modals/PackOpeningModal'))
+const LeaMemoryModal = lazy(() => import('./components/modals/LeaMemoryModal'))
+
+function AppSkeleton() {
+  const pulse = {
+    background: 'linear-gradient(90deg,#EDE7DE 25%,#E5DDD4 50%,#EDE7DE 75%)',
+    backgroundSize: '200% 100%',
+    animation: 'skeletonPulse 1.4s ease infinite',
+    borderRadius: 4,
+  }
+  return (
+    <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#FAF7F2' }}>
+      <style>{`@keyframes skeletonPulse{0%{background-position:200% 0}100%{background-position:-200% 0}}`}</style>
+      <div style={{ height: 52, borderBottom: '1px solid #EDE7DE', display: 'flex', alignItems: 'center', padding: '0 16px', gap: 10, flexShrink: 0 }}>
+        <div style={{ ...pulse, width: 28, height: 28, borderRadius: 6 }} />
+        <div style={{ ...pulse, width: 110, height: 16 }} />
+        <div style={{ flex: 1 }} />
+        <div style={{ ...pulse, width: 28, height: 28, borderRadius: 6 }} />
+        <div style={{ ...pulse, width: 28, height: 28, borderRadius: 6 }} />
+        <div style={{ ...pulse, width: 28, height: 28, borderRadius: 6 }} />
+        <div style={{ ...pulse, width: 28, height: 28, borderRadius: '50%' }} />
+      </div>
+      <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+        <div style={{ width: 200, borderRight: '1px solid #EDE7DE', padding: '16px 12px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ ...pulse, height: 13, width: '55%' }} />
+          <div style={{ ...pulse, height: 32, borderRadius: 6 }} />
+          <div style={{ ...pulse, height: 32, borderRadius: 6, opacity: .6 }} />
+          <div style={{ ...pulse, height: 32, borderRadius: 6, opacity: .4 }} />
+        </div>
+        <div style={{ flex: 1, padding: '48px 60px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div style={{ ...pulse, height: 22, width: '35%' }} />
+          <div style={{ ...pulse, height: 14, width: '92%' }} />
+          <div style={{ ...pulse, height: 14, width: '78%' }} />
+          <div style={{ ...pulse, height: 14, width: '85%' }} />
+          <div style={{ ...pulse, height: 14, width: '60%' }} />
+        </div>
+        <div style={{ width: 280, borderLeft: '1px solid #EDE7DE', padding: '16px 12px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ ...pulse, height: 13, width: '45%' }} />
+          <div style={{ ...pulse, height: 60, borderRadius: 8 }} />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function AppInner() {
+  const toast = useToast()
+  const db = useAppState()
+
+  const [modal, setModal] = useState(null)
+  const [moodOpen, setMoodOpen] = useState(false)
+  const [ambientOpen, setAmbientOpen] = useState(false)
+  const [showPack, setShowPack] = useState(false)
+  const [isOnline, setIsOnline] = useState(navigator.onLine)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [coachOpen, setCoachOpen] = useState(false)
+
+  const isMobile = useMediaQuery('(max-width: 767px)')
+
+  const openSidebar = () => { setSidebarOpen(true); setCoachOpen(false) }
+  const openCoach = () => { setCoachOpen(true); setSidebarOpen(false) }
+
+  const audioRef = useRef(null)
+  const [ambientPlaying, setAmbientPlaying] = useState(false)
+
+  const startAmbient = useCallback((sound, volume) => {
+    if (audioRef.current) {
+      audioRef.current.pause()
+      audioRef.current.src = ''
+      audioRef.current = null
+    }
+    if (!sound) return
+    const audio = new Audio(`/sounds/${sound}.mp3`)
+    audio.loop = true
+    audio.volume = Math.max(0, Math.min(1, volume ?? 0.28))
+    audio.play().catch(e => console.warn('[Ambiance] lecture bloquée:', e))
+    audioRef.current = audio
+  }, [])
+
+  const handleAmbientChange = useCallback((sound) => {
+    db.setAmbientSound(sound)
+    if (sound === null) {
+      audioRef.current?.pause()
+      if (audioRef.current) {
+        audioRef.current.src = ''
+        audioRef.current = null
+      }
+      setAmbientPlaying(false)
+    } else {
+      startAmbient(sound, db.ambientVolume)
+      setAmbientPlaying(true)
+    }
+  }, [db.setAmbientSound, db.ambientVolume, startAmbient])
+
+  const handleVolumeChange = useCallback((v) => {
+    db.setAmbientVolume(v)
+    if (audioRef.current) {
+      audioRef.current.volume = Math.max(0, Math.min(1, v))
+    }
+  }, [db.setAmbientVolume])
 
   useEffect(() => {
-    ;(async () => {
-      let storagePersisted = false
-      if (navigator.storage?.persist) {
-        try {
-          storagePersisted = await navigator.storage.persist()
-        } catch { /* silencieux si refusé */ }
+    return () => {
+      audioRef.current?.pause()
+      if (audioRef.current) {
+        audioRef.current.src = ''
       }
-      if (!storagePersisted) {
-        console.info('[Storage] Mode non-persistant. Le navigateur peut évincer les données en cas de pression mémoire.')
-      }
-
-      const [n, k, oai, lv, st, sess, last, mood, chs, chat, prof, mem, vrac, stok, lsa, ef, et, ew, fls, snd, vol, cs] = await Promise.all([
-        getKV('name',             ''),
-        getKV('apiKey',           ''),
-        getKV('openAiKey',        ''),
-        getKV('leaVoice',         'nova'),
-        getKV('streak',           0),
-        getKV('sessions',         0),
-        getKV('lastSession',      ''),
-        getKV('moodToday',        ''),
-        getChapters(),
-        getChatHistoryRecent(200),
-        getKV('caroline_profile', null),
-        getKV('lea_memory',       null),
-        getVrac(),
-        getKV('syncToken',        ''),
-        getKV('lastSyncedAt',     null),
-        getKV('editorFont',       'm'),
-        getKV('editorTheme',      'jour'),
-        getKV('editorWidth',      'confort'),
-        getKV('firstLaunchSeen',  false),
-        getKV('ambientSound',     null),
-        getKV('ambientVolume',    0.28),
-        getKV('chatScale',        1),
-      ])
-
-      setNameState(n); setApiKeyState(k); setOAIKey(oai); setLeaVoice(lv)
-      setStreakState(st); setSessionsState(sess); setLastSession(last)
-
-      const today = new Date().toDateString()
-      setMoodTodayState(mood === today ? await getKV('moodValue', '') : '')
-
-      setChapters(chs)
-      if (chs.length > 0) setCurrentId(chs[0].id)
-      setChatHistory(chat)
-      setProfileState(prof)
-      setLeaMemoryState(mem)
-      setVracIdeas(vrac)
-      setSyncTokenState(stok)
-      setLastSyncedAt(lsa)
-      setEditorFontState(ef)
-      setEditorThemeState(et)
-      setEditorWidthState(ew)
-      setFirstLaunchState(!fls)
-      setAmbientSoundState(snd)
-      setAmbientVolumeState(vol)
-      setChatScaleState(typeof cs === 'number' && cs > 0 ? cs : 1)
-      setReady(true)
-
-      try {
-        const est = await getStorageEstimate()
-        if (est && est.ratio > 0.85) {
-          setStorageWarning({
-            ratio: est.ratio,
-            usageMB: Math.round(est.usage / 1024 / 1024),
-            quotaMB: Math.round(est.quota / 1024 / 1024),
-          })
-        }
-      } catch { /* tolérant */ }
-    })()
-  }, [])
-
-  useEffect(() => { chaptersRef.current  = chapters  }, [chapters])
-  useEffect(() => { currentIdRef.current = currentId }, [currentId])
-  useEffect(() => { lastSessionRef.current = lastSession }, [lastSession])
-
-  const setName   = useCallback(async (v) => { setNameState(v);   await setKV('name',      v) }, [])
-  const setApiKey = useCallback(async (v) => { setApiKeyState(v); await setKV('apiKey',     v) }, [])
-  const setOaiKey = useCallback(async (v) => { setOAIKey(v);      await setKV('openAiKey',  v) }, [])
-  const setVoice  = useCallback(async (v) => { setLeaVoice(v);    await setKV('leaVoice',   v) }, [])
-
-  const setEditorFont  = useCallback(async (v) => { setEditorFontState(v);  await setKV('editorFont',  v) }, [])
-  const setEditorTheme = useCallback(async (v) => { setEditorThemeState(v); await setKV('editorTheme', v) }, [])
-  const setEditorWidth = useCallback(async (v) => { setEditorWidthState(v); await setKV('editorWidth', v) }, [])
-  const setChatScale   = useCallback(async (v) => {
-    const safe = typeof v === 'number' && v > 0 ? v : 1
-    setChatScaleState(safe)
-    await setKV('chatScale', safe)
-  }, [])
-
-  const setAmbientSound  = useCallback(async (v) => { setAmbientSoundState(v);  await setKV('ambientSound',  v) }, [])
-  const setAmbientVolume = useCallback(async (v) => { setAmbientVolumeState(v); await setKV('ambientVolume', v) }, [])
-  const markFirstLaunchSeen = useCallback(async () => {
-    setFirstLaunchState(false)
-    await setKV('firstLaunchSeen', true)
-  }, [])
-
-  const setMood = useCallback(async (v) => {
-    setMoodTodayState(v)
-    await setKV('moodValue', v)
-    await setKV('moodToday', new Date().toDateString())
-  }, [])
-
-  const setSyncToken = useCallback(async (v) => {
-    setSyncTokenState(v)
-    await setKV('syncToken', v)
-  }, [])
-
-  const syncNow = useCallback(async () => {
-    const token = await getKV('syncToken', '')
-    if (!token) { setSyncMessage('Configure un token dans Réglages'); setSyncStatus('error'); return }
-
-    setSyncStatus('syncing'); setSyncMessage('')
-    try {
-      const kvData = {
-        name:              await getKV('name',             ''),
-        leaVoice:          await getKV('leaVoice',         'nova'),
-        streak:            await getKV('streak',           0),
-        sessions:          await getKV('sessions',         0),
-        lastSession:       await getKV('lastSession',      ''),
-        moodToday:         await getKV('moodToday',        ''),
-        moodValue:         await getKV('moodValue',        ''),
-        caroline_profile:  await getKV('caroline_profile', null),
-        lea_memory:        await getKV('lea_memory',       null),
-        lastSyncedAt:      await getKV('lastSyncedAt',     null),
-      }
-      const [chapters, vrac, chat] = await Promise.all([
-        getChapters(),
-        getVrac(),
-        getChatHistoryRecent(500),
-      ])
-      const local = { ...buildSnapshot({ chapters, vrac, kvData }), chat }
-
-      const remote = await pullSnapshot({ token })
-
-      const winner = whoWins(local.syncedAt, remote.syncedAt)
-
-      if (winner === 'remote' && !remote.empty) {
-        const ok = await importSnapshot(remote)
-        if (!ok) {
-          setSyncStatus('error')
-          setSyncMessage('Snapshot distant corrompu — import annulé, données locales préservées')
-          return
-        }
-        const [chs, v, ch] = await Promise.all([getChapters(), getVrac(), getChatHistoryRecent(200)])
-        setChapters(chs)
-        if (chs.length > 0) setCurrentId(chs[0].id)
-        setVracIdeas(v)
-        setChatHistory(ch)
-        setLastSyncedAt(remote.syncedAt)
-        setSyncStatus('ok'); setSyncMessage(`Données mises à jour depuis le cloud ✓`)
-      } else if (winner === 'local' || remote.empty) {
-        await pushSnapshot({ token, snapshot: local })
-        await setKV('lastSyncedAt', local.syncedAt)
-        setLastSyncedAt(local.syncedAt)
-        setSyncStatus('ok'); setSyncMessage(`Sauvegardé dans le cloud ✓`)
-      } else {
-        setSyncStatus('ok'); setSyncMessage(`Déjà synchronisé ✓`)
-      }
-    } catch (err) {
-      setSyncStatus('error')
-      setSyncMessage(err.message || 'Erreur de synchronisation')
     }
   }, [])
 
-  const setCarolineProfile = useCallback(async (profile) => {
-    setProfileState(profile)
-    await setKV('caroline_profile', profile)
-  }, [])
-
-  const updateLeaMemory = useCallback(async (fieldsOrFn) => {
-    setLeaMemoryState(prev => {
-      const patch = typeof fieldsOrFn === 'function' ? fieldsOrFn(prev) : fieldsOrFn
-      if (!patch || typeof patch !== 'object') return prev
-      const next = { ...(prev || {}), ...patch, lastUpdated: new Date().toISOString() }
-      setKV('lea_memory', next)
-      return next
-    })
-  }, [])
-
-  const resetLeaMemory = useCallback(async () => {
-    setLeaMemoryState(null)
-    await setKV('lea_memory', null)
-  }, [])
-
-  const recordSession = useCallback(async () => {
-    if (recordSessionLockRef.current) return
-    const today = new Date().toDateString()
-    if (lastSessionRef.current === today) return
-    recordSessionLockRef.current = true
-    try {
-      const yesterday = new Date(Date.now() - 86400000).toDateString()
-      const newStreak   = (lastSessionRef.current === yesterday) ? streak + 1 : 1
-      const newSessions = sessions + 1
-      lastSessionRef.current = today
-      setStreakState(newStreak); setSessionsState(newSessions); setLastSession(today)
-      await Promise.all([
-        setKV('streak',      newStreak),
-        setKV('sessions',    newSessions),
-        setKV('lastSession', today),
-      ])
-    } finally {
-      recordSessionLockRef.current = false
+  useEffect(() => {
+    if (db.ready && db.isSetup && db.firstLaunch) {
+      setShowPack(true)
     }
-  }, [streak, sessions])
+  }, [db.ready, db.isSetup, db.firstLaunch])
 
-  const createChapter = useCallback(async () => {
-    const id  = `ch_${Date.now()}`
-    const ch  = {
-      id, title: 'Nouveau chapitre', content: '', order: chaptersRef.current.length,
-      intention: '', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+  useEffect(() => {
+    const goOnline = () => {
+      setIsOnline(true)
+      toast('Connexion rétablie — Léa est de nouveau disponible 🌿', 'success')
     }
-    await saveChapter(ch)
-    setChapters(prev => [...prev, ch])
-    setCurrentId(id)
-    return id
-  }, [])
-
-  const updateChapter = useCallback(async (id, fields) => {
-    setChapters(prev => prev.map(c => c.id === id ? { ...c, ...fields } : c))
-    const ch = chaptersRef.current.find(c => c.id === id)
-    if (ch) await saveChapter({ ...ch, ...fields })
-  }, [])
-
-  const removeChapter = useCallback(async (id) => {
-    await deleteChapter(id)
-    setChapters(prev => {
-      const next = prev.filter(c => c.id !== id)
-      if (currentIdRef.current === id) setCurrentId(next[0]?.id ?? null)
-      return next
-    })
-  }, [])
-
-  const restoreChapter = useCallback(async (chapter) => {
-    if (!chapter?.id) return false
-    const ok = await dbRestoreChapter(chapter)
-    if (!ok) return false
-    setChapters(prev => {
-      if (prev.some(c => c.id === chapter.id)) return prev
-      return [...prev, chapter].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-    })
-    setCurrentId(chapter.id)
-    return true
-  }, [])
-
-  const reorderChapters = useCallback(async (newOrder) => {
-    const reordered = newOrder.map((ch, i) => ({ ...ch, order: i }))
-    setChapters(reordered)
-    await Promise.all(reordered.map(saveChapter))
-  }, [])
-
-  const CHAT_RAM_CAP = 200
-  const addMessage = useCallback(async (msg) => {
-    const id = await addChatMessage(msg)
-    setChatHistory(prev => {
-      const next = [...prev, { ...msg, id }]
-      return next.length > CHAT_RAM_CAP ? next.slice(-CHAT_RAM_CAP) : next
-    })
-    return id
-  }, [])
-
-  const clearChat = useCallback(async () => {
-    await clearChatHistory()
-    setChatHistory([])
-  }, [])
-
-  const removeMessage = useCallback(async (id) => {
-    if (id == null) return
-    await deleteChatMessage(id)
-    setChatHistory(prev => prev.filter(m => m.id !== id))
-  }, [])
-
-  const addVracIdea = useCallback(async (idea) => {
-    const item = await addVrac(idea)
-    setVracIdeas(prev => [item, ...prev])
-    return item
-  }, [])
-
-  const markVracUsed = useCallback(async (id) => {
-    await updateVrac(id, { used: true })
-    setVracIdeas(prev => prev.map(v => v.id === id ? { ...v, used: true } : v))
-  }, [])
-
-  const removeVracIdea = useCallback(async (id) => {
-    await deleteVrac(id)
-    setVracIdeas(prev => prev.filter(v => v.id !== id))
-  }, [])
-
-  // LOT 4F.1 — Import d'une sauvegarde depuis fichier JSON
-  const importFromFile = useCallback(async (file) => {
-    if (!file) return { ok: false, message: 'Aucun fichier sélectionné' }
-    try {
-      const text = await file.text()
-      let parsed
-      try { parsed = JSON.parse(text) }
-      catch { return { ok: false, message: 'Fichier JSON invalide' } }
-
-      const ok = await importSnapshot(parsed)
-      if (!ok) return { ok: false, message: 'Format de sauvegarde non reconnu ou corrompu' }
-
-      const [chs, v, ch, prof, mem, lsa] = await Promise.all([
-        getChapters(),
-        getVrac(),
-        getChatHistoryRecent(200),
-        getKV('caroline_profile', null),
-        getKV('lea_memory',       null),
-        getKV('lastSyncedAt',     null),
-      ])
-      setChapters(chs)
-      if (chs.length > 0) setCurrentId(chs[0].id)
-      setVracIdeas(v)
-      setChatHistory(ch)
-      setProfileState(prof)
-      setLeaMemoryState(mem)
-      setLastSyncedAt(lsa)
-
-      return { ok: true, message: 'Sauvegarde importée avec succès' }
-    } catch (err) {
-      return { ok: false, message: err.message || 'Erreur lors de l\'import' }
+    const goOffline = () => {
+      setIsOnline(false)
+      toast('Connexion perdue — tu peux continuer à écrire, Léa revient dès que possible.', 'info')
+    }
+    window.addEventListener('online', goOnline)
+    window.addEventListener('offline', goOffline)
+    return () => {
+      window.removeEventListener('online', goOnline)
+      window.removeEventListener('offline', goOffline)
     }
   }, [])
 
-  const currentChapter = chapters.find(c => c.id === currentId) ?? null
-  const isSetup        = name.trim().length > 0
-  const totalWords     = chapters.reduce(
-    (acc, c) => acc + (c.content?.split(/\s+/).filter(Boolean).length ?? 0), 0
-  )
-  const unusedVrac = vracIdeas.filter(v => !v.used)
+  useEffect(() => {
+    if (db.editorTheme) {
+      document.documentElement.setAttribute('data-theme', db.editorTheme)
+    }
+  }, [db.editorTheme])
 
-  return {
-    ready, isSetup,
-    name,    setName,
-    apiKey,  setApiKey,
-    openAiKey, setOaiKey,
-    leaVoice, setVoice,
-    streak, sessions, recordSession,
-    moodToday, setMood,
-    chapters, currentId, setCurrentId,
-    currentChapter, totalWords,
-    createChapter, updateChapter, removeChapter, restoreChapter, reorderChapters,
-    chatHistory, addMessage, clearChat, removeMessage,
-    carolineProfile, setCarolineProfile,
-    leaMemory, updateLeaMemory, resetLeaMemory,
-    vracIdeas, unusedVrac, addVracIdea, markVracUsed, removeVracIdea,
-    syncToken, setSyncToken, syncStatus, syncMessage, lastSyncedAt, syncNow,
-    editorFont, setEditorFont, editorTheme, setEditorTheme, editorWidth, setEditorWidth,
-    chatScale, setChatScale,
-    firstLaunch, markFirstLaunchSeen,
-    ambientSound, setAmbientSound, ambientVolume, setAmbientVolume,
-    storageWarning, dismissStorageWarning: () => setStorageWarning(null),
-    exportAllData, resetAllData, importSnapshot,
-    importFromFile, buildLocalBackup,
+  useEffect(() => {
+    const v = (typeof db.chatScale === 'number' && db.chatScale > 0) ? db.chatScale : 1
+    document.documentElement.style.setProperty('--chat-scale', String(v))
+  }, [db.chatScale])
+
+  useEffect(() => {
+    if (!isMobile) {
+      setSidebarOpen(false)
+      setCoachOpen(false)
+    }
+  }, [isMobile])
+
+  useEffect(() => {
+    if (!sidebarOpen && !coachOpen) return
+    const handler = (e) => {
+      if (e.key === 'Escape') {
+        setSidebarOpen(false)
+        setCoachOpen(false)
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [sidebarOpen, coachOpen])
+
+  const coach = useCoach({
+    apiKey: db.apiKey,
+    openAiKey: db.openAiKey,
+    name: db.name,
+    moodToday: db.moodToday,
+    currentChapter: db.currentChapter,
+    leaVoice: db.leaVoice,
+    addMessage: db.addMessage,
+    chatHistory: db.chatHistory,
+    carolineProfile: db.carolineProfile,
+    leaMemory: db.leaMemory,
+    updateLeaMemory: db.updateLeaMemory,
+  })
+
+  useEffect(() => {
+    if (isMobile && coach.loading && !coachOpen) {
+      setCoachOpen(true)
+      setSidebarOpen(false)
+    }
+  }, [coach.loading, isMobile, coachOpen])
+
+  const handleSetupComplete = async ({ name, apiKey, profile }) => {
+    await db.setName(name)
+    if (apiKey) await db.setApiKey(apiKey)
+    if (profile) await db.setCarolineProfile(profile)
+    await db.createChapter()
+    toast(`Bienvenue ${name} ! Ton atelier est prêt 🌿`, 'success')
   }
+
+  const handleSaveSettings = async ({ name, apiKey, openAiKey, leaVoice, syncToken, editorFont, editorTheme, editorWidth, chatScale }) => {
+    await db.setName(name)
+    await db.setApiKey(apiKey)
+    await db.setOaiKey(openAiKey)
+    await db.setVoice(leaVoice)
+    if (syncToken !== undefined) await db.setSyncToken(syncToken)
+    if (editorFont !== undefined) await db.setEditorFont(editorFont)
+    if (editorTheme !== undefined) await db.setEditorTheme(editorTheme)
+    if (editorWidth !== undefined) await db.setEditorWidth(editorWidth)
+    if (chatScale  !== undefined) await db.setChatScale(chatScale)
+    toast('Réglages sauvegardés ✓', 'success')
+  }
+
+  const handleInsertDictation = useCallback((text) => {
+    if (!db.currentChapter) return
+    const newContent = (db.currentChapter.content || '') + (db.currentChapter.content ? ' ' : '') + text
+    db.updateChapter(db.currentId, { content: newContent })
+    toast('Texte inséré ✓', 'success')
+  }, [db])
+
+  const handleRemoveChapter = useCallback((id) => {
+    const chapter = db.chapters.find(c => c.id === id)
+    if (!chapter) {
+      db.removeChapter(id)
+      return
+    }
+    db.removeChapter(id)
+    toast(`Chapitre "${chapter.title || 'sans titre'}" supprimé`, 'info', 4000, {
+      label: 'Annuler',
+      fn: () => {
+        db.restoreChapter(chapter)
+        toast('Chapitre restauré ✓', 'success')
+      },
+    })
+  }, [db, toast])
+
+  useEffect(() => {
+    if (db.ready && db.syncToken && import.meta.env.VITE_SYNC_WORKER_URL) {
+      db.syncNow()
+    }
+  }, [db.ready]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // LOT 4F.1 — Auto-sync silencieuse toutes les 5 min (résultat ignoré → pas de toast)
+  useEffect(() => {
+    if (!db.ready || !db.syncToken || !import.meta.env.VITE_SYNC_WORKER_URL) return
+    const intervalId = setInterval(() => {
+      db.syncNow()
+    }, 5 * 60 * 1000)
+    return () => clearInterval(intervalId)
+  }, [db.ready, db.syncToken]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // LOT 4F.1 — Sync best-effort sur visibilitychange (silencieuse aussi)
+  useEffect(() => {
+    if (!db.ready || !db.syncToken || !import.meta.env.VITE_SYNC_WORKER_URL) return
+    const handler = () => {
+      if (document.hidden) {
+        db.syncNow()
+      }
+    }
+    document.addEventListener('visibilitychange', handler)
+    return () => document.removeEventListener('visibilitychange', handler)
+  }, [db.ready, db.syncToken]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (!db.ready) return <AppSkeleton />
+  if (!db.isSetup) return <Onboarding onComplete={handleSetupComplete} />
+
+  return (
+    <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <Header
+        name={db.name} moodToday={db.moodToday} setMood={db.setMood}
+        streak={db.streak} moodOpen={moodOpen} setMoodOpen={setMoodOpen}
+        onDictate={() => setModal('dictation')} onPlan={() => setModal('plan')}
+        onExport={() => setModal('export')} onSettings={() => setModal('settings')}
+        onInspir={() => setModal('inspir')} onVocab={() => setModal('vocab')}
+        ambientSound={db.ambientSound}
+        ambientPlaying={ambientPlaying}
+        onAmbientChange={handleAmbientChange}
+        ambientVolume={db.ambientVolume}
+        onVolumeChange={handleVolumeChange}
+        ambientOpen={ambientOpen}
+        setAmbientOpen={setAmbientOpen}
+        isMobile={isMobile}
+        onMenuClick={openSidebar}
+        onCoachClick={openCoach}
+      />
+      <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+        <Sidebar
+          chapters={db.chapters} currentId={db.currentId} setCurrentId={db.setCurrentId}
+          createChapter={db.createChapter} removeChapter={handleRemoveChapter}
+          totalWords={db.totalWords} streak={db.streak}
+          isMobile={isMobile} isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)}
+        />
+        <WritingArea
+          chapter={db.currentChapter} updateChapter={db.updateChapter}
+          recordSession={db.recordSession}
+          editorFont={db.editorFont} editorTheme={db.editorTheme} editorWidth={db.editorWidth}
+        />
+        <CoachPanel
+          coach={{ ...coach, clearChat: db.clearChat, removeMessage: db.removeMessage }}
+          hasKey={!!db.apiKey}
+          isOnline={isOnline}
+          currentChapter={db.currentChapter}
+          chatHistory={db.chatHistory}
+          welcomeMsg={buildWelcomeMessage({
+            name: db.name, leaMemory: db.leaMemory, currentChapter: db.currentChapter,
+          })}
+          onOpenVrac={() => setModal('vrac')}
+          isMobile={isMobile} isOpen={coachOpen} onClose={() => setCoachOpen(false)}
+        />
+      </div>
+
+      {isMobile && (sidebarOpen || coachOpen) && (
+        <div
+          onClick={() => { setSidebarOpen(false); setCoachOpen(false) }}
+          style={{
+            position: 'fixed', top: 52, left: 0, right: 0, bottom: 0,
+            background: 'rgba(0,0,0,0.4)', zIndex: 99, transition: 'opacity .25s',
+          }}
+          aria-label="Fermer le panneau"
+          role="button"
+        />
+      )}
+
+      <Suspense fallback={null}>
+        {modal === 'plan' && <PlanModal chapters={db.chapters} updateChapter={db.updateChapter} onClose={() => setModal(null)} />}
+        {modal === 'dictation' && <DictationModal onClose={() => setModal(null)} onInsert={handleInsertDictation} />}
+        {modal === 'settings' && <SettingsModal
+          state={{
+            name: db.name, apiKey: db.apiKey, openAiKey: db.openAiKey, leaVoice: db.leaVoice,
+            syncToken: db.syncToken, syncStatus: db.syncStatus, syncMessage: db.syncMessage,
+            lastSyncedAt: db.lastSyncedAt, syncNow: db.syncNow,
+            editorFont: db.editorFont, editorTheme: db.editorTheme, editorWidth: db.editorWidth,
+            chatScale: db.chatScale,
+          }}
+          chapters={db.chapters} vracIdeas={db.vracIdeas} name={db.name}
+          onClose={() => setModal(null)} onSave={handleSaveSettings} onReset={db.resetAllData}
+          onOpenMemory={() => setModal('memory')}
+          onImport={db.importFromFile}
+          buildLocalBackup={db.buildLocalBackup}
+          resetSyncStatus={db.resetSyncStatus}             /* LOT 4F.1.2 */
+        />}
+        {modal === 'memory' && <LeaMemoryModal
+          leaMemory={db.leaMemory}
+          updateLeaMemory={db.updateLeaMemory}
+          resetLeaMemory={db.resetLeaMemory}
+          onClose={() => setModal(null)}
+        />}
+        {modal === 'inspir' && <InspirationModal onClose={() => setModal(null)} onSendToCoach={coach.sendMessage} hasKey={!!db.apiKey} />}
+        {modal === 'export' && <ExportModal chapters={db.chapters} name={db.name} onClose={() => setModal(null)} />}
+        {modal === 'vocab' && <DicoCaroModal onClose={() => setModal(null)} coach={coach} hasKey={!!db.apiKey} currentChapter={db.currentChapter} />}
+        {modal === 'vrac' && (
+          <VracModal
+            onClose={() => setModal(null)} vracIdeas={db.vracIdeas}
+            addVracIdea={db.addVracIdea} markVracUsed={db.markVracUsed} removeVracIdea={db.removeVracIdea}
+            currentChapter={db.currentChapter} onInjectToLea={coach.injectVrac} hasKey={!!db.apiKey}
+          />
+        )}
+        {showPack && (
+          <PackOpeningModal
+            onClose={async () => {
+              await db.markFirstLaunchSeen()
+              setShowPack(false)
+            }}
+          />
+        )}
+      </Suspense>
+
+      {!isMobile && (() => {
+        const hasToken = !!db.syncToken
+        const lastSync = db.lastSyncedAt ? new Date(db.lastSyncedAt) : null
+        const ageMin   = lastSync ? Math.floor((Date.now() - lastSync.getTime()) / 60000) : null
+
+        let state = 'ok'
+        let label = ''
+
+        if (!isOnline) {
+          state = 'warn'
+          label = 'Hors ligne — sauvegardé localement'
+        } else if (!hasToken) {
+          state = 'warn'
+          label = '⚠ Sauvegarde en ligne inactive — Configure dans Réglages'
+        } else if (!lastSync) {
+          state = 'warn'
+          label = '⚠ Première sauvegarde en attente'
+        } else if (ageMin < 1) {
+          label = '✓ Sauvegardé à l\'instant'
+        } else if (ageMin < 60) {
+          label = `✓ Sauvegardé il y a ${ageMin} min`
+        } else if (ageMin < 60 * 24) {
+          const h = Math.floor(ageMin / 60)
+          label = `✓ Sauvegardé il y a ${h} h`
+        } else {
+          const d = Math.floor(ageMin / (60 * 24))
+          state = 'warn'
+          label = `⚠ Pas de sauvegarde depuis ${d} jour${d > 1 ? 's' : ''}`
+        }
+
+        const colors = state === 'ok'
+          ? { bg: 'rgba(61,107,69,.12)',  border: '#6B8F71', text: '#3D6B45', dot: '#6B8F71' }
+          : { bg: 'rgba(180,83,9,.12)',   border: '#C4956A', text: '#92400E', dot: '#C4956A' }
+
+        const isClickable = isOnline && !hasToken
+
+        return (
+          <div
+            onClick={isClickable ? () => setModal('settings') : undefined}
+            style={{
+              position: 'fixed', bottom: 16, right: 'calc(var(--coach-w) + 16px)',
+              display: 'flex', alignItems: 'center', gap: 6, padding: '5px 12px',
+              background: colors.bg,
+              border: `1px solid ${colors.border}`,
+              borderRadius: 20,
+              fontSize: '.68rem', fontWeight: 600, fontFamily: "'Nunito', sans-serif",
+              color: colors.text,
+              zIndex: 500,
+              pointerEvents: isClickable ? 'auto' : 'none',
+              cursor: isClickable ? 'pointer' : 'default',
+              transition: 'all .4s ease',
+              userSelect: 'none',
+            }}
+            role={isClickable ? 'button' : undefined}
+            aria-label={isClickable ? 'Ouvrir les réglages de sauvegarde' : undefined}
+          >
+            <span style={{
+              width: 6, height: 6, borderRadius: '50%',
+              background: colors.dot, flexShrink: 0,
+            }} />
+            {label}
+          </div>
+        )
+      })()}
+    </div>
+  )
+}
+
+export default function App() {
+  return (
+    <ToastProvider>
+      <AppInner />
+    </ToastProvider>
+  )
 }
