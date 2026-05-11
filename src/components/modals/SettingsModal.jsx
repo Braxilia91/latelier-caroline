@@ -2,7 +2,6 @@ import { useState, useRef } from 'react'
 import Modal from '../ui/Modal'
 import { X, Save, AlertTriangle, RefreshCw, Wifi, Download, Upload, Lock } from 'lucide-react'
 
-// ── Constantes ───────────────────────────────────────────────────
 const VOICES = [
   { value: 'nova', label: 'Nova — Douce et claire' },
   { value: 'shimmer', label: 'Shimmer — Chaleureuse' },
@@ -10,7 +9,6 @@ const VOICES = [
   { value: 'alloy', label: 'Alloy — Neutre' },
 ]
 
-// LOT 3.3 — XL exposé dans l'UI (moteur préparé en LOT 3.2 dans WritingArea.FONT_SIZES.xl)
 const FONT_SIZES = [
   { value: 's',  label: 'S',  desc: 'Compact' },
   { value: 'm',  label: 'M',  desc: 'Confort' },
@@ -18,7 +16,6 @@ const FONT_SIZES = [
   { value: 'xl', label: 'XL', desc: 'Très grand' },
 ]
 
-// LOT 3.5 — Échelle du chat Léa (multiplie toutes les tailles du coach panel via --chat-scale)
 const CHAT_SCALES = [
   { value: 1,    label: 'Compact', desc: 'Taille actuelle' },
   { value: 1.15, label: 'Confort', desc: '+15 %' },
@@ -35,7 +32,6 @@ const WIDTHS = [
   { value: 'full', label: 'Pleine page', desc: '100 %' },
 ]
 
-// ── Composant section ────────────────────────────────────────────
 function Section({ title, icon, children }) {
   return (
     <div style={S.section}>
@@ -48,7 +44,6 @@ function Section({ title, icon, children }) {
   )
 }
 
-// ── Toggle groupe ────────────────────────────────────────────────
 function ToggleGroup({ options, value, onChange }) {
   return (
     <div style={S.toggleGroup}>
@@ -66,41 +61,31 @@ function ToggleGroup({ options, value, onChange }) {
   )
 }
 
-// ── Modal principal ──────────────────────────────────────────────
 export default function SettingsModal({
   state, chapters = [], vracIdeas = [], name = '',
   onClose, onSave, onReset, onOpenMemory,
-  // LOT 4F.1 — Sauvegarde Phase 0
   onImport, buildLocalBackup,
 }) {
-  // Section 1 — Profil
   const [sName, setSName] = useState(state.name || '')
   const [apiKey, setApiKey] = useState(state.apiKey || '')
   const [voice, setVoice] = useState(state.leaVoice || 'nova')
 
-  // Section 2 — Écriture
   const [editorFont, setEditorFont]   = useState(state.editorFont || 'm')
   const [editorTheme, setEditorTheme] = useState(state.editorTheme || 'jour')
   const [editorWidth, setEditorWidth] = useState(state.editorWidth || 'confort')
-  // LOT 3.5
   const [chatScale, setChatScale]     = useState(typeof state.chatScale === 'number' && state.chatScale > 0 ? state.chatScale : 1)
 
-  // Section 3 — Sync
   const [syncTok, setSyncTok] = useState(state.syncToken || '')
 
-  // Section 4 — Sécurité
   const [confirmReset, setConfirmReset] = useState(false)
   const [exportDone, setExportDone] = useState(false)
 
-  // LOT 4F.1 — Import sauvegarde
   const fileInputRef = useRef(null)
   const [importing, setImporting] = useState(false)
 
   const tokenChanged = state.syncToken && syncTok && syncTok !== state.syncToken
   const tokenValid = syncTok.length === 0 || syncTok.length >= 20
 
-  // ── Sauvegarde ────────────────────────────────────────────────
-  // Note: on copie apiKey dans openAiKey (même mot de passe pour tous les proxies)
   const handleSave = () => {
     onSave({
       name: sName,
@@ -109,12 +94,11 @@ export default function SettingsModal({
       leaVoice: voice,
       syncToken: syncTok,
       editorFont, editorTheme, editorWidth,
-      chatScale,                                  // LOT 3.5
+      chatScale,
     })
     onClose()
   }
 
-  // ── Réinitialisation ─────────────────────────────────────────
   const handleReset = async () => {
     if (confirmReset) {
       await onReset()
@@ -125,10 +109,9 @@ export default function SettingsModal({
     }
   }
 
-  // ── LOT 4F.1 — Export JSON (format complet importable) ───────
+  // LOT 4F.1 — Export JSON (format complet importable)
   const handleExport = async () => {
     try {
-      // Si buildLocalBackup dispo (LOT 4F.1) → snapshot complet ; sinon fallback minimal
       const data = buildLocalBackup
         ? await buildLocalBackup()
         : {
@@ -153,14 +136,14 @@ export default function SettingsModal({
     }
   }
 
-  // ── LOT 4F.1 — Import depuis fichier JSON ────────────────────
+  // LOT 4F.1 — Import depuis fichier JSON
   const handleImportClick = () => {
     fileInputRef.current?.click()
   }
 
   const handleFileSelected = async (e) => {
     const file = e.target.files?.[0]
-    e.target.value = ''   // reset pour permettre la re-sélection du même fichier
+    e.target.value = ''
     if (!file) return
 
     const confirmed = window.confirm(
@@ -195,7 +178,6 @@ export default function SettingsModal({
       overlayStyle={S.overlay}
       modalStyle={S.modal}
     >
-        {/* Header */}
         <div style={S.hdr}>
           <span style={S.hdrTitle}>Réglages</span>
           <button style={S.closeBtn} onClick={onClose} aria-label="Fermer les réglages"><X size={16} /></button>
@@ -203,7 +185,6 @@ export default function SettingsModal({
 
         <div style={S.body}>
 
-          {/* ── Section 1 : Profil ─────────────────────────────── */}
           <Section title="Profil" icon={<span style={S.secIcon}>👤</span>}>
             <div style={S.fg}>
               <label style={S.label}>Ton prénom</label>
@@ -227,7 +208,6 @@ export default function SettingsModal({
             )}
           </Section>
 
-          {/* ── Section 2 : Écriture ───────────────────────────── */}
           <Section title="Écriture" icon={<span style={S.secIcon}>✍️</span>}>
             <div style={S.row}>
               <div style={S.fg}>
@@ -243,14 +223,12 @@ export default function SettingsModal({
               <label style={S.label}>Thème visuel</label>
               <ToggleGroup options={THEMES} value={editorTheme} onChange={setEditorTheme} />
             </div>
-            {/* LOT 3.5 — Échelle du chat Léa */}
             <div style={S.fg}>
               <label style={S.label}>Taille du chat avec Léa</label>
               <ToggleGroup options={CHAT_SCALES} value={chatScale} onChange={setChatScale} />
             </div>
           </Section>
 
-          {/* ── Section 3 : Sauvegarde en ligne (LOT 4F.1) ────── */}
           <Section title="Sauvegarde en ligne" icon={<Wifi size={13} color="#8B6445" />}>
             <p style={S.syncTxt}>
               Tes données sont enregistrées dans le cloud et restaurables si tu changes d'appareil ou
@@ -288,7 +266,6 @@ export default function SettingsModal({
             </button>
           </Section>
 
-          {/* ── Section : Mémoire de Léa (LOT 4C.3) ─────────────── */}
           <Section title="Mémoire de Léa" icon={<span style={S.secIcon}>🧠</span>}>
             <div style={S.actionRow}>
               <div>
@@ -301,8 +278,6 @@ export default function SettingsModal({
                 style={S.actionBtn}
                 onClick={() => {
                   if (!onOpenMemory) return
-                  // Pattern: ferme SettingsModal puis ouvre LeaMemoryModal après un micro-délai
-                  // (le state `modal` ne porte qu'une valeur — sinon les 2 modales se chevauchent)
                   onClose()
                   setTimeout(onOpenMemory, 50)
                 }}
@@ -312,10 +287,8 @@ export default function SettingsModal({
             </div>
           </Section>
 
-          {/* ── Section 4 : Sécurité ───────────────────────────── */}
           <Section title="Sécurité & données" icon={<Lock size={13} color="#8B6445" />}>
 
-            {/* LOT 4F.1 — Import JSON */}
             <div style={S.actionRow}>
               <div>
                 <div style={S.actionTitle}>Importer une sauvegarde</div>
@@ -333,7 +306,6 @@ export default function SettingsModal({
                 {importing ? 'Import…' : 'Importer'}
               </button>
             </div>
-            {/* Input file caché — déclenché par handleImportClick */}
             <input
               ref={fileInputRef}
               type="file"
@@ -343,7 +315,6 @@ export default function SettingsModal({
               aria-hidden="true"
             />
 
-            {/* Export JSON */}
             <div style={S.actionRow}>
               <div>
                 <div style={S.actionTitle}>Exporter une sauvegarde</div>
@@ -357,7 +328,6 @@ export default function SettingsModal({
               </button>
             </div>
 
-            {/* Zone danger */}
             <div style={S.dangerZone}>
               <div style={S.dangerHdr}>
                 <AlertTriangle size={13} color="#C0392B" />
@@ -372,9 +342,8 @@ export default function SettingsModal({
             </div>
           </Section>
 
-        </div>{/* /body */}
+        </div>
 
-        {/* Footer fixe */}
         <div style={S.footer}>
           <button style={S.cancelBtn} onClick={onClose}>Annuler</button>
           <button style={S.saveBtn} onClick={handleSave}>
@@ -384,201 +353,44 @@ export default function SettingsModal({
     </Modal>
   )
 }
-// ── Styles ───────────────────────────────────────────────────────
 const S = {
-  overlay: {
-    position: 'fixed', inset: 0,
-    background: 'rgba(42,26,14,.45)',
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    zIndex: 1000, padding: 16,
-  },
-  modal: {
-    background: '#FFFEFB', borderRadius: 18,
-    width: '100%', maxWidth: 560,
-    maxHeight: '90vh',
-    display: 'flex', flexDirection: 'column',
-    boxShadow: '0 24px 60px rgba(42,26,14,.25)',
-    overflow: 'hidden',
-  },
-  hdr: {
-    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-    padding: '16px 20px',
-    borderBottom: '1px solid #EDE7DE',
-    background: '#FAF7F2', flexShrink: 0,
-  },
-  hdrTitle: {
-    fontFamily: "'Cormorant Garamond', serif",
-    fontSize: '1.15rem', fontWeight: 700, color: '#2A1A0E',
-  },
-  closeBtn: {
-    width: 32, height: 32, borderRadius: 10,
-    background: 'transparent', border: '1.5px solid #EDE7DE',
-    color: '#9C8878', cursor: 'pointer',
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-  },
-  body: {
-    flex: 1, overflowY: 'auto',
-    padding: '12px 20px 8px',
-    display: 'flex', flexDirection: 'column', gap: 4,
-  },
-
-  // Sections
-  section: {
-    background: '#FAF7F2',
-    border: '1px solid #EDE7DE',
-    borderRadius: 12,
-    padding: '14px 16px',
-    marginBottom: 10,
-  },
-  secHdr: {
-    display: 'flex', alignItems: 'center', gap: 7,
-    marginBottom: 12,
-  },
+  overlay: { position: 'fixed', inset: 0, background: 'rgba(42,26,14,.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 },
+  modal: { background: '#FFFEFB', borderRadius: 18, width: '100%', maxWidth: 560, maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 24px 60px rgba(42,26,14,.25)', overflow: 'hidden' },
+  hdr: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid #EDE7DE', background: '#FAF7F2', flexShrink: 0 },
+  hdrTitle: { fontFamily: "'Cormorant Garamond', serif", fontSize: '1.15rem', fontWeight: 700, color: '#2A1A0E' },
+  closeBtn: { width: 32, height: 32, borderRadius: 10, background: 'transparent', border: '1.5px solid #EDE7DE', color: '#9C8878', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' },
+  body: { flex: 1, overflowY: 'auto', padding: '12px 20px 8px', display: 'flex', flexDirection: 'column', gap: 4 },
+  section: { background: '#FAF7F2', border: '1px solid #EDE7DE', borderRadius: 12, padding: '14px 16px', marginBottom: 10 },
+  secHdr: { display: 'flex', alignItems: 'center', gap: 7, marginBottom: 12 },
   secIcon: { fontSize: '1rem' },
-  secTitle: {
-    fontSize: '.72rem', fontWeight: 800,
-    fontFamily: "'Nunito', sans-serif",
-    color: '#8B6445', textTransform: 'uppercase', letterSpacing: '.8px',
-  },
-
-  // Champs
+  secTitle: { fontSize: '.72rem', fontWeight: 800, fontFamily: "'Nunito', sans-serif", color: '#8B6445', textTransform: 'uppercase', letterSpacing: '.8px' },
   fg: { marginBottom: 10 },
   row: { display: 'flex', gap: 12, marginBottom: 0 },
-  label: {
-    display: 'block', fontSize: '.75rem', fontWeight: 700,
-    fontFamily: "'Nunito', sans-serif", color: '#6B5A4E',
-    marginBottom: 5,
-  },
-  badge: {
-    display: 'inline-block', background: '#F7EFE3',
-    border: '1px solid #E8D5B8', borderRadius: 10,
-    fontSize: '.65rem', fontWeight: 700, color: '#8B6445',
-    padding: '1px 7px', marginLeft: 6,
-  },
-  badgeOpt: {
-    fontSize: '.7rem', fontWeight: 400, color: '#9C8878', marginLeft: 4,
-  },
-  input: {
-    width: '100%', boxSizing: 'border-box',
-    padding: '9px 12px',
-    border: '1.5px solid #DDD5C8', borderRadius: 8,
-    fontFamily: "'Nunito', sans-serif", fontSize: '.85rem',
-    background: '#FFFEFB', color: '#2A1A0E', outline: 'none',
-    caretColor: '#8B6445',
-  },
-  hint: {
-    fontSize: '.72rem', color: '#9C8878',
-    fontFamily: "'Nunito', sans-serif", lineHeight: 1.5,
-    marginTop: 4,
-  },
-  select: {
-    width: '100%', padding: '9px 12px',
-    border: '1.5px solid #DDD5C8', borderRadius: 8,
-    fontFamily: "'Nunito', sans-serif", fontSize: '.85rem',
-    background: '#FFFEFB', color: '#2A1A0E', outline: 'none',
-  },
-
-  // Toggle
+  label: { display: 'block', fontSize: '.75rem', fontWeight: 700, fontFamily: "'Nunito', sans-serif", color: '#6B5A4E', marginBottom: 5 },
+  badge: { display: 'inline-block', background: '#F7EFE3', border: '1px solid #E8D5B8', borderRadius: 10, fontSize: '.65rem', fontWeight: 700, color: '#8B6445', padding: '1px 7px', marginLeft: 6 },
+  badgeOpt: { fontSize: '.7rem', fontWeight: 400, color: '#9C8878', marginLeft: 4 },
+  input: { width: '100%', boxSizing: 'border-box', padding: '9px 12px', border: '1.5px solid #DDD5C8', borderRadius: 8, fontFamily: "'Nunito', sans-serif", fontSize: '.85rem', background: '#FFFEFB', color: '#2A1A0E', outline: 'none', caretColor: '#8B6445' },
+  hint: { fontSize: '.72rem', color: '#9C8878', fontFamily: "'Nunito', sans-serif", lineHeight: 1.5, marginTop: 4 },
+  select: { width: '100%', padding: '9px 12px', border: '1.5px solid #DDD5C8', borderRadius: 8, fontFamily: "'Nunito', sans-serif", fontSize: '.85rem', background: '#FFFEFB', color: '#2A1A0E', outline: 'none' },
   toggleGroup: { display: 'flex', gap: 6, flexWrap: 'wrap' },
-  toggleBtn: {
-    padding: '7px 14px',
-    border: '1.5px solid #DDD5C8', borderRadius: 20,
-    background: '#FFFEFB',
-    fontSize: '.78rem', fontWeight: 600,
-    fontFamily: "'Nunito', sans-serif", color: '#9C8878',
-    cursor: 'pointer', transition: 'all .15s',
-    whiteSpace: 'nowrap',
-  },
-  toggleBtnActive: {
-    background: '#F7EFE3', border: '1.5px solid #C4956A', color: '#8B6445',
-  },
-
-  // Sync
-  syncTxt: {
-    fontSize: '.78rem', color: '#6B5A4E', lineHeight: 1.5,
-    fontFamily: "'Nunito', sans-serif", marginBottom: 10,
-  },
-  syncBtn: {
-    display: 'flex', alignItems: 'center', gap: 6,
-    padding: '8px 14px',
-    background: 'linear-gradient(135deg,#8B6445,#C4956A)',
-    color: '#fff', border: 'none', borderRadius: 8,
-    fontSize: '.78rem', fontWeight: 700,
-    fontFamily: "'Nunito', sans-serif", cursor: 'pointer',
-    marginTop: 8,
-  },
+  toggleBtn: { padding: '7px 14px', border: '1.5px solid #DDD5C8', borderRadius: 20, background: '#FFFEFB', fontSize: '.78rem', fontWeight: 600, fontFamily: "'Nunito', sans-serif", color: '#9C8878', cursor: 'pointer', transition: 'all .15s', whiteSpace: 'nowrap' },
+  toggleBtnActive: { background: '#F7EFE3', border: '1.5px solid #C4956A', color: '#8B6445' },
+  syncTxt: { fontSize: '.78rem', color: '#6B5A4E', lineHeight: 1.5, fontFamily: "'Nunito', sans-serif", marginBottom: 10 },
+  syncBtn: { display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: 'linear-gradient(135deg,#8B6445,#C4956A)', color: '#fff', border: 'none', borderRadius: 8, fontSize: '.78rem', fontWeight: 700, fontFamily: "'Nunito', sans-serif", cursor: 'pointer', marginTop: 8 },
   okMsg: { fontSize: '.72rem', color: '#3D6B45', margin: '4px 0 0', fontFamily: "'Nunito', sans-serif" },
   errMsg: { fontSize: '.72rem', color: '#C0392B', margin: '4px 0 0', fontFamily: "'Nunito', sans-serif" },
-  warnBox: {
-    fontSize: '.72rem', color: '#92400E',
-    background: '#FEF3C7', border: '1px solid #FCD34D',
-    borderRadius: 8, padding: '8px 10px',
-    marginTop: 6, lineHeight: 1.5,
-    fontFamily: "'Nunito', sans-serif",
-  },
-
-  // Actions (export)
-  actionRow: {
-    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-    gap: 12, marginBottom: 12,
-    padding: '10px 12px',
-    background: '#FFFEFB', border: '1px solid #EDE7DE', borderRadius: 10,
-  },
+  warnBox: { fontSize: '.72rem', color: '#92400E', background: '#FEF3C7', border: '1px solid #FCD34D', borderRadius: 8, padding: '8px 10px', marginTop: 6, lineHeight: 1.5, fontFamily: "'Nunito', sans-serif" },
+  actionRow: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 12, padding: '10px 12px', background: '#FFFEFB', border: '1px solid #EDE7DE', borderRadius: 10 },
   actionTitle: { fontSize: '.82rem', fontWeight: 700, color: '#2A1A0E', fontFamily: "'Nunito', sans-serif" },
   actionDesc: { fontSize: '.72rem', color: '#9C8878', fontFamily: "'Nunito', sans-serif", marginTop: 2 },
-  actionBtn: {
-    display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0,
-    padding: '7px 14px',
-    background: '#F7EFE3', border: '1.5px solid #E8D5B8', borderRadius: 8,
-    fontSize: '.78rem', fontWeight: 700,
-    fontFamily: "'Nunito', sans-serif", color: '#8B6445', cursor: 'pointer',
-    transition: 'all .2s',
-  },
-  actionBtnOk: {
-    background: '#EEF4EC', border: '1.5px solid #A3C4A8', color: '#3D6B45',
-  },
-
-  // Danger
-  dangerZone: {
-    background: '#FFF5F5', border: '1.5px solid #FECACA',
-    borderRadius: 10, padding: '12px 14px',
-  },
+  actionBtn: { display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0, padding: '7px 14px', background: '#F7EFE3', border: '1.5px solid #E8D5B8', borderRadius: 8, fontSize: '.78rem', fontWeight: 700, fontFamily: "'Nunito', sans-serif", color: '#8B6445', cursor: 'pointer', transition: 'all .2s' },
+  actionBtnOk: { background: '#EEF4EC', border: '1.5px solid #A3C4A8', color: '#3D6B45' },
+  dangerZone: { background: '#FFF5F5', border: '1.5px solid #FECACA', borderRadius: 10, padding: '12px 14px' },
   dangerHdr: { display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 },
-  dangerTitle: {
-    fontSize: '.72rem', fontWeight: 800, color: '#C0392B',
-    textTransform: 'uppercase', letterSpacing: '.5px',
-    fontFamily: "'Nunito', sans-serif",
-  },
-  dangerTxt: {
-    fontSize: '.78rem', color: '#7F1D1D', lineHeight: 1.5,
-    fontFamily: "'Nunito', sans-serif", marginBottom: 10,
-  },
-  dangerBtn: {
-    padding: '8px 14px',
-    background: '#C0392B', color: '#fff', border: 'none',
-    borderRadius: 8, fontSize: '.78rem', fontWeight: 700,
-    fontFamily: "'Nunito', sans-serif", cursor: 'pointer',
-  },
-
-  // Footer
-  footer: {
-    display: 'flex', gap: 10, justifyContent: 'flex-end',
-    padding: '12px 20px',
-    borderTop: '1px solid #EDE7DE',
-    background: '#FAF7F2', flexShrink: 0,
-  },
-  cancelBtn: {
-    padding: '9px 18px',
-    background: 'transparent', border: '1.5px solid #EDE7DE',
-    borderRadius: 10, fontSize: '.82rem', fontWeight: 600,
-    fontFamily: "'Nunito', sans-serif", color: '#9C8878', cursor: 'pointer',
-  },
-  saveBtn: {
-    display: 'flex', alignItems: 'center', gap: 6,
-    padding: '9px 20px',
-    background: 'linear-gradient(135deg, #8B6445, #C4956A)',
-    color: '#fff', border: 'none', borderRadius: 10,
-    fontSize: '.82rem', fontWeight: 700,
-    fontFamily: "'Nunito', sans-serif", cursor: 'pointer',
-  },
+  dangerTitle: { fontSize: '.72rem', fontWeight: 800, color: '#C0392B', textTransform: 'uppercase', letterSpacing: '.5px', fontFamily: "'Nunito', sans-serif" },
+  dangerTxt: { fontSize: '.78rem', color: '#7F1D1D', lineHeight: 1.5, fontFamily: "'Nunito', sans-serif", marginBottom: 10 },
+  dangerBtn: { padding: '8px 14px', background: '#C0392B', color: '#fff', border: 'none', borderRadius: 8, fontSize: '.78rem', fontWeight: 700, fontFamily: "'Nunito', sans-serif", cursor: 'pointer' },
+  footer: { display: 'flex', gap: 10, justifyContent: 'flex-end', padding: '12px 20px', borderTop: '1px solid #EDE7DE', background: '#FAF7F2', flexShrink: 0 },
+  cancelBtn: { padding: '9px 18px', background: 'transparent', border: '1.5px solid #EDE7DE', borderRadius: 10, fontSize: '.82rem', fontWeight: 600, fontFamily: "'Nunito', sans-serif", color: '#9C8878', cursor: 'pointer' },
+  saveBtn: { display: 'flex', alignItems: 'center', gap: 6, padding: '9px 20px', background: 'linear-gradient(135deg, #8B6445, #C4956A)', color: '#fff', border: 'none', borderRadius: 10, fontSize: '.82rem', fontWeight: 700, fontFamily: "'Nunito', sans-serif", cursor: 'pointer' },
 }
