@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import Modal from '../ui/Modal'
 import { useToast } from '../ui/Toast'
 import { X, Save, AlertTriangle, RefreshCw, Wifi, Download, Upload, Lock, Eye, EyeOff, Copy, Check } from 'lucide-react'
@@ -98,6 +98,14 @@ export default function SettingsModal({
 
   const tokenChanged = state.syncToken && syncTok && syncTok !== state.syncToken
   const tokenValid = syncTok.length === 0 || syncTok.length >= 20
+
+  // LOT 4F.1.6 — Reset propre de l'état sync à l'ouverture de la modale
+  // (évite d'afficher un vieux message persistant de la session précédente).
+  // state.resetSyncStatus est stable (useCallback([]) côté useDB.js), donc
+  // l'effet n'est exécuté qu'une fois au mount.
+  useEffect(() => {
+    state.resetSyncStatus?.()
+  }, [state.resetSyncStatus])
 
   // LOT 4F.1.5 — handleSave devient async + param `closeAfter`.
   // closeAfter=true (défaut) : flux normal du bouton "Enregistrer" du footer.
@@ -360,18 +368,17 @@ export default function SettingsModal({
             {state.syncStatus === 'ok' && state.lastSyncedAt && (
               <p style={S.okMsg}>✓ Dernière sauvegarde : {new Date(state.lastSyncedAt).toLocaleString('fr-FR')}</p>
             )}
-            {state.syncStatus === 'error' && state.syncMessage && (
-              <p style={S.errMsg}>⚠ {state.syncMessage}</p>
-            )}
+            {/* LOT 4F.1.6 — Plus de double affichage erreur : le toast d'erreur de
+                handleSyncNow couvre déjà ce cas. */}
             {/* LOT 4F.1.5 — bouton délégué à handleSyncNow (await save → await syncNow → toast) */}
             <button
               type="button"
               style={{ ...S.syncBtn, opacity: tokenValid && !syncBusy ? 1 : .45 }}
-              disabled={syncBusy || (syncTok.length > 0 && syncTok.length < 20)}
+              disabled={syncBusy || !tokenValid}
               onClick={handleSyncNow}
             >
               <RefreshCw size={13} />
-              {syncBusy || state.syncStatus === 'syncing' ? 'Sauvegarde…' : 'Sauvegarder maintenant'}
+              {syncBusy ? 'Sauvegarde…' : 'Sauvegarder maintenant'}
             </button>
           </Section>
 
