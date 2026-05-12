@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react'
 import Modal from '../ui/Modal'
-import { X, Save, AlertTriangle, RefreshCw, Wifi, Download, Upload, Lock } from 'lucide-react'
+import { useToast } from '../ui/Toast'
+import { X, Save, AlertTriangle, RefreshCw, Wifi, Download, Upload, Lock, Eye, EyeOff, Copy, Check } from 'lucide-react'
 
 const VOICES = [
   { value: 'nova', label: 'Nova — Douce et claire' },
@@ -50,6 +51,7 @@ function ToggleGroup({ options, value, onChange }) {
       {options.map(o => (
         <button
           key={o.value}
+          type="button"
           style={{ ...S.toggleBtn, ...(value === o.value ? S.toggleBtnActive : {}) }}
           onClick={() => onChange(o.value)}
           title={o.desc}
@@ -66,6 +68,8 @@ export default function SettingsModal({
   onClose, onSave, onReset, onOpenMemory,
   onImport, buildLocalBackup,
 }) {
+  const toast = useToast()
+
   const [sName, setSName] = useState(state.name || '')
   const [apiKey, setApiKey] = useState(state.apiKey || '')
   const [voice, setVoice] = useState(state.leaVoice || 'nova')
@@ -77,6 +81,15 @@ export default function SettingsModal({
 
   const [syncTok, setSyncTok] = useState(state.syncToken || '')
 
+  // LOT 4F.1.4 — Visibilité afficher/masquer pour les deux champs sensibles
+  const [showApiKey, setShowApiKey]     = useState(false)
+  const [showSyncTok, setShowSyncTok]   = useState(false)
+  // LOT 4F.1.4 — Feedback visuel après copie du mot secret
+  const [copiedSync, setCopiedSync]     = useState(false)
+
+  // LOT 4F.1.5 — Verrou réentrance pendant save+sync
+  const [syncBusy, setSyncBusy] = useState(false)
+
   const [confirmReset, setConfirmReset] = useState(false)
   const [exportDone, setExportDone] = useState(false)
 
@@ -86,8 +99,12 @@ export default function SettingsModal({
   const tokenChanged = state.syncToken && syncTok && syncTok !== state.syncToken
   const tokenValid = syncTok.length === 0 || syncTok.length >= 20
 
-  const handleSave = () => {
-    onSave({
+  // LOT 4F.1.5 — handleSave devient async + param `closeAfter`.
+  // closeAfter=true (défaut) : flux normal du bouton "Enregistrer" du footer.
+  // closeAfter=false : appelé depuis handleSyncNow, on garde la modale
+  // ouverte pour que l'utilisateur voie le toast de résultat sync.
+  const handleSave = async (closeAfter = true) => {
+    await onSave({
       name: sName,
       apiKey,
       openAiKey: apiKey,
@@ -96,7 +113,32 @@ export default function SettingsModal({
       editorFont, editorTheme, editorWidth,
       chatScale,
     })
-    onClose()
+    if (closeAfter) onClose()
+  }
+
+  // LOT 4F.1.5 — Sauvegarde manuelle vers le cloud, séquencée proprement :
+  //   1. await onSave(...) pour persister les réglages locaux
+  //      (notamment le syncToken s'il vient d'être modifié)
+  //   2. await state.syncNow() qui retourne {ok, message}
+  //   3. toast adapté (success ou error)
+  //   4. modale reste ouverte pour que Caroline voie le résultat
+  // Évite la race condition de l'ancien flux : handleSave() ; syncNow()
+  // qui partait sans attendre la fin du save, et fermait la modale.
+  const handleSyncNow = async () => {
+    if (syncBusy) return
+    if (syncTok.length > 0 && syncTok.length < 20) return
+    setSyncBusy(true)
+    try {
+      await handleSave(false) // closeAfter=false → modale reste ouverte
+      const result = await state.syncNow?.()
+      if (result && typeof result === 'object') {
+        toast(result.message, result.ok ? 'success' : 'error')
+      }
+    } catch (err) {
+      toast(err?.message || 'Erreur pendant la sauvegarde', 'error')
+    } finally {
+      setSyncBusy(false)
+    }
   }
 
   const handleReset = async () => {
@@ -106,6 +148,20 @@ export default function SettingsModal({
     } else {
       setConfirmReset(true)
       setTimeout(() => setConfirmReset(false), 5000)
+    }
+  }
+
+  // LOT 4F.1.4 — Copier le mot secret de sauvegarde dans le presse-papier
+  // (utile pour reporter le même mot secret sur un autre appareil).
+  const handleCopySync = async () => {
+    if (!syncTok) return
+    try {
+      await navigator.clipboard.writeText(syncTok)
+      setCopiedSync(true)
+      setTimeout(() => setCopiedSync(false), 1500)
+    } catch {
+      // Fallback : sélectionner le contenu si clipboard API refusée
+      alert('Impossible de copier automatiquement. Sélectionne et copie manuellement le mot secret.')
     }
   }
 
@@ -180,7 +236,7 @@ export default function SettingsModal({
     >
         <div style={S.hdr}>
           <span style={S.hdrTitle}>Réglages</span>
-          <button style={S.closeBtn} onClick={onClose} aria-label="Fermer les réglages"><X size={16} /></button>
+          <button type="button" style={S.closeBtn} onClick={onClose} aria-label="Fermer les réglages"><X size={16} /></button>
         </div>
 
         <div style={S.body}>
@@ -193,8 +249,26 @@ export default function SettingsModal({
 
             <div style={S.fg}>
               <label style={S.label}>Mot de passe Léa <span style={S.badge}>active le coach</span></label>
-              <input style={S.input} type="password" value={apiKey}
-                onChange={e => setApiKey(e.target.value)} placeholder="Le mot que Mourad t'a donné…" />
+              {/* LOT 4F.1.4 — wrapper position:relative pour bouton œil */}
+              <div style={S.inputWrap}>
+                <input
+                  style={{ ...S.input, paddingRight: 40 }}
+                  type={showApiKey ? 'text' : 'password'}
+                  value={apiKey}
+                  onChange={e => setApiKey(e.target.value)}
+                  placeholder="Le mot que Mourad t'a donné…"
+                  aria-label="Mot de passe Léa"
+                />
+                <button
+                  type="button"
+                  style={S.iconBtn}
+                  onClick={() => setShowApiKey(s => !s)}
+                  aria-label={showApiKey ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+                  title={showApiKey ? 'Masquer' : 'Afficher'}
+                >
+                  {showApiKey ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
               <p style={S.hint}>🔒 Stocké sur cet appareil uniquement. Ce mot de passe active les réponses de Léa et sa voix via un serveur sécurisé — les vraies clés API ne transitent jamais sur ton appareil.</p>
             </div>
 
@@ -235,12 +309,45 @@ export default function SettingsModal({
               si ton navigateur est nettoyé. Choisis un mot secret <strong>(20+ caractères)</strong> —
               le même sur tous tes appareils. Ne le partage pas.
             </p>
-            <input
-              style={{ ...S.input, borderColor: !tokenValid ? '#E87070' : undefined }}
-              type="password" value={syncTok}
-              onChange={e => setSyncTok(e.target.value)}
-              placeholder="Mon-mot-secret-très-long-2024"
-            />
+            {/* LOT 4F.1.4 — wrapper + œil + copier */}
+            <div style={S.inputWrap}>
+              <input
+                style={{
+                  ...S.input,
+                  paddingRight: 76,
+                  borderColor: !tokenValid ? '#E87070' : undefined,
+                }}
+                type={showSyncTok ? 'text' : 'password'}
+                value={syncTok}
+                onChange={e => setSyncTok(e.target.value)}
+                placeholder="Mon-mot-secret-très-long-2024"
+                aria-label="Mot secret de sauvegarde"
+              />
+              <button
+                type="button"
+                style={{ ...S.iconBtn, right: 42 }}
+                onClick={() => setShowSyncTok(s => !s)}
+                aria-label={showSyncTok ? 'Masquer le mot secret' : 'Afficher le mot secret'}
+                title={showSyncTok ? 'Masquer' : 'Afficher'}
+              >
+                {showSyncTok ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+              <button
+                type="button"
+                style={{
+                  ...S.iconBtn,
+                  color: copiedSync ? '#3D6B45' : '#9C8878',
+                  opacity: syncTok ? 1 : .35,
+                  cursor: syncTok ? 'pointer' : 'not-allowed',
+                }}
+                onClick={handleCopySync}
+                disabled={!syncTok}
+                aria-label={copiedSync ? 'Mot secret copié' : 'Copier le mot secret'}
+                title={copiedSync ? 'Copié ✓' : 'Copier'}
+              >
+                {copiedSync ? <Check size={16} /> : <Copy size={16} />}
+              </button>
+            </div>
             {syncTok.length > 0 && syncTok.length < 20 && (
               <p style={S.errMsg}>⚠ Minimum 20 caractères ({syncTok.length}/20)</p>
             )}
@@ -256,13 +363,15 @@ export default function SettingsModal({
             {state.syncStatus === 'error' && state.syncMessage && (
               <p style={S.errMsg}>⚠ {state.syncMessage}</p>
             )}
+            {/* LOT 4F.1.5 — bouton délégué à handleSyncNow (await save → await syncNow → toast) */}
             <button
-              style={{ ...S.syncBtn, opacity: tokenValid ? 1 : .45 }}
-              disabled={syncTok.length > 0 && syncTok.length < 20}
-              onClick={() => { handleSave(); state.syncNow?.() }}
+              type="button"
+              style={{ ...S.syncBtn, opacity: tokenValid && !syncBusy ? 1 : .45 }}
+              disabled={syncBusy || (syncTok.length > 0 && syncTok.length < 20)}
+              onClick={handleSyncNow}
             >
               <RefreshCw size={13} />
-              {state.syncStatus === 'syncing' ? 'Sauvegarde…' : 'Sauvegarder maintenant'}
+              {syncBusy || state.syncStatus === 'syncing' ? 'Sauvegarde…' : 'Sauvegarder maintenant'}
             </button>
           </Section>
 
@@ -275,6 +384,7 @@ export default function SettingsModal({
                 </div>
               </div>
               <button
+                type="button"
                 style={S.actionBtn}
                 onClick={() => {
                   if (!onOpenMemory) return
@@ -298,6 +408,7 @@ export default function SettingsModal({
                 </div>
               </div>
               <button
+                type="button"
                 style={S.actionBtn}
                 onClick={handleImportClick}
                 disabled={importing || !onImport}
@@ -322,7 +433,7 @@ export default function SettingsModal({
                   Télécharge tes chapitres, idées, chat et profil en JSON horodaté.
                 </div>
               </div>
-              <button style={{ ...S.actionBtn, ...(exportDone ? S.actionBtnOk : {}) }} onClick={handleExport}>
+              <button type="button" style={{ ...S.actionBtn, ...(exportDone ? S.actionBtnOk : {}) }} onClick={handleExport}>
                 <Download size={13} />
                 {exportDone ? 'Téléchargé ✓' : 'Exporter'}
               </button>
@@ -336,7 +447,7 @@ export default function SettingsModal({
               <p style={S.dangerTxt}>
                 Supprimer toutes les données efface définitivement tous tes chapitres et paramètres.
               </p>
-              <button style={S.dangerBtn} onClick={handleReset}>
+              <button type="button" style={S.dangerBtn} onClick={handleReset}>
                 {confirmReset ? '⚠️ Confirmer — effacer tout ?' : 'Supprimer toutes mes données'}
               </button>
             </div>
@@ -345,8 +456,8 @@ export default function SettingsModal({
         </div>
 
         <div style={S.footer}>
-          <button style={S.cancelBtn} onClick={onClose}>Annuler</button>
-          <button style={S.saveBtn} onClick={handleSave}>
+          <button type="button" style={S.cancelBtn} onClick={onClose}>Annuler</button>
+          <button type="button" style={S.saveBtn} onClick={() => handleSave(true)}>
             <Save size={14} /> Enregistrer
           </button>
         </div>
@@ -370,6 +481,16 @@ const S = {
   badge: { display: 'inline-block', background: '#F7EFE3', border: '1px solid #E8D5B8', borderRadius: 10, fontSize: '.65rem', fontWeight: 700, color: '#8B6445', padding: '1px 7px', marginLeft: 6 },
   badgeOpt: { fontSize: '.7rem', fontWeight: 400, color: '#9C8878', marginLeft: 4 },
   input: { width: '100%', boxSizing: 'border-box', padding: '9px 12px', border: '1.5px solid #DDD5C8', borderRadius: 8, fontFamily: "'Nunito', sans-serif", fontSize: '.85rem', background: '#FFFEFB', color: '#2A1A0E', outline: 'none', caretColor: '#8B6445' },
+  // LOT 4F.1.4 — Wrapper position:relative pour boutons œil/copier dans les champs sensibles
+  inputWrap: { position: 'relative', width: '100%' },
+  iconBtn: {
+    position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)',
+    width: 32, height: 32, padding: 0,
+    background: 'transparent', border: 'none', borderRadius: 6,
+    color: '#9C8878', cursor: 'pointer',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    transition: 'color .15s, background .15s',
+  },
   hint: { fontSize: '.72rem', color: '#9C8878', fontFamily: "'Nunito', sans-serif", lineHeight: 1.5, marginTop: 4 },
   select: { width: '100%', padding: '9px 12px', border: '1.5px solid #DDD5C8', borderRadius: 8, fontFamily: "'Nunito', sans-serif", fontSize: '.85rem', background: '#FFFEFB', color: '#2A1A0E', outline: 'none' },
   toggleGroup: { display: 'flex', gap: 6, flexWrap: 'wrap' },
