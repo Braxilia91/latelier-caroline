@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect } from 'react'
 import Modal from '../ui/Modal'
 import { useToast } from '../ui/Toast'
-import { X, Save, AlertTriangle, RefreshCw, Wifi, Download, Upload, Lock, Eye, EyeOff, Copy, Check } from 'lucide-react'
+import { X, Save, AlertTriangle, RefreshCw, Wifi, Download, Upload, Lock, Eye, EyeOff, Copy, Check, HardDrive } from 'lucide-react'
+import * as googleDrive from '../../lib/googleDrive'
 
 const VOICES = [
   { value: 'nova', label: 'Nova — Douce et claire' },
@@ -90,6 +91,10 @@ export default function SettingsModal({
   // LOT 4F.1.5 — Verrou réentrance pendant save+sync
   const [syncBusy, setSyncBusy] = useState(false)
 
+  // LOT 4F.2.1 — État Google Drive (auth seule à ce stade, pas d'upload/download)
+  const [googleUser, setGoogleUser] = useState(() => googleDrive.getCurrentUser())
+  const [googleBusy, setGoogleBusy] = useState(false)
+
   const [confirmReset, setConfirmReset] = useState(false)
   const [exportDone, setExportDone] = useState(false)
 
@@ -100,17 +105,11 @@ export default function SettingsModal({
   const tokenValid = syncTok.length === 0 || syncTok.length >= 20
 
   // LOT 4F.1.6 — Reset propre de l'état sync à l'ouverture de la modale
-  // (évite d'afficher un vieux message persistant de la session précédente).
-  // state.resetSyncStatus est stable (useCallback([]) côté useDB.js), donc
-  // l'effet n'est exécuté qu'une fois au mount.
   useEffect(() => {
     state.resetSyncStatus?.()
   }, [state.resetSyncStatus])
 
   // LOT 4F.1.5 — handleSave devient async + param `closeAfter`.
-  // closeAfter=true (défaut) : flux normal du bouton "Enregistrer" du footer.
-  // closeAfter=false : appelé depuis handleSyncNow, on garde la modale
-  // ouverte pour que l'utilisateur voie le toast de résultat sync.
   const handleSave = async (closeAfter = true) => {
     await onSave({
       name: sName,
@@ -124,20 +123,13 @@ export default function SettingsModal({
     if (closeAfter) onClose()
   }
 
-  // LOT 4F.1.5 — Sauvegarde manuelle vers le cloud, séquencée proprement :
-  //   1. await onSave(...) pour persister les réglages locaux
-  //      (notamment le syncToken s'il vient d'être modifié)
-  //   2. await state.syncNow() qui retourne {ok, message}
-  //   3. toast adapté (success ou error)
-  //   4. modale reste ouverte pour que Caroline voie le résultat
-  // Évite la race condition de l'ancien flux : handleSave() ; syncNow()
-  // qui partait sans attendre la fin du save, et fermait la modale.
+  // LOT 4F.1.5 — Sauvegarde manuelle vers le cloud, séquencée proprement.
   const handleSyncNow = async () => {
     if (syncBusy) return
     if (syncTok.length > 0 && syncTok.length < 20) return
     setSyncBusy(true)
     try {
-      await handleSave(false) // closeAfter=false → modale reste ouverte
+      await handleSave(false)
       const result = await state.syncNow?.()
       if (result && typeof result === 'object') {
         toast(result.message, result.ok ? 'success' : 'error')
@@ -146,6 +138,40 @@ export default function SettingsModal({
       toast(err?.message || 'Erreur pendant la sauvegarde', 'error')
     } finally {
       setSyncBusy(false)
+    }
+  }
+
+  // LOT 4F.2.1 — Connexion Google Drive (popup OAuth GIS).
+  const handleGoogleSignIn = async () => {
+    if (googleBusy) return
+    setGoogleBusy(true)
+    try {
+      const user = await googleDrive.signIn()
+      setGoogleUser(googleDrive.getCurrentUser())
+      toast(
+        user.email ? `Connecté à ${user.email} ✓` : 'Connecté à Google Drive ✓',
+        'success'
+      )
+    } catch (err) {
+      toast(err?.message || 'Échec de la connexion Google Drive', 'error')
+    } finally {
+      setGoogleBusy(false)
+    }
+  }
+
+  // LOT 4F.2.1 — Déconnexion : révoque le token côté Google et vide le state local.
+  const handleGoogleSignOut = async () => {
+    if (googleBusy) return
+    setGoogleBusy(true)
+    try {
+      await googleDrive.signOut()
+      setGoogleUser(null)
+      toast('Déconnecté de Google Drive', 'info')
+    } catch {
+      toast('Déconnexion partielle — état local nettoyé', 'info')
+      setGoogleUser(null)
+    } finally {
+      setGoogleBusy(false)
     }
   }
 
@@ -159,8 +185,7 @@ export default function SettingsModal({
     }
   }
 
-  // LOT 4F.1.4 — Copier le mot secret de sauvegarde dans le presse-papier
-  // (utile pour reporter le même mot secret sur un autre appareil).
+  // LOT 4F.1.4 — Copier le mot secret de sauvegarde dans le presse-papier.
   const handleCopySync = async () => {
     if (!syncTok) return
     try {
@@ -168,12 +193,11 @@ export default function SettingsModal({
       setCopiedSync(true)
       setTimeout(() => setCopiedSync(false), 1500)
     } catch {
-      // Fallback : sélectionner le contenu si clipboard API refusée
       alert('Impossible de copier automatiquement. Sélectionne et copie manuellement le mot secret.')
     }
   }
 
-  // LOT 4F.1 — Export JSON (format complet importable)
+  // LOT 4F.1 — Export JSON
   const handleExport = async () => {
     try {
       const data = buildLocalBackup
@@ -257,7 +281,6 @@ export default function SettingsModal({
 
             <div style={S.fg}>
               <label style={S.label}>Mot de passe Léa <span style={S.badge}>active le coach</span></label>
-              {/* LOT 4F.1.4 — wrapper position:relative pour bouton œil */}
               <div style={S.inputWrap}>
                 <input
                   style={{ ...S.input, paddingRight: 40 }}
@@ -317,7 +340,6 @@ export default function SettingsModal({
               si ton navigateur est nettoyé. Choisis un mot secret <strong>(20+ caractères)</strong> —
               le même sur tous tes appareils. Ne le partage pas.
             </p>
-            {/* LOT 4F.1.4 — wrapper + œil + copier */}
             <div style={S.inputWrap}>
               <input
                 style={{
@@ -368,9 +390,6 @@ export default function SettingsModal({
             {state.syncStatus === 'ok' && state.lastSyncedAt && (
               <p style={S.okMsg}>✓ Dernière sauvegarde : {new Date(state.lastSyncedAt).toLocaleString('fr-FR')}</p>
             )}
-            {/* LOT 4F.1.6 — Plus de double affichage erreur : le toast d'erreur de
-                handleSyncNow couvre déjà ce cas. */}
-            {/* LOT 4F.1.5 — bouton délégué à handleSyncNow (await save → await syncNow → toast) */}
             <button
               type="button"
               style={{ ...S.syncBtn, opacity: tokenValid && !syncBusy ? 1 : .45 }}
@@ -380,6 +399,41 @@ export default function SettingsModal({
               <RefreshCw size={13} />
               {syncBusy ? 'Sauvegarde…' : 'Sauvegarder maintenant'}
             </button>
+          </Section>
+
+          {/* LOT 4F.2.1 — Section Google Drive : auth seule, pas encore d'upload/download */}
+          <Section title="Sauvegarde Google Drive" icon={<HardDrive size={13} color="#8B6445" />}>
+            <p style={S.syncTxt}>
+              Sauvegarde durable de tes données dans ton Google Drive (dossier invisible,
+              ~50 KB). Complémentaire à la sauvegarde en ligne ci-dessus : sert de filet
+              de sécurité si tu perds tes données locales ou changes d'appareil.
+            </p>
+            {googleUser ? (
+              <>
+                <p style={S.okMsg}>✓ Connecté à : {googleUser.email || 'Google Drive'}</p>
+                <button
+                  type="button"
+                  style={{ ...S.actionBtn, opacity: googleBusy ? 0.5 : 1, marginTop: 8 }}
+                  onClick={handleGoogleSignOut}
+                  disabled={googleBusy}
+                >
+                  {googleBusy ? 'Déconnexion…' : 'Déconnecter'}
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                style={{ ...S.syncBtn, opacity: googleBusy ? 0.5 : 1 }}
+                onClick={handleGoogleSignIn}
+                disabled={googleBusy}
+              >
+                <HardDrive size={13} />
+                {googleBusy ? 'Connexion…' : 'Connecter Google Drive'}
+              </button>
+            )}
+            <p style={{ ...S.hint, marginTop: 8 }}>
+              🔒 La connexion reste active jusqu'à la fermeture de l'app. Aucun jeton n'est stocké.
+            </p>
           </Section>
 
           <Section title="Mémoire de Léa" icon={<span style={S.secIcon}>🧠</span>}>
@@ -488,7 +542,6 @@ const S = {
   badge: { display: 'inline-block', background: '#F7EFE3', border: '1px solid #E8D5B8', borderRadius: 10, fontSize: '.65rem', fontWeight: 700, color: '#8B6445', padding: '1px 7px', marginLeft: 6 },
   badgeOpt: { fontSize: '.7rem', fontWeight: 400, color: '#9C8878', marginLeft: 4 },
   input: { width: '100%', boxSizing: 'border-box', padding: '9px 12px', border: '1.5px solid #DDD5C8', borderRadius: 8, fontFamily: "'Nunito', sans-serif", fontSize: '.85rem', background: '#FFFEFB', color: '#2A1A0E', outline: 'none', caretColor: '#8B6445' },
-  // LOT 4F.1.4 — Wrapper position:relative pour boutons œil/copier dans les champs sensibles
   inputWrap: { position: 'relative', width: '100%' },
   iconBtn: {
     position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)',
