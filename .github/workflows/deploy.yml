@@ -26,7 +26,12 @@ jobs:
       - name: Build
         run: npm run build
         env:
-          VITE_SYNC_WORKER_URL: ${{ secrets.VITE_SYNC_WORKER_URL }}
+          # URLs publiques des Workers Cloudflare — injectées au build Vite
+          # pour que `import.meta.env.VITE_*` soit inliné dans le bundle.
+          # Hardcoded ici car publiques (visibles dans le bundle JS final
+          # de toute façon) : pas de valeur ajoutée à les passer en secret.
+          VITE_SYNC_WORKER_URL: https://atelier-sync.atome-tdah-cloud.workers.dev
+          VITE_WORKER_URL:      https://latelier-api.atome-tdah-cloud.workers.dev
 
       - name: Deploy to Cloudflare Pages
         uses: cloudflare/pages-action@v1
