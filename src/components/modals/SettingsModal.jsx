@@ -109,6 +109,17 @@ export default function SettingsModal({
   // LOT 4F.1.6 — useEffect resetSyncStatus retiré : App.jsx ne propage pas
   // encore cette prop. À ré-ajouter quand App.jsx sera patché.
 
+  // LOT 4F.2.4 — Formate l'âge de la dernière sauvegarde Drive en texte FR.
+  const formatDriveSyncAge = (ts) => {
+    if (!ts) return 'Aucune sauvegarde Drive encore'
+    const ageMin = Math.floor((Date.now() - ts) / 60000)
+    if (ageMin < 1) return 'Dernière sauvegarde Drive : à l\'instant'
+    if (ageMin < 60) return `Dernière sauvegarde Drive : il y a ${ageMin} min`
+    if (ageMin < 60 * 24) return `Dernière sauvegarde Drive : il y a ${Math.floor(ageMin / 60)} h`
+    const d = Math.floor(ageMin / (60 * 24))
+    return `Dernière sauvegarde Drive : il y a ${d} jour${d > 1 ? 's' : ''}`
+  }
+
   const handleSave = async (closeAfter = true) => {
     await onSave({
       name: sName,
@@ -175,6 +186,11 @@ export default function SettingsModal({
       const data = await buildLocalBackup()
       const jsonString = JSON.stringify(data, null, 2)
       const result = await googleDrive.uploadSnapshot(jsonString)
+      // LOT 4F.2.4 — Maj lastDriveSyncedAt après upload manuel réussi
+      // (cohérent avec auto-sync : tout upload réussi remet le compteur à 0).
+      if (result.ok && state.setLastDriveSyncedAt) {
+        await state.setLastDriveSyncedAt(Date.now())
+      }
       toast(result.message, result.ok ? 'success' : 'error')
     } catch (err) {
       toast(err?.message || 'Erreur lors de la sauvegarde Drive', 'error')
@@ -484,6 +500,11 @@ export default function SettingsModal({
             {googleUser ? (
               <>
                 <p style={S.okMsg}>✓ Connecté à : {googleUser.email || 'Google Drive'}</p>
+                {/* LOT 4F.2.4 — Indicateur dernière sauvegarde Drive + erreur auto-sync */}
+                <p style={S.hint}>{formatDriveSyncAge(state.lastDriveSyncedAt)}</p>
+                {state.lastDriveError && (
+                  <p style={S.driveWarnMsg}>⚠ Erreur sauvegarde auto Drive : {state.lastDriveError}</p>
+                )}
                 <button
                   type="button"
                   style={{ ...S.syncBtn, opacity: driveBusy ? 0.5 : 1 }}
@@ -651,6 +672,7 @@ const S = {
   syncBtn: { display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: 'linear-gradient(135deg,#8B6445,#C4956A)', color: '#fff', border: 'none', borderRadius: 8, fontSize: '.78rem', fontWeight: 700, fontFamily: "'Nunito', sans-serif", cursor: 'pointer', marginTop: 8 },
   okMsg: { fontSize: '.72rem', color: '#3D6B45', margin: '4px 0 0', fontFamily: "'Nunito', sans-serif" },
   errMsg: { fontSize: '.72rem', color: '#C0392B', margin: '4px 0 0', fontFamily: "'Nunito', sans-serif" },
+  driveWarnMsg: { fontSize: '.72rem', color: '#92400E', margin: '6px 0 0', fontFamily: "'Nunito', sans-serif" }, // LOT 4F.2.4
   warnBox: { fontSize: '.72rem', color: '#92400E', background: '#FEF3C7', border: '1px solid #FCD34D', borderRadius: 8, padding: '8px 10px', marginTop: 6, lineHeight: 1.5, fontFamily: "'Nunito', sans-serif" },
   actionRow: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 12, padding: '10px 12px', background: '#FFFEFB', border: '1px solid #EDE7DE', borderRadius: 10 },
   actionTitle: { fontSize: '.82rem', fontWeight: 700, color: '#2A1A0E', fontFamily: "'Nunito', sans-serif" },
