@@ -103,6 +103,11 @@ export default function SettingsModal({
   const fileInputRef = useRef(null)
   const [importing, setImporting] = useState(false)
 
+  // LOT 4F.2.5 — Refs pour cleanup des timers à l'unmount (évite setState sur composant démonté)
+  const confirmResetTimerRef = useRef(null)
+  const copiedSyncTimerRef   = useRef(null)
+  const exportDoneTimerRef   = useRef(null)
+
   const tokenChanged = state.syncToken && syncTok && syncTok !== state.syncToken
   const tokenValid = syncTok.length === 0 || syncTok.length >= 20
 
@@ -112,9 +117,18 @@ export default function SettingsModal({
     state.resetSyncStatus?.()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // LOT 4F.2.5 — Cleanup des timers à l'unmount pour éviter setState sur composant démonté.
+  useEffect(() => {
+    return () => {
+      clearTimeout(confirmResetTimerRef.current)
+      clearTimeout(copiedSyncTimerRef.current)
+      clearTimeout(exportDoneTimerRef.current)
+    }
+  }, [])
+
   // LOT 4F.2.4 — Formate l'âge de la dernière sauvegarde Drive en texte FR.
   const formatDriveSyncAge = (ts) => {
-    if (!ts) return 'Aucune sauvegarde Drive encore'
+    if (!ts) return 'Aucune sauvegarde Drive enregistrée pour l\'instant'
     const ageMin = Math.floor((Date.now() - ts) / 60000)
     if (ageMin < 1) return 'Dernière sauvegarde Drive : à l\'instant'
     if (ageMin < 60) return `Dernière sauvegarde Drive : il y a ${ageMin} min`
@@ -276,7 +290,7 @@ export default function SettingsModal({
       window.location.reload()
     } else {
       setConfirmReset(true)
-      setTimeout(() => setConfirmReset(false), 5000)
+      confirmResetTimerRef.current = setTimeout(() => setConfirmReset(false), 5000)
     }
   }
 
@@ -285,7 +299,7 @@ export default function SettingsModal({
     try {
       await navigator.clipboard.writeText(syncTok)
       setCopiedSync(true)
-      setTimeout(() => setCopiedSync(false), 1500)
+      copiedSyncTimerRef.current = setTimeout(() => setCopiedSync(false), 1500)
     } catch {
       alert('Impossible de copier automatiquement. Sélectionne et copie manuellement le mot secret.')
     }
@@ -309,9 +323,9 @@ export default function SettingsModal({
       a.href = url
       a.download = `atelier-caroline-backup-${date}.json`
       a.click()
-      URL.revokeObjectURL(url)
+      setTimeout(() => URL.revokeObjectURL(url), 1000)
       setExportDone(true)
-      setTimeout(() => setExportDone(false), 3000)
+      exportDoneTimerRef.current = setTimeout(() => setExportDone(false), 3000)
     } catch (err) {
       alert('Échec de l\'export : ' + (err.message || 'erreur inconnue'))
     }
@@ -367,14 +381,15 @@ export default function SettingsModal({
 
           <Section title="Profil" icon={<span style={S.secIcon}>👤</span>}>
             <div style={S.fg}>
-              <label style={S.label}>Ton prénom</label>
-              <input style={S.input} value={sName} onChange={e => setSName(e.target.value)} placeholder="Caroline" />
+              <label htmlFor="settings-name" style={S.label}>Ton prénom</label>
+              <input id="settings-name" style={S.input} value={sName} onChange={e => setSName(e.target.value)} placeholder="Caroline" />
             </div>
 
             <div style={S.fg}>
-              <label style={S.label}>Mot de passe Léa <span style={S.badge}>active le coach</span></label>
+              <label htmlFor="settings-api-key" style={S.label}>Mot de passe Léa <span style={S.badge}>active le coach</span></label>
               <div style={S.inputWrap}>
                 <input
+                  id="settings-api-key"
                   style={{ ...S.input, paddingRight: 40 }}
                   type={showApiKey ? 'text' : 'password'}
                   value={apiKey}
@@ -397,8 +412,8 @@ export default function SettingsModal({
 
             {apiKey && (
               <div style={S.fg}>
-                <label style={S.label}>Voix de Léa</label>
-                <select style={S.select} value={voice} onChange={e => setVoice(e.target.value)}>
+                <label htmlFor="settings-voice" style={S.label}>Voix de Léa</label>
+                <select id="settings-voice" style={S.select} value={voice} onChange={e => setVoice(e.target.value)}>
                   {VOICES.map(v => <option key={v.value} value={v.value}>{v.label}</option>)}
                 </select>
               </div>
@@ -675,7 +690,7 @@ const S = {
   syncBtn: { display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: 'linear-gradient(135deg,#8B6445,#C4956A)', color: '#fff', border: 'none', borderRadius: 8, fontSize: '.78rem', fontWeight: 700, fontFamily: "'Nunito', sans-serif", cursor: 'pointer', marginTop: 8 },
   okMsg: { fontSize: '.72rem', color: '#3D6B45', margin: '4px 0 0', fontFamily: "'Nunito', sans-serif" },
   errMsg: { fontSize: '.72rem', color: '#C0392B', margin: '4px 0 0', fontFamily: "'Nunito', sans-serif" },
-  driveWarnMsg: { fontSize: '.72rem', color: '#92400E', margin: '6px 0 0', fontFamily: "'Nunito', sans-serif" }, // LOT 4F.2.4
+  driveWarnMsg: { fontSize: '.72rem', color: '#92400E', margin: '6px 0 0', fontFamily: "'Nunito', sans-serif" },
   warnBox: { fontSize: '.72rem', color: '#92400E', background: '#FEF3C7', border: '1px solid #FCD34D', borderRadius: 8, padding: '8px 10px', marginTop: 6, lineHeight: 1.5, fontFamily: "'Nunito', sans-serif" },
   actionRow: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 12, padding: '10px 12px', background: '#FFFEFB', border: '1px solid #EDE7DE', borderRadius: 10 },
   actionTitle: { fontSize: '.82rem', fontWeight: 700, color: '#2A1A0E', fontFamily: "'Nunito', sans-serif" },
