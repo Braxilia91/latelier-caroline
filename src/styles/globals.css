@@ -41,6 +41,9 @@
 
   /* LOT 3.5 — Échelle du chat Léa (multiplicateur appliqué via JS dans App.jsx) */
   --chat-scale: 1;
+
+  /* LOT 4E.1 — Levier d'échelle UI global (multiplicateur appliqué via JS dans App.jsx) */
+  --ui-scale: 1;
 }
 
 /* ─── Reset ──────────────────────────────────────────────── */
@@ -50,7 +53,7 @@ body {
   font-family: var(--fu);
   background: var(--cream);
   color: var(--ink);
-  font-size: 15px;
+  font-size: calc(15px * var(--ui-scale, 1));
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
 }
@@ -239,7 +242,7 @@ textarea:focus {
 
   /* LOT 3 + 3.5 — Lisibilité mobile : base body + bulles chat + input chat
      multipliées par var(--chat-scale) pour permettre l'échelle utilisateur. */
-  body { font-size: 16px; }
+  body { font-size: calc(16px * var(--ui-scale, 1)); }
 
   .chat-bubble-user,
   .chat-bubble-lea {
