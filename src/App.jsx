@@ -343,6 +343,7 @@ function AppInner() {
             name: db.name, apiKey: db.apiKey, openAiKey: db.openAiKey, leaVoice: db.leaVoice,
             syncToken: db.syncToken, syncStatus: db.syncStatus, syncMessage: db.syncMessage,
             lastSyncedAt: db.lastSyncedAt, syncNow: db.syncNow,
+            resetSyncStatus: db.resetSyncStatus,
             editorFont: db.editorFont, editorTheme: db.editorTheme, editorWidth: db.editorWidth,
             chatScale: db.chatScale,
           }}
