@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import Modal from '../ui/Modal'
 import { useToast } from '../ui/Toast'
 import { X, Save, AlertTriangle, RefreshCw, Wifi, Download, Upload, Lock, Eye, EyeOff, Copy, Check, HardDrive } from 'lucide-react'
@@ -106,8 +106,11 @@ export default function SettingsModal({
   const tokenChanged = state.syncToken && syncTok && syncTok !== state.syncToken
   const tokenValid = syncTok.length === 0 || syncTok.length >= 20
 
-  // LOT 4F.1.6 — useEffect resetSyncStatus retiré : App.jsx ne propage pas
-  // encore cette prop. À ré-ajouter quand App.jsx sera patché.
+  // LOT 4F.1.6 (2/2) — Reset l'état sync au montage de la modale pour éviter
+  // d'afficher un vieux message d'erreur/succès laissé d'une session précédente.
+  useEffect(() => {
+    state.resetSyncStatus?.()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // LOT 4F.2.4 — Formate l'âge de la dernière sauvegarde Drive en texte FR.
   const formatDriveSyncAge = (ts) => {
