@@ -5,6 +5,7 @@ import { useCoach } from './hooks/useCoach'
 import { useMediaQuery } from './hooks/useMediaQuery'
 import { ToastProvider, useToast } from './components/ui/Toast'
 import { buildWelcomeMessage } from './lib/prompts'
+import * as googleDrive from './lib/googleDrive' // LOT 4F.2.4
 
 import Onboarding from './components/onboarding/Onboarding'
 import Header from './components/layout/Header'
@@ -75,6 +76,13 @@ function AppInner() {
   const [isOnline, setIsOnline] = useState(navigator.onLine)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [coachOpen, setCoachOpen] = useState(false)
+
+  // LOT 4F.2.4 — Auto-sync silencieuse Drive
+  const [lastChangeAt,    setLastChangeAt]    = useState(0)
+  const [lastDriveError,  setLastDriveError]  = useState(null)
+  const hydratedRef = useRef(false)
+  const lastChangeAtRef = useRef(0)
+  const lastDriveSyncedAtRef = useRef(null)
 
   const isMobile = useMediaQuery('(max-width: 767px)')
 
@@ -275,6 +283,65 @@ function AppInner() {
     return () => document.removeEventListener('visibilitychange', handler)
   }, [db.ready, db.syncToken]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // LOT 4F.2.4 — Sync refs pour lecture stable dans les setInterval
+  useEffect(() => { lastChangeAtRef.current = lastChangeAt }, [lastChangeAt])
+  useEffect(() => { lastDriveSyncedAtRef.current = db.lastDriveSyncedAt }, [db.lastDriveSyncedAt])
+
+  // LOT 4F.2.4 — Dirty tracking : bump lastChangeAt à chaque modif data après hydrate
+  useEffect(() => {
+    if (!db.ready) return
+    if (!hydratedRef.current) {
+      hydratedRef.current = true
+      return
+    }
+    setLastChangeAt(Date.now())
+  }, [db.ready, db.chapters, db.vracIdeas, db.leaMemory, db.carolineProfile, db.chatHistory])
+
+  // LOT 4F.2.4 — Helper : tente un upload Drive auto (lit refs pour valeurs fraîches)
+  const tryDriveAutoBackup = useCallback(async (opts = {}) => {
+    const { bypassCooldown = false, bypassRecencyDelay = false } = opts
+    const user = googleDrive.getCurrentUser()
+    if (!user) return // Drive non connecté → skip silencieux
+    const lastChange = lastChangeAtRef.current
+    const lastSync = lastDriveSyncedAtRef.current ?? 0
+    if (lastChange <= lastSync) return // rien à sauver
+    const now = Date.now()
+    if (!bypassCooldown && now - lastSync < 30 * 60 * 1000) return // cooldown 30 min
+    if (!bypassRecencyDelay && now - lastChange < 5 * 60 * 1000) return // délai 5 min après modif
+    try {
+      const backup = await db.buildLocalBackup()
+      const result = await googleDrive.uploadSnapshot(JSON.stringify(backup, null, 2))
+      if (result.ok) {
+        await db.setLastDriveSyncedAt(now)
+        setLastDriveError(null)
+      } else {
+        setLastDriveError(result.message || 'Erreur Drive auto')
+      }
+    } catch (err) {
+      setLastDriveError(err?.message || 'Erreur Drive auto')
+    }
+  }, [db.buildLocalBackup, db.setLastDriveSyncedAt])
+
+  // LOT 4F.2.4 — Interval Drive auto-sync : tick toutes les 2 min, conditions strictes
+  useEffect(() => {
+    if (!db.ready) return
+    const intervalId = setInterval(() => {
+      tryDriveAutoBackup()
+    }, 2 * 60 * 1000)
+    return () => clearInterval(intervalId)
+  }, [db.ready, tryDriveAutoBackup])
+
+  // LOT 4F.2.4 — Best-effort on hide : bypass cooldown ET délai 5 min si modif non sauvée
+  useEffect(() => {
+    if (!db.ready) return
+    const handler = () => {
+      if (!document.hidden) return
+      tryDriveAutoBackup({ bypassCooldown: true, bypassRecencyDelay: true })
+    }
+    document.addEventListener('visibilitychange', handler)
+    return () => document.removeEventListener('visibilitychange', handler)
+  }, [db.ready, tryDriveAutoBackup])
+
   if (!db.ready) return <AppSkeleton />
   if (!db.isSetup) return <Onboarding onComplete={handleSetupComplete} />
 
@@ -344,6 +411,8 @@ function AppInner() {
             syncToken: db.syncToken, syncStatus: db.syncStatus, syncMessage: db.syncMessage,
             lastSyncedAt: db.lastSyncedAt, syncNow: db.syncNow,
             resetSyncStatus: db.resetSyncStatus,
+            lastDriveSyncedAt: db.lastDriveSyncedAt, setLastDriveSyncedAt: db.setLastDriveSyncedAt,
+            lastDriveError,
             editorFont: db.editorFont, editorTheme: db.editorTheme, editorWidth: db.editorWidth,
             chatScale: db.chatScale,
           }}
