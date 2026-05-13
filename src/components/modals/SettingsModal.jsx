@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef } from 'react'
 import Modal from '../ui/Modal'
 import { useToast } from '../ui/Toast'
 import { X, Save, AlertTriangle, RefreshCw, Wifi, Download, Upload, Lock, Eye, EyeOff, Copy, Check, HardDrive } from 'lucide-react'
@@ -85,15 +85,17 @@ export default function SettingsModal({
   // LOT 4F.1.4 — Visibilité afficher/masquer pour les deux champs sensibles
   const [showApiKey, setShowApiKey]     = useState(false)
   const [showSyncTok, setShowSyncTok]   = useState(false)
-  // LOT 4F.1.4 — Feedback visuel après copie du mot secret
   const [copiedSync, setCopiedSync]     = useState(false)
 
   // LOT 4F.1.5 — Verrou réentrance pendant save+sync
   const [syncBusy, setSyncBusy] = useState(false)
 
-  // LOT 4F.2.1 — État Google Drive (auth seule à ce stade, pas d'upload/download)
+  // LOT 4F.2.1 — État Google Drive
   const [googleUser, setGoogleUser] = useState(() => googleDrive.getCurrentUser())
   const [googleBusy, setGoogleBusy] = useState(false)
+
+  // LOT 4F.2.2/4F.2.3 — Verrou réentrance Drive (upload + download).
+  const [driveBusy, setDriveBusy] = useState(false)
 
   const [confirmReset, setConfirmReset] = useState(false)
   const [exportDone, setExportDone] = useState(false)
@@ -104,12 +106,9 @@ export default function SettingsModal({
   const tokenChanged = state.syncToken && syncTok && syncTok !== state.syncToken
   const tokenValid = syncTok.length === 0 || syncTok.length >= 20
 
-  // LOT 4F.1.6 — Reset propre de l'état sync à l'ouverture de la modale
-  useEffect(() => {
-    state.resetSyncStatus?.()
-  }, [state.resetSyncStatus])
+  // LOT 4F.1.6 — useEffect resetSyncStatus retiré : App.jsx ne propage pas
+  // encore cette prop. À ré-ajouter quand App.jsx sera patché.
 
-  // LOT 4F.1.5 — handleSave devient async + param `closeAfter`.
   const handleSave = async (closeAfter = true) => {
     await onSave({
       name: sName,
@@ -123,7 +122,6 @@ export default function SettingsModal({
     if (closeAfter) onClose()
   }
 
-  // LOT 4F.1.5 — Sauvegarde manuelle vers le cloud, séquencée proprement.
   const handleSyncNow = async () => {
     if (syncBusy) return
     if (syncTok.length > 0 && syncTok.length < 20) return
@@ -141,7 +139,6 @@ export default function SettingsModal({
     }
   }
 
-  // LOT 4F.2.1 — Connexion Google Drive (popup OAuth GIS).
   const handleGoogleSignIn = async () => {
     if (googleBusy) return
     setGoogleBusy(true)
@@ -159,9 +156,88 @@ export default function SettingsModal({
     }
   }
 
-  // LOT 4F.2.1 — Déconnexion : révoque le token côté Google et vide le state local.
+  // LOT 4F.2.2 — Sauvegarde manuelle vers Drive.
+  const handleUploadDrive = async () => {
+    if (driveBusy) return
+    if (!googleUser) return
+    // Refresh opportuniste : si le token a expiré pendant que la modale
+    // était ouverte, getCurrentUser() retourne null et on bascule l'UI
+    // proprement sans tenter l'appel API.
+    const fresh = googleDrive.getCurrentUser()
+    if (!fresh) {
+      setGoogleUser(null)
+      toast('Session Google Drive expirée. Reconnecte-toi.', 'info')
+      return
+    }
+    setDriveBusy(true)
+    try {
+      if (!buildLocalBackup) throw new Error('Sauvegarde locale indisponible')
+      const data = await buildLocalBackup()
+      const jsonString = JSON.stringify(data, null, 2)
+      const result = await googleDrive.uploadSnapshot(jsonString)
+      toast(result.message, result.ok ? 'success' : 'error')
+    } catch (err) {
+      toast(err?.message || 'Erreur lors de la sauvegarde Drive', 'error')
+    } finally {
+      setDriveBusy(false)
+    }
+  }
+
+  // LOT 4F.2.3 — Restauration manuelle depuis Drive.
+  const handleRestoreDrive = async () => {
+    if (driveBusy || googleBusy) return
+    if (!googleUser) return
+    // Refresh opportuniste (idem handleUploadDrive)
+    const fresh = googleDrive.getCurrentUser()
+    if (!fresh) {
+      setGoogleUser(null)
+      toast('Session Google Drive expirée. Reconnecte-toi.', 'info')
+      return
+    }
+
+    const confirmed = window.confirm(
+      '⚠️ Attention\n\n' +
+      'Cela va remplacer TES DONNÉES ACTUELLES par celles de la sauvegarde Drive :\n' +
+      '• Chapitres\n' +
+      '• Idées vrac\n' +
+      '• Historique du chat\n' +
+      '• Profil et mémoire de Léa\n\n' +
+      'Cette action est irréversible.\n\n' +
+      'Astuce : tu peux faire "Exporter une sauvegarde" en bas avant pour avoir un filet de sécurité local.\n\n' +
+      'Continuer ?'
+    )
+    if (!confirmed) return
+
+    setDriveBusy(true)
+    try {
+      const result = await googleDrive.downloadSnapshot()
+      if (!result.ok) {
+        const tone = result.message === 'Aucune sauvegarde Drive trouvée' ? 'info' : 'error'
+        toast(result.message, tone)
+        return
+      }
+      if (!onImport) {
+        toast('Import indisponible', 'error')
+        return
+      }
+      // Feedback intermédiaire avant l'import (1-3 s IndexedDB)
+      toast(result.message, 'info')
+      const importResult = await onImport(result.file)
+      if (importResult?.ok) {
+        alert('✓ Sauvegarde Drive restaurée avec succès.\n\nL\'application va redémarrer pour rafraîchir.')
+        window.location.reload()
+      } else {
+        toast(importResult?.message || 'Échec de la restauration', 'error')
+      }
+    } catch (err) {
+      toast(err?.message || 'Erreur lors de la restauration Drive', 'error')
+    } finally {
+      setDriveBusy(false)
+    }
+  }
+
   const handleGoogleSignOut = async () => {
-    if (googleBusy) return
+    if (googleBusy || driveBusy) return
     setGoogleBusy(true)
     try {
       await googleDrive.signOut()
@@ -185,7 +261,6 @@ export default function SettingsModal({
     }
   }
 
-  // LOT 4F.1.4 — Copier le mot secret de sauvegarde dans le presse-papier.
   const handleCopySync = async () => {
     if (!syncTok) return
     try {
@@ -197,7 +272,6 @@ export default function SettingsModal({
     }
   }
 
-  // LOT 4F.1 — Export JSON
   const handleExport = async () => {
     try {
       const data = buildLocalBackup
@@ -224,7 +298,6 @@ export default function SettingsModal({
     }
   }
 
-  // LOT 4F.1 — Import depuis fichier JSON
   const handleImportClick = () => {
     fileInputRef.current?.click()
   }
@@ -401,7 +474,7 @@ export default function SettingsModal({
             </button>
           </Section>
 
-          {/* LOT 4F.2.1 — Section Google Drive : auth seule, pas encore d'upload/download */}
+          {/* LOT 4F.2.1/4F.2.2/4F.2.3 — Section Google Drive : auth + upload + restore */}
           <Section title="Sauvegarde Google Drive" icon={<HardDrive size={13} color="#8B6445" />}>
             <p style={S.syncTxt}>
               Sauvegarde durable de tes données dans ton Google Drive (dossier invisible,
@@ -413,9 +486,27 @@ export default function SettingsModal({
                 <p style={S.okMsg}>✓ Connecté à : {googleUser.email || 'Google Drive'}</p>
                 <button
                   type="button"
+                  style={{ ...S.syncBtn, opacity: driveBusy ? 0.5 : 1 }}
+                  onClick={handleUploadDrive}
+                  disabled={driveBusy || googleBusy}
+                >
+                  <Upload size={13} />
+                  {driveBusy ? 'Opération Drive en cours…' : 'Sauvegarder sur Drive maintenant'}
+                </button>
+                <button
+                  type="button"
+                  style={{ ...S.actionBtn, opacity: driveBusy || googleBusy ? 0.5 : 1, marginTop: 8 }}
+                  onClick={handleRestoreDrive}
+                  disabled={driveBusy || googleBusy}
+                >
+                  <Download size={13} />
+                  {driveBusy ? 'Opération Drive en cours…' : 'Restaurer depuis Drive'}
+                </button>
+                <button
+                  type="button"
                   style={{ ...S.actionBtn, opacity: googleBusy ? 0.5 : 1, marginTop: 8 }}
                   onClick={handleGoogleSignOut}
-                  disabled={googleBusy}
+                  disabled={googleBusy || driveBusy}
                 >
                   {googleBusy ? 'Déconnexion…' : 'Déconnecter'}
                 </button>
