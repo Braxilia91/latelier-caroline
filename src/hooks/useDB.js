@@ -30,6 +30,7 @@ export function useAppState() {
   const [syncStatus,     setSyncStatus]     = useState('idle')
   const [syncMessage,    setSyncMessage]    = useState('')
   const [lastSyncedAt,   setLastSyncedAt]   = useState(null)
+  const [lastDriveSyncedAt, setLastDriveSyncedAtState] = useState(null) // LOT 4F.2.4
   const [vracIdeas,      setVracIdeas]      = useState([])
   const [editorFont,     setEditorFontState]  = useState('m')
   const [editorTheme,    setEditorThemeState] = useState('jour')
@@ -54,7 +55,7 @@ export function useAppState() {
         console.info('[Storage] Mode non-persistant. Le navigateur peut évincer les données en cas de pression mémoire.')
       }
 
-      const [n, k, oai, lv, st, sess, last, mood, chs, chat, prof, mem, vrac, stok, lsa, ef, et, ew, fls, snd, vol, cs] = await Promise.all([
+      const [n, k, oai, lv, st, sess, last, mood, chs, chat, prof, mem, vrac, stok, lsa, lds, ef, et, ew, fls, snd, vol, cs] = await Promise.all([
         getKV('name',             ''),
         getKV('apiKey',           ''),
         getKV('openAiKey',        ''),
@@ -70,6 +71,7 @@ export function useAppState() {
         getVrac(),
         getKV('syncToken',        ''),
         getKV('lastSyncedAt',     null),
+        getKV('lastDriveSyncedAt', null),
         getKV('editorFont',       'm'),
         getKV('editorTheme',      'jour'),
         getKV('editorWidth',      'confort'),
@@ -93,6 +95,7 @@ export function useAppState() {
       setVracIdeas(vrac)
       setSyncTokenState(stok)
       setLastSyncedAt(lsa)
+      setLastDriveSyncedAtState(lds)
       setEditorFontState(ef)
       setEditorThemeState(et)
       setEditorWidthState(ew)
@@ -226,6 +229,13 @@ export function useAppState() {
   const resetSyncStatus = useCallback(() => {
     setSyncStatus('idle')
     setSyncMessage('')
+  }, [])
+
+  // LOT 4F.2.4 — Setter persisté pour la dernière sauvegarde Drive
+  // (utilisé par l'upload manuel ET par l'auto-sync dans App.jsx).
+  const setLastDriveSyncedAt = useCallback(async (ts) => {
+    setLastDriveSyncedAtState(ts)
+    await setKV('lastDriveSyncedAt', ts)
   }, [])
 
   const setCarolineProfile = useCallback(async (profile) => {
@@ -409,6 +419,7 @@ export function useAppState() {
     vracIdeas, unusedVrac, addVracIdea, markVracUsed, removeVracIdea,
     syncToken, setSyncToken, syncStatus, syncMessage, lastSyncedAt, syncNow,
     resetSyncStatus,
+    lastDriveSyncedAt, setLastDriveSyncedAt, // LOT 4F.2.4
     editorFont, setEditorFont, editorTheme, setEditorTheme, editorWidth, setEditorWidth,
     chatScale, setChatScale,
     firstLaunch, markFirstLaunchSeen,
