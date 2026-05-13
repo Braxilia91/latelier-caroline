@@ -37,6 +37,7 @@ export function useAppState() {
   const [editorWidth,    setEditorWidthState] = useState('confort')
   const [firstLaunch,    setFirstLaunchState] = useState(false)
   const [chatScale,      setChatScaleState]   = useState(1)
+  const [uiScale,        setUiScaleState]     = useState(1)  // LOT 4E.1
   const [ambientSound,   setAmbientSoundState]  = useState(null)
   const [ambientVolume,  setAmbientVolumeState] = useState(0.28)
   const [storageWarning, setStorageWarning] = useState(null)
@@ -55,7 +56,7 @@ export function useAppState() {
         console.info('[Storage] Mode non-persistant. Le navigateur peut évincer les données en cas de pression mémoire.')
       }
 
-      const [n, k, oai, lv, st, sess, last, mood, chs, chat, prof, mem, vrac, stok, lsa, lds, ef, et, ew, fls, snd, vol, cs] = await Promise.all([
+      const [n, k, oai, lv, st, sess, last, mood, chs, chat, prof, mem, vrac, stok, lsa, lds, ef, et, ew, fls, snd, vol, cs, us] = await Promise.all([
         getKV('name',             ''),
         getKV('apiKey',           ''),
         getKV('openAiKey',        ''),
@@ -79,6 +80,7 @@ export function useAppState() {
         getKV('ambientSound',     null),
         getKV('ambientVolume',    0.28),
         getKV('chatScale',        1),
+        getKV('uiScale',          1),   // LOT 4E.1
       ])
 
       setNameState(n); setApiKeyState(k); setOAIKey(oai); setLeaVoice(lv)
@@ -103,6 +105,7 @@ export function useAppState() {
       setAmbientSoundState(snd)
       setAmbientVolumeState(vol)
       setChatScaleState(typeof cs === 'number' && cs > 0 ? cs : 1)
+      setUiScaleState(typeof us === 'number' && us > 0 ? us : 1)  // LOT 4E.1
       setReady(true)
 
       try {
@@ -134,6 +137,11 @@ export function useAppState() {
     const safe = typeof v === 'number' && v > 0 ? v : 1
     setChatScaleState(safe)
     await setKV('chatScale', safe)
+  }, [])
+  const setUiScale     = useCallback(async (v) => {  // LOT 4E.1
+    const safe = typeof v === 'number' && v > 0 ? v : 1
+    setUiScaleState(safe)
+    await setKV('uiScale', safe)
   }, [])
 
   const setAmbientSound  = useCallback(async (v) => { setAmbientSoundState(v);  await setKV('ambientSound',  v) }, [])
@@ -422,6 +430,7 @@ export function useAppState() {
     lastDriveSyncedAt, setLastDriveSyncedAt, // LOT 4F.2.4
     editorFont, setEditorFont, editorTheme, setEditorTheme, editorWidth, setEditorWidth,
     chatScale, setChatScale,
+    uiScale, setUiScale,  // LOT 4E.1
     firstLaunch, markFirstLaunchSeen,
     ambientSound, setAmbientSound, ambientVolume, setAmbientVolume,
     storageWarning, dismissStorageWarning: () => setStorageWarning(null),
