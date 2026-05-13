@@ -24,6 +24,13 @@ const CHAT_SCALES = [
   { value: 1.3,  label: 'Grand',   desc: '+30 %' },
 ]
 
+// LOT 4E.1 — Échelle UI globale
+const UI_SCALES = [
+  { value: 0.9,  label: 'Compact', desc: '−10 %' },
+  { value: 1,    label: 'Normal',  desc: 'Par défaut' },
+  { value: 1.15, label: 'Grand',   desc: '+15 %' },
+]
+
 const THEMES = [
   { value: 'jour', label: '☀️ Jour', desc: 'Fond ivoire clair' },
   { value: 'soir', label: '🌙 Soir', desc: 'Tons dorés apaisés' },
@@ -79,6 +86,7 @@ export default function SettingsModal({
   const [editorTheme, setEditorTheme] = useState(state.editorTheme || 'jour')
   const [editorWidth, setEditorWidth] = useState(state.editorWidth || 'confort')
   const [chatScale, setChatScale]     = useState(typeof state.chatScale === 'number' && state.chatScale > 0 ? state.chatScale : 1)
+  const [uiScale, setUiScale]         = useState(typeof state.uiScale === 'number' && state.uiScale > 0 ? state.uiScale : 1)  // LOT 4E.1
 
   const [syncTok, setSyncTok] = useState(state.syncToken || '')
 
@@ -146,6 +154,7 @@ export default function SettingsModal({
       syncToken: syncTok,
       editorFont, editorTheme, editorWidth,
       chatScale,
+      uiScale,  // LOT 4E.1
     })
     if (closeAfter) onClose()
   }
@@ -438,6 +447,10 @@ export default function SettingsModal({
             <div style={S.fg}>
               <label style={S.label}>Taille du chat avec Léa</label>
               <ToggleGroup options={CHAT_SCALES} value={chatScale} onChange={setChatScale} />
+            </div>
+            <div style={S.fg}>
+              <label style={S.label}>Échelle de l'interface <span style={S.badgeOpt}>global</span></label>
+              <ToggleGroup options={UI_SCALES} value={uiScale} onChange={setUiScale} />
             </div>
           </Section>
 
