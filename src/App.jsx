@@ -171,6 +171,12 @@ function AppInner() {
     document.documentElement.style.setProperty('--chat-scale', String(v))
   }, [db.chatScale])
 
+  // LOT 4E.1 — Propagation de --ui-scale sur documentElement
+  useEffect(() => {
+    const v = (typeof db.uiScale === 'number' && db.uiScale > 0) ? db.uiScale : 1
+    document.documentElement.style.setProperty('--ui-scale', String(v))
+  }, [db.uiScale])
+
   useEffect(() => {
     if (!isMobile) {
       setSidebarOpen(false)
@@ -219,16 +225,17 @@ function AppInner() {
     toast(`Bienvenue ${name} ! Ton atelier est prêt 🌿`, 'success')
   }
 
-  const handleSaveSettings = async ({ name, apiKey, openAiKey, leaVoice, syncToken, editorFont, editorTheme, editorWidth, chatScale }) => {
+  const handleSaveSettings = async ({ name, apiKey, openAiKey, leaVoice, syncToken, editorFont, editorTheme, editorWidth, chatScale, uiScale }) => {
     await db.setName(name)
     await db.setApiKey(apiKey)
     await db.setOaiKey(openAiKey)
     await db.setVoice(leaVoice)
-    if (syncToken !== undefined) await db.setSyncToken(syncToken)
-    if (editorFont !== undefined) await db.setEditorFont(editorFont)
+    if (syncToken   !== undefined) await db.setSyncToken(syncToken)
+    if (editorFont  !== undefined) await db.setEditorFont(editorFont)
     if (editorTheme !== undefined) await db.setEditorTheme(editorTheme)
     if (editorWidth !== undefined) await db.setEditorWidth(editorWidth)
-    if (chatScale  !== undefined) await db.setChatScale(chatScale)
+    if (chatScale   !== undefined) await db.setChatScale(chatScale)
+    if (uiScale     !== undefined) await db.setUiScale(uiScale)  // LOT 4E.1
     toast('Réglages sauvegardés ✓', 'success')
   }
 
@@ -415,6 +422,7 @@ function AppInner() {
             lastDriveError,
             editorFont: db.editorFont, editorTheme: db.editorTheme, editorWidth: db.editorWidth,
             chatScale: db.chatScale,
+            uiScale: db.uiScale,  // LOT 4E.1
           }}
           chapters={db.chapters} vracIdeas={db.vracIdeas} name={db.name}
           onClose={() => setModal(null)} onSave={handleSaveSettings} onReset={db.resetAllData}
