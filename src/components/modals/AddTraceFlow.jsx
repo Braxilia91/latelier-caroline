@@ -2,69 +2,85 @@ import { useState, useEffect, useRef } from 'react'
 import Modal from '../ui/Modal'
 import { X, ImagePlus } from 'lucide-react'
 import { compressImage } from '../../lib/imageCompress'
+import { runOCR, OCR_CONFIDENCE_THRESHOLD } from '../../lib/ocrWorker'
 
 /**
  * AddTraceFlow — Flow d'ajout d'une trace photo dans Le tiroir.
  *
- * Spec : docs/le-tiroir-v1.md §4 étapes 1-2 (V1 photo uniquement).
- * LOT 3 = étapes 1-2 seulement. Étapes 3-5 (OCR, 3 questions, choix de sortie)
- * reportées aux LOT 4-5-6.
+ * Spec : docs/le-tiroir-v1.md §4 étapes 1-3 (V1 photo uniquement).
+ * LOT 3 = étapes 1-2. LOT 4 = étape 3 (OCR conditionnel). Étapes 4-5 reportées LOT 5-6.
  *
  * Étape 1 — Importer :
  *   File picker (accept="image/*") → compressImage (Canvas 1600px + JPEG q=0.85).
- *   En cas d'échec : message inline, reste sur étape 1, permet de retenter
- *   (cf. arbitrage LOT 3 Q2 figé dans REPRISE_CONV_LOT3.md).
  *
  * Étape 2 — Première écoute :
- *   Photo plein cadre + une seule question « Pourquoi cette photo, maintenant ? »
- *   Champ texte multiligne, vide accepté.
- *   Boutons : "Passer" (sauve avec whyNow='') / "Suivante" (sauve avec whyNow=text).
+ *   Photo plein cadre + question « Pourquoi cette photo, maintenant ? »
+ *   OCR lancé en arrière-plan en parallèle (non bloquant).
  *
- * Architecture (LOT 3 Option 1 stricte) :
- *   Ce composant ne touche pas IndexedDB directement. La persistance est
- *   entièrement déléguée au parent via la prop `onCreateTrace`, qui sera
- *   câblée en LOT 3B (TiroirModal ou App.jsx) en appelant createTraceWithBlob
- *   depuis lib/db.js. Cela préserve l'architecture centrée sur useAppState
- *   et évite une double porte d'accès aux données côté UI.
+ * Étape 3 — OCR conditionnel (pendant étape 2) :
+ *   Si confiance > OCR_CONFIDENCE_THRESHOLD : ligne discrète sous textarea.
+ *   Si "Oui" : encart dépliable, OCR brut éditable + question whatItStirs.
+ *   Si OCR encore en cours au Save : sauvegarde sans attendre (ocrRunAt null).
  *
- * Statut : composant non branché (aucune importation) tant que LOT 3B
- * ne l'instancie pas.
+ * Architecture (Option 1 stricte) :
+ *   Pas de touche IDB directe. Persistance déléguée au parent via onCreateTrace.
  *
  * Props :
- *   onClose        : () => void                                — ferme la modale
- *                                                                (X header, Échap, overlay, fin du flow)
- *   onCreateTrace  : ({ metadata, blob }) => Promise<trace>    — handler de persistance fourni par le parent.
- *                                                                Doit throw en cas d'échec pour que l'UI
- *                                                                affiche un message inline.
+ *   onClose        : () => void
+ *   onCreateTrace  : ({ metadata, blob }) => Promise<trace>
  */
 export default function AddTraceFlow({ onClose, onCreateTrace }) {
-  const [step, setStep]             = useState('import')   // 'import' | 'firstListen'
-  const [compressed, setCompressed] = useState(null)        // { blob, mimeType, width, height, originalSize }
-  const [previewUrl, setPreviewUrl] = useState(null)        // URL.createObjectURL pour <img>
-  const [whyNow, setWhyNow]         = useState('')
-  const [error, setError]           = useState(null)
+  const [step, setStep] = useState('import')         // 'import' | 'firstListen'
+  const [compressed, setCompressed] = useState(null) // { blob, mimeType, width, height, originalSize }
+  const [previewUrl, setPreviewUrl] = useState(null)
+  const [whyNow, setWhyNow] = useState('')
+  const [error, setError] = useState(null)
   const [submitting, setSubmitting] = useState(false)
-  const fileInputRef                = useRef(null)
-  const textareaRef                 = useRef(null)
 
-  // Libère le URL.createObjectURL au démontage ou au remplacement du blob.
-  // Évite les fuites mémoire si la modale est fermée avant la fin du flow.
+  // OCR state
+  const [ocrStatus, setOcrStatus] = useState('idle') // 'idle'|'running'|'done'|'skipped'|'error'
+  const [ocrResult, setOcrResult] = useState(null)   // { text, confidence } | null
+  const [ocrExpanded, setOcrExpanded] = useState(false)
+  const [ocrTextEdited, setOcrTextEdited] = useState('')
+  const [whatItStirs, setWhatItStirs] = useState('')
+
+  const fileInputRef = useRef(null)
+  const textareaRef = useRef(null)
+
+  // Libère l'ObjectURL au démontage ou remplacement du blob.
   useEffect(() => {
     return () => {
       if (previewUrl) URL.revokeObjectURL(previewUrl)
     }
   }, [previewUrl])
 
-  // Modal.jsx ne re-trigger pas son autofocus au step change (useEffect deps []).
-  // On focus explicitement la textarea quand on bascule sur l'étape 2.
+  // Focus textarea à l'arrivée sur étape 2.
   useEffect(() => {
     if (step === 'firstListen') {
       const id = setTimeout(() => {
-        try { textareaRef.current?.focus({ preventScroll: true }) } catch (_) { /* tolérant */ }
+        try { textareaRef.current?.focus({ preventScroll: true }) } catch (_) {}
       }, 0)
       return () => clearTimeout(id)
     }
   }, [step])
+
+  // Lance l'OCR en parallèle dès l'arrivée sur étape 2.
+  // Non bloquant : si OCR en cours au Save, on sauve sans attendre.
+  useEffect(() => {
+    if (step !== 'firstListen' || !compressed) return
+    setOcrStatus('running')
+    runOCR(compressed.blob)
+      .then(({ text, confidence }) => {
+        if (confidence >= OCR_CONFIDENCE_THRESHOLD && text.trim().length > 0) {
+          setOcrResult({ text, confidence })
+          setOcrTextEdited(text)
+          setOcrStatus('done')
+        } else {
+          setOcrStatus('skipped')
+        }
+      })
+      .catch(() => setOcrStatus('error'))
+  }, [step]) // compressed est stable une fois positionné
 
   const handlePickFile = () => {
     setError(null)
@@ -73,7 +89,7 @@ export default function AddTraceFlow({ onClose, onCreateTrace }) {
 
   const handleFileChange = async (e) => {
     const file = e.target.files?.[0]
-    e.target.value = ''  // permet de re-sélectionner le même fichier après une erreur
+    e.target.value = ''
     if (!file) return
     setSubmitting(true)
     setError(null)
@@ -101,19 +117,25 @@ export default function AddTraceFlow({ onClose, onCreateTrace }) {
     try {
       await onCreateTrace({
         metadata: {
-          type:      'photo',
-          mimeType:  compressed.mimeType,
-          width:     compressed.width,
-          height:    compressed.height,
+          type: 'photo',
+          mimeType: compressed.mimeType,
+          width: compressed.width,
+          height: compressed.height,
           sizeBytes: compressed.blob.size,
-          whyNow:    (whyNowValue || '').trim(),
-          status:    'private',
+          whyNow: (whyNowValue || '').trim(),
+          // OCR — null si OCR non terminé ou sous le seuil (non bloquant)
+          ocrText: ocrExpanded
+            ? (ocrTextEdited.trim() || null)
+            : (ocrResult?.text?.trim() || null),
+          ocrConfidence: ocrResult?.confidence ?? null,
+          ocrLang: ocrResult ? 'fra+eng' : '',
+          ocrRunAt: ocrResult ? new Date().toISOString() : null,
+          whatItStirs: ocrExpanded ? whatItStirs.trim() : '',
+          status: 'private',
         },
         blob: compressed.blob,
       })
       onClose?.()
-      // Note : pas de setSubmitting(false) ici — le composant va être démonté par onClose.
-      //        En cas d'erreur, le catch s'en charge.
     } catch (err) {
       setError(err?.message || "La sauvegarde a échoué. Réessaye dans un instant.")
       setSubmitting(false)
@@ -172,7 +194,7 @@ export default function AddTraceFlow({ onClose, onCreateTrace }) {
         </div>
       )}
 
-      {/* Étape 2 — Première écoute */}
+      {/* Étape 2 — Première écoute + OCR conditionnel */}
       {step === 'firstListen' && (
         <div style={S.bodyListen}>
           <div style={S.imgWrap}>
@@ -188,6 +210,40 @@ export default function AddTraceFlow({ onClose, onCreateTrace }) {
             rows={3}
             disabled={submitting}
           />
+
+          {/* OCR — ligne discrète si confiance > seuil */}
+          {ocrStatus === 'done' && !ocrExpanded && (
+            <div style={S.ocrHint}>
+              <span style={S.ocrHintText}>Un texte se cache dans cette image. Le lire ?</span>
+              <button style={S.ocrYesBtn} onClick={() => setOcrExpanded(true)}>
+                Oui
+              </button>
+            </div>
+          )}
+
+          {/* OCR — encart dépliable */}
+          {ocrExpanded && (
+            <div style={S.ocrPanel}>
+              <p style={S.ocrLabel}>Texte détecté — modifie-le si besoin :</p>
+              <textarea
+                style={S.ocrTextarea}
+                value={ocrTextEdited}
+                onChange={(e) => setOcrTextEdited(e.target.value)}
+                rows={3}
+                disabled={submitting}
+              />
+              <p style={S.ocrQuestion}>Ce que tu relis là — qu'est-ce que ça remue ?</p>
+              <textarea
+                style={{ ...S.textarea, minHeight: 56 }}
+                value={whatItStirs}
+                onChange={(e) => setWhatItStirs(e.target.value)}
+                placeholder="Une phrase suffit."
+                rows={2}
+                disabled={submitting}
+              />
+            </div>
+          )}
+
           {error && <p style={S.errorInline} role="alert">{error}</p>}
           <div style={S.footer}>
             <button
@@ -305,6 +361,62 @@ const S = {
     boxSizing: 'border-box',
     minHeight: 76,
   },
+
+  // OCR styles
+  ocrHint: {
+    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+    padding: '8px 12px',
+    background: '#F5F0E8',
+    border: '1px solid #EDE7DE',
+    borderRadius: 10,
+  },
+  ocrHintText: {
+    fontFamily: "'Lora', serif", fontStyle: 'italic',
+    fontSize: '.82rem', color: '#7A6555',
+  },
+  ocrYesBtn: {
+    padding: '4px 14px',
+    background: 'transparent',
+    color: '#8B6445',
+    border: '1.5px solid #C4956A',
+    borderRadius: 8,
+    fontSize: '.8rem', fontWeight: 700,
+    fontFamily: "'Nunito', sans-serif",
+    cursor: 'pointer',
+    flexShrink: 0,
+    marginLeft: 10,
+  },
+  ocrPanel: {
+    display: 'flex', flexDirection: 'column', gap: 8,
+    padding: '12px 14px',
+    background: '#F5F0E8',
+    border: '1px solid #EDE7DE',
+    borderRadius: 12,
+  },
+  ocrLabel: {
+    margin: 0,
+    fontFamily: "'Lora', serif", fontStyle: 'italic',
+    fontSize: '.78rem', color: '#9C8878',
+  },
+  ocrTextarea: {
+    width: '100%',
+    padding: '8px 11px',
+    border: '1.5px solid #EDE7DE',
+    borderRadius: 10,
+    fontFamily: "'Lora', serif",
+    fontSize: '.85rem', lineHeight: 1.5,
+    background: '#FFFEFB', color: '#2A1A0E',
+    outline: 'none', resize: 'vertical',
+    caretColor: '#8B6445',
+    boxSizing: 'border-box',
+    minHeight: 64,
+  },
+  ocrQuestion: {
+    margin: 0,
+    fontFamily: "'Cormorant Garamond', serif",
+    fontSize: '.95rem', fontWeight: 600, color: '#2A1A0E',
+  },
+
   errorInline: {
     margin: 0,
     padding: '8px 12px',
