@@ -1,5 +1,5 @@
 import { useRef, useEffect } from 'react'
-import { Feather, Mic, BookOpen, Download, Settings, Lightbulb, Search, Music, Menu, Leaf } from 'lucide-react'
+import { Feather, Mic, BookOpen, Download, Settings, Lightbulb, Search, Music, Menu, Leaf, Archive } from 'lucide-react'
 import useClickAway from '../../hooks/useClickAway'
 
 const MOODS = [
@@ -21,7 +21,7 @@ const SOUNDS = [
 
 export default function Header({
   name, moodToday, setMood, streak,
-  onDictate, onPlan, onExport, onSettings, onInspir, onVocab,
+  onDictate, onPlan, onTiroir, onExport, onSettings, onInspir, onVocab,
   moodOpen, setMoodOpen,
   // ── Ambiance ──
   ambientSound, ambientPlaying, onAmbientChange,
@@ -112,6 +112,7 @@ export default function Header({
         <BtnH icon={<Search   size={16} />} label="Vocabulaire" onClick={onVocab}    isMobile={isMobile} />
         <BtnH icon={<Mic      size={16} />} label="Dicter"      onClick={onDictate}  isMobile={isMobile} />
         <BtnH icon={<BookOpen size={16} />} label="Plan"         onClick={onPlan}     isMobile={isMobile} />
+        {!isMobile && <BtnH icon={<Archive size={16} />} label="Le tiroir"   onClick={onTiroir}   isMobile={isMobile} />}
         <BtnH icon={<Download size={16} />} label="Exporter"    onClick={onExport}   isMobile={isMobile} />
         <BtnH icon={<Settings size={16} />} label="Réglages"    onClick={onSettings} isMobile={isMobile} />
 
