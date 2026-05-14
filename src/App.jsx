@@ -5,6 +5,10 @@ import { useCoach } from './hooks/useCoach'
 import { useMediaQuery } from './hooks/useMediaQuery'
 import { ToastProvider, useToast } from './components/ui/Toast'
 import { buildWelcomeMessage } from './lib/prompts'
+// LOT 3B — accès direct au helper bas niveau pour stocker le blob d'une trace.
+// Le hook useAppState ne l'expose pas (encapsulation blob), mais le câblage du
+// flow d'ajout en a besoin pour composer le pattern 3-step (cf handleCreateTrace).
+import { putTraceBlob } from './lib/db'
 
 // ── Imports critiques (chemin de rendu initial) ──────────────────
 import Onboarding from './components/onboarding/Onboarding'
@@ -27,6 +31,8 @@ const LeaMemoryModal = lazy(() => import('./components/modals/LeaMemoryModal'))
 // LOT 2B.1 — Le tiroir : routing inert (bouton câblé au commit 2B.2 dans Header.jsx)
 const TiroirModal = lazy(() => import('./components/modals/TiroirModal'))
 const TraceDetailModal = lazy(() => import('./components/modals/TraceDetailModal'))
+// LOT 3 — Flow d'ajout d'une trace photo (étapes 1-2) câblé en 3B.
+const AddTraceFlow = lazy(() => import('./components/modals/AddTraceFlow'))
 
 function AppSkeleton() {
   const pulse = {
@@ -305,6 +311,37 @@ function AppInner() {
     })
   }, [db, toast])
 
+  // LOT 3B — Câblage du flow d'ajout d'une trace photo (étapes 1-2).
+  //
+  // Pattern 3 étapes recomposé via le hook useAppState pour bénéficier du
+  // refresh automatique du state React `traces` à chaque mutation :
+  //   1) db.createTrace({ blobAvailable: false }) → state React mis à jour, trace visible
+  //      dans la grille avec un flag honnête (pas de blob encore stocké).
+  //   2) putTraceBlob(blobKey, blob)              → stockage blob bas niveau (pas d'effet state).
+  //   3) db.editTrace({ blobAvailable: true })    → state React refresh, flag passe à true.
+  //
+  // Si l'étape 2 ou 3 échoue : rollback best-effort via db.removeTrace
+  // (cascade trace + blob dans lib/db). Si le rollback échoue lui-même, on swallow :
+  // la trace orpheline restera avec blobAvailable=false (cf. étape 1) — état honnête,
+  // détectable côté UI et nettoyable par un GC ultérieur (dette gcOrphanedBlobs).
+  //
+  // Note : on n'utilise PAS createTraceWithBlob (3A.1bis) ici car il bypass le state
+  // React du hook ; il reste valable comme bibliothèque atomique pour scripts batch /
+  // restore futurs.
+  const handleCreateTrace = useCallback(async ({ metadata, blob }) => {
+    if (!blob) throw new Error('handleCreateTrace: blob requis.')
+    const trace = await db.createTrace({ ...metadata, blobAvailable: false })
+    try {
+      await putTraceBlob(trace.blobKey, blob)
+      await db.editTrace(trace.id, { blobAvailable: true })
+      toast('Photo ajoutee au tiroir', 'success')
+      return { ...trace, blobAvailable: true }
+    } catch (err) {
+      try { await db.removeTrace(trace.id) } catch { /* swallow : trace fantôme assumée */ }
+      throw err
+    }
+  }, [db, toast])
+
   useEffect(() => {
     if (db.ready && db.syncToken && import.meta.env.VITE_SYNC_WORKER_URL) {
       db.syncNow()
@@ -414,7 +451,7 @@ function AppInner() {
           <TiroirModal
             traces={db.traces}
             onClose={() => setModal(null)}
-            onAddTrace={() => { /* LOT 3 : ouvrira AddTraceFlow */ }}
+            onAddTrace={() => setModal('addTrace')}
             onOpenTrace={(trace) => { setSelectedTrace(trace); setModal('traceDetail') }}
             isMobile={isMobile}
           />
@@ -426,6 +463,12 @@ function AppInner() {
             onEdit={() => { /* LOT futur : ouvrira AddTraceFlow en mode édition */ }}
             onDelete={() => { /* LOT futur : confirm + db.removeTrace */ }}
             isMobile={isMobile}
+          />
+        )}
+        {modal === 'addTrace' && (
+          <AddTraceFlow
+            onClose={() => setModal('tiroir')}
+            onCreateTrace={handleCreateTrace}
           />
         )}
         {showPack && (
