@@ -5,10 +5,6 @@ import { useCoach } from './hooks/useCoach'
 import { useMediaQuery } from './hooks/useMediaQuery'
 import { ToastProvider, useToast } from './components/ui/Toast'
 import { buildWelcomeMessage } from './lib/prompts'
-// LOT 3B — accès direct au helper bas niveau pour stocker le blob d'une trace.
-// Le hook useAppState ne l'expose pas (encapsulation blob), mais le câblage du
-// flow d'ajout en a besoin pour composer le pattern 3-step (cf handleCreateTrace).
-import { putTraceBlob } from './lib/db'
 
 // ── Imports critiques (chemin de rendu initial) ──────────────────
 import Onboarding from './components/onboarding/Onboarding'
@@ -18,21 +14,18 @@ import WritingArea from './components/writing/WritingArea'
 import CoachPanel from './components/layout/CoachPanel'
 
 // ── Modaux : chargés à la demande uniquement ─────────────────────
-const DictationModal = lazy(() => import('./components/modals/DictationModal'))
-const SettingsModal = lazy(() => import('./components/modals/SettingsModal'))
-const InspirationModal = lazy(() => import('./components/modals/InspirationModal'))
-const ExportModal = lazy(() => import('./components/modals/ExportModal'))
-const VracModal = lazy(() => import('./components/modals/VracModal'))
-const DicoCaroModal = lazy(() => import('./components/modals/DicoCaroModal'))
-const PlanModal = lazy(() => import('./components/modals/PlanModal'))
-const PackOpeningModal = lazy(() => import('./components/modals/PackOpeningModal'))
+const DictationModal  = lazy(() => import('./components/modals/DictationModal'))
+const SettingsModal   = lazy(() => import('./components/modals/SettingsModal'))
+const InspirationModal= lazy(() => import('./components/modals/InspirationModal'))
+const ExportModal     = lazy(() => import('./components/modals/ExportModal'))
+const VracModal       = lazy(() => import('./components/modals/VracModal'))
+const DicoCaroModal   = lazy(() => import('./components/modals/DicoCaroModal'))
+const PlanModal       = lazy(() => import('./components/modals/PlanModal'))
+const PackOpeningModal= lazy(() => import('./components/modals/PackOpeningModal'))
 // LOT 4C.3 — Mémoire de Léa : modale dédiée pour visibilité + contrôle utilisateur
-const LeaMemoryModal = lazy(() => import('./components/modals/LeaMemoryModal'))
-// LOT 2B.1 — Le tiroir : routing inert (bouton câblé au commit 2B.2 dans Header.jsx)
-const TiroirModal = lazy(() => import('./components/modals/TiroirModal'))
-const TraceDetailModal = lazy(() => import('./components/modals/TraceDetailModal'))
-// LOT 3 — Flow d'ajout d'une trace photo (étapes 1-2) câblé en 3B.
-const AddTraceFlow = lazy(() => import('./components/modals/AddTraceFlow'))
+const LeaMemoryModal  = lazy(() => import('./components/modals/LeaMemoryModal'))
+// T1 — Le Tiroir : socle inert (grille vide), AddTraceFlow ajouté en T3
+const TiroirModal     = lazy(() => import('./components/modals/TiroirModal'))
 
 function AppSkeleton() {
   const pulse = {
@@ -87,8 +80,6 @@ function AppInner() {
   const [isOnline, setIsOnline] = useState(navigator.onLine)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [coachOpen, setCoachOpen] = useState(false)
-  // LOT 2B.1 — Trace sélectionnée pour TraceDetailModal (null = pas de fiche ouverte)
-  const [selectedTrace, setSelectedTrace] = useState(null)
 
   const isMobile = useMediaQuery('(max-width: 767px)')
 
@@ -108,7 +99,7 @@ function AppInner() {
     const audio = new Audio(`/sounds/${sound}.mp3`)
     audio.loop = true
     audio.volume = Math.max(0, Math.min(1, volume ?? 0.28))
-    audio.play().catch(e => console.warn('[Ambiance] lecture bloquee:', e))
+    audio.play().catch(e => console.warn('[Ambiance] lecture bloquée:', e))
     audioRef.current = audio
   }, [])
 
@@ -152,11 +143,11 @@ function AppInner() {
   useEffect(() => {
     const goOnline = () => {
       setIsOnline(true)
-      toast('Connexion retablie — Lea est de nouveau disponible', 'success')
+      toast('Connexion rétablie — Léa est de nouveau disponible 🌿', 'success')
     }
     const goOffline = () => {
       setIsOnline(false)
-      toast('Connexion perdue — tu peux continuer a ecrire, Lea revient des que possible.', 'info')
+      toast('Connexion perdue — tu peux continuer à écrire, Léa revient dès que possible.', 'info')
     }
     window.addEventListener('online', goOnline)
     window.addEventListener('offline', goOffline)
@@ -172,20 +163,20 @@ function AppInner() {
     }
   }, [db.editorTheme])
 
-  // LOT 3.5 — Applique l'echelle du chat Lea sur la racine HTML
-  // Les elements du coach panel utilisent calc(... * var(--chat-scale))
+  // LOT 3.5 — Applique l'échelle du chat Léa sur la racine HTML
+  // Les éléments du coach panel utilisent calc(... * var(--chat-scale))
   useEffect(() => {
     const v = (typeof db.chatScale === 'number' && db.chatScale > 0) ? db.chatScale : 1
     document.documentElement.style.setProperty('--chat-scale', String(v))
   }, [db.chatScale])
 
-  // LOT 4E.1 — Applique l'echelle UI globale sur la racine HTML
+  // LOT 4E.1 — Applique l'échelle UI globale sur la racine HTML
   useEffect(() => {
     const v = (typeof db.uiScale === 'number' && db.uiScale > 0) ? db.uiScale : 1
     document.documentElement.style.setProperty('--ui-scale', String(v))
   }, [db.uiScale])
 
-  // LOT 4E.2 — Echelle mise en page desktop (sidebar + header actions)
+  // LOT 4E.2 — Échelle mise en page desktop (sidebar + header actions)
   useEffect(() => {
     const v = (typeof db.layoutScale === 'number' && db.layoutScale > 0) ? db.layoutScale : 1
     document.documentElement.style.setProperty('--layout-scale', String(v))
@@ -196,13 +187,6 @@ function AppInner() {
     const v = (typeof db.sidebarWidth === 'number' && db.sidebarWidth >= 160) ? db.sidebarWidth : 220
     document.documentElement.style.setProperty('--sidebar-w', v + 'px')
   }, [db.sidebarWidth])
-
-  // LOT 4E.2 bis — Largeur du panneau Lea (desktop uniquement)
-  // Mobile : globals.css force --coach-w: 0px via @media (max-width: 768px)
-  useEffect(() => {
-    const v = (typeof db.coachWidth === 'number' && db.coachWidth >= 220) ? db.coachWidth : 270
-    document.documentElement.style.setProperty('--coach-w', v + 'px')
-  }, [db.coachWidth])
 
   useEffect(() => {
     if (!isMobile) {
@@ -237,7 +221,7 @@ function AppInner() {
     updateLeaMemory: db.updateLeaMemory,
   })
 
-  // ── Auto-ouvre le drawer CoachPanel sur mobile quand Lea repond ──
+  // ── Auto-ouvre le drawer CoachPanel sur mobile quand Léa répond ──
   useEffect(() => {
     if (isMobile && coach.loading && !coachOpen) {
       setCoachOpen(true)
@@ -250,10 +234,10 @@ function AppInner() {
     if (apiKey) await db.setApiKey(apiKey)
     if (profile) await db.setCarolineProfile(profile)
     await db.createChapter()
-    toast(`Bienvenue ${name} ! Ton atelier est pret`, 'success')
+    toast(`Bienvenue ${name} ! Ton atelier est prêt 🌿`, 'success')
   }
 
-  const handleSaveSettings = async ({ name, apiKey, openAiKey, leaVoice, syncToken, editorFont, editorTheme, editorWidth, chatScale, uiScale, layoutScale, sidebarWidth, coachWidth }) => {
+  const handleSaveSettings = async ({ name, apiKey, openAiKey, leaVoice, syncToken, editorFont, editorTheme, editorWidth, chatScale, uiScale, layoutScale, sidebarWidth }) => {
     await db.setName(name)
     await db.setApiKey(apiKey)
     await db.setOaiKey(openAiKey)
@@ -266,33 +250,14 @@ function AppInner() {
     if (uiScale      !== undefined) await db.setUiScale(uiScale)        // LOT 4E.1
     if (layoutScale  !== undefined) await db.setLayoutScale(layoutScale)  // LOT 4E.2
     if (sidebarWidth !== undefined) await db.setSidebarWidth(sidebarWidth) // LOT 4E.2
-    if (coachWidth   !== undefined) await db.setCoachWidth(coachWidth)     // LOT 4E.2 bis
-    toast('Reglages sauvegardes', 'success')
-  }
-
-  // LOT 4F.2.6 — Wrapper d'import depuis un File DOM (utilise par SettingsModal
-  // pour les deux flux : import fichier local + restauration depuis Drive).
-  // SettingsModal s'occupe du window.location.reload() apres succes,
-  // donc on ne rafraichit pas le state React ici.
-  const handleImportFromBackup = async (file) => {
-    if (!file) return { ok: false, message: 'Aucun fichier fourni' }
-    try {
-      const text = await file.text()
-      const snapshot = JSON.parse(text)
-      const ok = await db.importSnapshot(snapshot)
-      return ok
-        ? { ok: true, message: 'Sauvegarde restauree' }
-        : { ok: false, message: 'Snapshot invalide ou corrompu' }
-    } catch (err) {
-      return { ok: false, message: err?.message || 'Erreur de lecture du fichier' }
-    }
+    toast('Réglages sauvegardés ✓', 'success')
   }
 
   const handleInsertDictation = useCallback((text) => {
     if (!db.currentChapter) return
     const newContent = (db.currentChapter.content || '') + (db.currentChapter.content ? ' ' : '') + text
     db.updateChapter(db.currentId, { content: newContent })
-    toast('Texte insere', 'success')
+    toast('Texte inséré ✓', 'success')
   }, [db])
 
   const handleRemoveChapter = useCallback((id) => {
@@ -302,44 +267,13 @@ function AppInner() {
       return
     }
     db.removeChapter(id)
-    toast(`Chapitre "${chapter.title || 'sans titre'}" supprime`, 'info', 4000, {
+    toast(`Chapitre "${chapter.title || 'sans titre'}" supprimé`, 'info', 4000, {
       label: 'Annuler',
       fn: () => {
         db.restoreChapter(chapter)
-        toast('Chapitre restaure', 'success')
+        toast('Chapitre restauré ✓', 'success')
       },
     })
-  }, [db, toast])
-
-  // LOT 3B — Câblage du flow d'ajout d'une trace photo (étapes 1-2).
-  //
-  // Pattern 3 étapes recomposé via le hook useAppState pour bénéficier du
-  // refresh automatique du state React `traces` à chaque mutation :
-  //   1) db.createTrace({ blobAvailable: false }) → state React mis à jour, trace visible
-  //      dans la grille avec un flag honnête (pas de blob encore stocké).
-  //   2) putTraceBlob(blobKey, blob)              → stockage blob bas niveau (pas d'effet state).
-  //   3) db.editTrace({ blobAvailable: true })    → state React refresh, flag passe à true.
-  //
-  // Si l'étape 2 ou 3 échoue : rollback best-effort via db.removeTrace
-  // (cascade trace + blob dans lib/db). Si le rollback échoue lui-même, on swallow :
-  // la trace orpheline restera avec blobAvailable=false (cf. étape 1) — état honnête,
-  // détectable côté UI et nettoyable par un GC ultérieur (dette gcOrphanedBlobs).
-  //
-  // Note : on n'utilise PAS createTraceWithBlob (3A.1bis) ici car il bypass le state
-  // React du hook ; il reste valable comme bibliothèque atomique pour scripts batch /
-  // restore futurs.
-  const handleCreateTrace = useCallback(async ({ metadata, blob }) => {
-    if (!blob) throw new Error('handleCreateTrace: blob requis.')
-    const trace = await db.createTrace({ ...metadata, blobAvailable: false })
-    try {
-      await putTraceBlob(trace.blobKey, blob)
-      await db.editTrace(trace.id, { blobAvailable: true })
-      toast('Photo ajoutee au tiroir', 'success')
-      return { ...trace, blobAvailable: true }
-    } catch (err) {
-      try { await db.removeTrace(trace.id) } catch { /* swallow : trace fantôme assumée */ }
-      throw err
-    }
   }, [db, toast])
 
   useEffect(() => {
@@ -357,9 +291,9 @@ function AppInner() {
         name={db.name} moodToday={db.moodToday} setMood={db.setMood}
         streak={db.streak} moodOpen={moodOpen} setMoodOpen={setMoodOpen}
         onDictate={() => setModal('dictation')} onPlan={() => setModal('plan')}
-        onTiroir={() => setModal('tiroir')}
         onExport={() => setModal('export')} onSettings={() => setModal('settings')}
         onInspir={() => setModal('inspir')} onVocab={() => setModal('vocab')}
+        onTiroir={() => setModal('tiroir')}
         ambientSound={db.ambientSound}
         ambientPlaying={ambientPlaying}
         onAmbientChange={handleAmbientChange}
@@ -420,15 +354,10 @@ function AppInner() {
             editorFont: db.editorFont, editorTheme: db.editorTheme, editorWidth: db.editorWidth,
             chatScale: db.chatScale, uiScale: db.uiScale,
             layoutScale: db.layoutScale, sidebarWidth: db.sidebarWidth,
-            coachWidth: db.coachWidth,
-            lastDriveSyncedAt: db.lastDriveSyncedAt,
-            setLastDriveSyncedAt: db.setLastDriveSyncedAt,
           }}
           chapters={db.chapters} vracIdeas={db.vracIdeas} name={db.name}
           onClose={() => setModal(null)} onSave={handleSaveSettings} onReset={db.resetAllData}
           onOpenMemory={() => setModal('memory')}
-          buildLocalBackup={db.buildLocalBackup}
-          onImport={handleImportFromBackup}
           isMobile={isMobile}
         />}
         {modal === 'memory' && <LeaMemoryModal
@@ -448,28 +377,7 @@ function AppInner() {
           />
         )}
         {modal === 'tiroir' && (
-          <TiroirModal
-            traces={db.traces}
-            onClose={() => setModal(null)}
-            onAddTrace={() => setModal('addTrace')}
-            onOpenTrace={(trace) => { setSelectedTrace(trace); setModal('traceDetail') }}
-            isMobile={isMobile}
-          />
-        )}
-        {modal === 'traceDetail' && (
-          <TraceDetailModal
-            trace={selectedTrace}
-            onClose={() => { setSelectedTrace(null); setModal('tiroir') }}
-            onEdit={() => { /* LOT futur : ouvrira AddTraceFlow en mode édition */ }}
-            onDelete={() => { /* LOT futur : confirm + db.removeTrace */ }}
-            isMobile={isMobile}
-          />
-        )}
-        {modal === 'addTrace' && (
-          <AddTraceFlow
-            onClose={() => setModal('tiroir')}
-            onCreateTrace={handleCreateTrace}
-          />
+          <TiroirModal onClose={() => setModal(null)} />
         )}
         {showPack && (
           <PackOpeningModal
@@ -496,7 +404,7 @@ function AppInner() {
             width: 6, height: 6, borderRadius: '50%',
             background: isOnline ? '#6B8F71' : '#C4956A', flexShrink: 0,
           }} />
-          {isOnline ? 'En ligne' : 'Hors ligne — sauvegarde localement'}
+          {isOnline ? 'En ligne' : 'Hors ligne — sauvegardé localement'}
         </div>
       )}
     </div>
