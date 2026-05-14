@@ -4,7 +4,7 @@ import {
   getChapters, saveChapter, deleteChapter, restoreChapter as dbRestoreChapter,
   getChatHistoryRecent, addChatMessage, clearChatHistory, deleteChatMessage,
   getVrac, addVrac, updateVrac, deleteVrac,
-  exportAllData, resetAllData, importSnapshot, getStorageEstimate,
+  exportAllData, resetAllData, importSnapshot, buildLocalBackup, getStorageEstimate,
 } from '../lib/db'
 import { pushSnapshot, pullSnapshot, buildSnapshot, whoWins } from '../lib/sync'
 
@@ -462,6 +462,6 @@ export function useAppState() {
     firstLaunch, markFirstLaunchSeen,
     ambientSound, setAmbientSound, ambientVolume, setAmbientVolume,
     storageWarning, dismissStorageWarning: () => setStorageWarning(null),
-    exportAllData, resetAllData, importSnapshot,
+    exportAllData, resetAllData, importSnapshot, buildLocalBackup,
   }
 }
