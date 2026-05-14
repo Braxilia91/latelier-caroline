@@ -32,14 +32,12 @@ export default function Header({
 }) {
   const currentMood = MOODS.find(m => m.value === moodToday)
 
-  // ── Refs pour clickaway ──────────────────────────────────────
   const moodContainerRef    = useRef(null)
   const ambientContainerRef = useRef(null)
 
   useClickAway(moodContainerRef,    () => setMoodOpen(false))
   useClickAway(ambientContainerRef, () => setAmbientOpen(false))
 
-  // ── Escape global ────────────────────────────────────────────
   useEffect(() => {
     function onKeyDown(e) {
       if (e.key !== 'Escape') return
@@ -53,7 +51,6 @@ export default function Header({
   return (
     <header style={styles.hdr}>
 
-      {/* Bouton hamburger mobile (Sidebar) */}
       {isMobile && (
         <button
           style={styles.menuBtn}
@@ -65,13 +62,11 @@ export default function Header({
         </button>
       )}
 
-      {/* Logo */}
       <div style={styles.logo}>
         <Feather size={18} color="var(--gold)" />
         {!isMobile && <span style={styles.logoText}>L'Atelier</span>}
       </div>
 
-      {/* Centre — humeur + streak (caché sur mobile) */}
       {!isMobile && (
         <div style={styles.center}>
           <div ref={moodContainerRef} style={{ position: 'relative' }}>
@@ -112,7 +107,6 @@ export default function Header({
         </div>
       )}
 
-      {/* Actions droite */}
       <div style={styles.actions}>
         <BtnH icon={<Lightbulb size={16} />} label="Inspiration" onClick={onInspir}   isMobile={isMobile} />
         <BtnH icon={<Search   size={16} />} label="Vocabulaire" onClick={onVocab}    isMobile={isMobile} />
@@ -121,7 +115,6 @@ export default function Header({
         <BtnH icon={<Download size={16} />} label="Exporter"    onClick={onExport}   isMobile={isMobile} />
         <BtnH icon={<Settings size={16} />} label="Réglages"    onClick={onSettings} isMobile={isMobile} />
 
-        {/* ── Ambiance sonore ── */}
         <div ref={ambientContainerRef} style={{ position: 'relative' }}>
           <button
             style={{
@@ -177,7 +170,6 @@ export default function Header({
         </div>
       </div>
 
-      {/* Bouton Léa mobile (CoachPanel) */}
       {isMobile && (
         <button
           style={styles.coachBtn}
@@ -249,16 +241,16 @@ const styles = {
   center: { flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 },
   moodBtn: {
     display: 'flex', alignItems: 'center', gap: 6,
-    padding: '5px 14px',
+    padding: 'calc(5px * var(--layout-scale, 1)) calc(14px * var(--layout-scale, 1))',
     background: 'var(--cream)',
     border: '1.5px solid var(--border-l)',
     borderRadius: 20,
-    fontSize: '.8rem', fontWeight: 600,
+    fontSize: 'calc(.8rem * var(--layout-scale, 1))', fontWeight: 600,
     fontFamily: "'Nunito', sans-serif",
     color: 'var(--ink)', cursor: 'pointer',
     transition: 'all .18s',
   },
-  moodLabel: { fontSize: '.78rem' },
+  moodLabel: { fontSize: 'calc(.78rem * var(--layout-scale, 1))' },
   moodDrop: {
     position: 'absolute', top: '110%', left: '50%',
     transform: 'translateX(-50%)',
@@ -291,20 +283,20 @@ const styles = {
     color: 'var(--brown)',
   },
   streak: {
-    padding: '4px 10px',
+    padding: 'calc(4px * var(--layout-scale, 1)) calc(10px * var(--layout-scale, 1))',
     background: '#FFF3E0',
     borderRadius: 16,
-    fontSize: '.78rem', fontWeight: 700,
+    fontSize: 'calc(.78rem * var(--layout-scale, 1))', fontWeight: 700,
     color: '#E65100',
   },
   actions: { display: 'flex', gap: 4, flexShrink: 0, alignItems: 'center' },
   hdrBtn: {
     display: 'flex', alignItems: 'center', gap: 4,
-    padding: '5px 10px',
+    padding: 'calc(5px * var(--layout-scale, 1)) calc(10px * var(--layout-scale, 1))',
     background: 'transparent',
     border: '1.5px solid transparent',
     borderRadius: 8,
-    fontSize: '.75rem', fontWeight: 600,
+    fontSize: 'calc(.75rem * var(--layout-scale, 1))', fontWeight: 600,
     fontFamily: "'Nunito', sans-serif",
     color: 'var(--ink-l)', cursor: 'pointer',
     transition: 'all .15s',
