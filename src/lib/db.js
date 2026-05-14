@@ -1,6 +1,6 @@
 // ─── IndexedDB wrapper v4 ──────────────────────────────────────
-const DB_NAME    = 'atelier_v3'
-const DB_VERSION = 4          // v4 : ajout stores 'traces' et 'traceBlobs' (tiroir)
+const DB_NAME    = 'atelier_v3' // nom historique conservé — ne pas renommer, casserait les bases existantes
+const DB_VERSION = 4            // v4 : ajout stores 'traces' et 'traceBlobs' (tiroir)
 
 let _db = null
 
@@ -30,7 +30,6 @@ async function openDB() {
           db.createObjectStore('fragments', { keyPath: 'id' })
       }
       // ── Migration v3 → v4 ────────────────────────────────
-      // Tiroir : traces (métadonnées) + traceBlobs (binaires)
       // Idempotent : stores déjà présents en prod v4 → rien ne se passe
       if (old < 4) {
         if (!db.objectStoreNames.contains('traces'))
@@ -102,10 +101,6 @@ export async function deleteChapter(id) {
   })
 }
 
-/**
- * Restaure un chapitre supprimé — wrapper safe sur saveChapter.
- * Utilisé par le toast undo après removeChapter.
- */
 export async function restoreChapter(chapter) {
   if (!chapter || typeof chapter.id !== 'string' || !chapter.id) return false
   await openDB()
@@ -129,7 +124,6 @@ export async function getChatHistory() {
   })
 }
 
-/** Charge uniquement les N derniers messages (curseur inverse — O(limit) not O(n)) */
 export async function getChatHistoryRecent(limit = 50) {
   await openDB()
   return new Promise((resolve) => {
@@ -138,7 +132,7 @@ export async function getChatHistoryRecent(limit = 50) {
     req.onsuccess = (e) => {
       const cursor = e.target.result
       if (cursor && results.length < limit) {
-        results.unshift(cursor.value)   // unshift → ordre chronologique
+        results.unshift(cursor.value)
         cursor.continue()
       } else {
         resolve(results)
@@ -155,7 +149,6 @@ export async function addChatMessage(msg) {
       ...msg,
       timestamp: new Date().toISOString(),
     })
-    // LOT 4C.2 — retourne l'id auto-incrémenté pour permettre la suppression unitaire
     req.onsuccess = (e) => resolve(e.target.result)
     req.onerror   = (e) => reject(e.target.error)
   })
@@ -170,7 +163,6 @@ export async function clearChatHistory() {
   })
 }
 
-// LOT 4C.2 — Suppression d'un message individuel par id auto-incrémenté
 export async function deleteChatMessage(id) {
   if (id == null) return
   await openDB()
@@ -181,7 +173,7 @@ export async function deleteChatMessage(id) {
   })
 }
 
-// ─── Vrac — boîte à idées pêle-mêle ───────────────────────────
+// ─── Vrac ──────────────────────────────────────────────────────
 export async function getVrac() {
   await openDB()
   return new Promise((resolve) => {
@@ -198,7 +190,7 @@ export async function addVrac(idea) {
   const item = {
     id:        `vrac_${Date.now()}`,
     text:      idea.text      || '',
-    tag:       idea.tag       || 'idée',   // idée | scène | souvenir | émotion | dialogue | titre
+    tag:       idea.tag       || 'idée',
     chapterId: idea.chapterId || null,
     used:      false,
     createdAt: new Date().toISOString(),
@@ -234,14 +226,7 @@ export async function deleteVrac(id) {
   })
 }
 
-// ─── Fragments — boîte de réception (texte uniquement en LOT 1) ──
-// Schéma minimal v1 :
-// {
-//   id, text, tags [], chapterId, source ('manual'),
-//   status ('inbox'|'used'), createdAt, updatedAt
-// }
-// (audio / image / OCR : reportés à un lot ultérieur, hors LOT 1)
-
+// ─── Fragments ─────────────────────────────────────────────────
 export async function getFragments() {
   await openDB()
   return new Promise((resolve) => {
@@ -292,7 +277,6 @@ export async function deleteFragment(id) {
 }
 
 // ─── Traces — tiroir mémoire photo ─────────────────────────────
-// T1 : CRUD fondation. AddTraceFlow + OCR ajoutés en T3/T4.
 // Schéma trace  : { id, title, date, createdAt, updatedAt }
 // Schéma blob   : { traceId, blob, mimeType }
 
@@ -307,6 +291,45 @@ export async function getTraces() {
   })
 }
 
+/**
+ * Crée une nouvelle trace — id toujours auto-généré (jamais hérité de l'appelant).
+ * Évite tout risque de collision sur id existant.
+ */
+export async function addTrace(trace) {
+  await openDB()
+  const item = {
+    id:        `tr_${Date.now()}`,
+    title:     trace?.title || '',
+    date:      trace?.date  || new Date().toISOString().split('T')[0],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  }
+  return new Promise((resolve, reject) => {
+    const req = tx('traces', 'readwrite').add(item)
+    req.onsuccess = () => resolve(item)
+    req.onerror   = (e) => reject(e.target.error)
+  })
+}
+
+/** Met à jour une trace existante par merge de champs. */
+export async function updateTrace(id, fields) {
+  await openDB()
+  return new Promise((resolve, reject) => {
+    const getReq = tx('traces').get(id)
+    getReq.onsuccess = () => {
+      const item = getReq.result
+      if (!item) return reject(new Error('Trace not found'))
+      const putReq = tx('traces', 'readwrite').put({
+        ...item, ...fields, updatedAt: new Date().toISOString(),
+      })
+      putReq.onsuccess = () => resolve()
+      putReq.onerror   = (e) => reject(e.target.error)
+    }
+    getReq.onerror = (e) => reject(e.target.error)
+  })
+}
+
+/** Upsert direct d'une trace (restore/import). */
 export async function saveTrace(trace) {
   await openDB()
   return new Promise((resolve, reject) => {
@@ -328,13 +351,19 @@ export async function deleteTrace(id) {
   })
 }
 
-export async function loadTraceBlob(traceId) {
+/** Lecture blob — nom attendu par useDB.js. */
+export async function getTraceBlob(traceId) {
   await openDB()
   return new Promise((resolve) => {
     const req = tx('traceBlobs').get(traceId)
     req.onsuccess = () => resolve(req.result || null)
     req.onerror   = () => resolve(null)
   })
+}
+
+/** Alias de getTraceBlob (compatibilité interne). */
+export async function loadTraceBlob(traceId) {
+  return getTraceBlob(traceId)
 }
 
 export async function saveTraceBlob(traceId, blob, mimeType) {
@@ -346,6 +375,11 @@ export async function saveTraceBlob(traceId, blob, mimeType) {
   })
 }
 
+/** Alias de saveTraceBlob — nom attendu par App.jsx. */
+export async function putTraceBlob(traceId, blob, mimeType) {
+  return saveTraceBlob(traceId, blob, mimeType)
+}
+
 export async function deleteTraceBlob(traceId) {
   await openDB()
   return new Promise((resolve, reject) => {
@@ -355,37 +389,23 @@ export async function deleteTraceBlob(traceId) {
   })
 }
 
-// ─── Import snapshot (sync inter-appareils) ───────────────────────
+// ─── Import snapshot (sync inter-appareils) ────────────────────
 const KV_KEYS_SYNC = ['name','leaVoice','streak','sessions','lastSession','moodToday','moodValue','caroline_profile','lea_memory']
 
-/**
- * Valide la structure minimale d'un snapshot avant import.
- * Protège contre la corruption KV ou les migrations ratées.
- */
 export function isValidSnapshot(data) {
   if (!data || typeof data !== 'object')              return false
   if (typeof data.version !== 'number')               return false
   if (!Array.isArray(data.chapters))                  return false
   if (!Array.isArray(data.vrac))                      return false
-  // chat est optionnel pour rétrocompatibilité (anciens snapshots)
   if (data.chat != null && !Array.isArray(data.chat)) return false
   if (typeof data.kv !== 'object' || !data.kv)        return false
-  // Guard syncedAt — doit être une date ISO 8601 parseable (rejette '' et les strings invalides)
   if (data.syncedAt != null && (!data.syncedAt || isNaN(Date.parse(data.syncedAt)))) return false
-  // Chaque chapitre doit avoir un id string non vide
   for (const ch of data.chapters) {
     if (typeof ch.id !== 'string' || !ch.id)          return false
   }
   return true
 }
 
-/**
- * Écrase les données locales avec un snapshot distant.
- * Retourne false si le snapshot est invalide — jamais de corruption silencieuse.
- * Les clés sensibles (apiKey, openAiKey) ne sont jamais remplacées.
- * NB : le store 'fragments' n'est pas inclus dans le snapshot pour l'instant
- * (sera ajouté dans une livraison ultérieure quand le format sera stabilisé).
- */
 export async function importSnapshot(snapshot) {
   if (!isValidSnapshot(snapshot)) {
     console.error('[Sync] Snapshot invalide — import annulé', snapshot)
@@ -393,7 +413,6 @@ export async function importSnapshot(snapshot) {
   }
   await openDB()
 
-  // ── Chapitres ────────────────────────────────────────────────
   await new Promise((resolve, reject) => {
     const req = tx('chapters', 'readwrite').clear()
     req.onsuccess = () => resolve()
@@ -403,7 +422,6 @@ export async function importSnapshot(snapshot) {
     await saveChapter(ch)
   }
 
-  // ── Vrac ─────────────────────────────────────────────────────
   await new Promise((resolve, reject) => {
     const req = tx('vrac', 'readwrite').clear()
     req.onsuccess = () => resolve()
@@ -416,7 +434,6 @@ export async function importSnapshot(snapshot) {
     }
   }
 
-  // ── Vrac items ───────────────────────────────────────────────
   for (const idea of (snapshot.vrac || [])) {
     await new Promise((resolve, reject) => {
       const req = tx('vrac', 'readwrite').put(idea)
@@ -425,9 +442,6 @@ export async function importSnapshot(snapshot) {
     })
   }
 
-  // ── Chat history (sync) ─────────────────────────────────────
-  // Si le snapshot contient chat, on remplace l'historique local par le distant
-  // (last-write-wins par snapshot, pas par message — simple et lisible)
   if (Array.isArray(snapshot.chat)) {
     await new Promise((resolve, reject) => {
       const req = tx('chat', 'readwrite').clear()
@@ -436,7 +450,6 @@ export async function importSnapshot(snapshot) {
     })
     for (const msg of snapshot.chat.slice(-500)) {
       await new Promise((resolve, reject) => {
-        // On laisse IndexedDB générer l'id auto-incrémenté
         const { id, ...rest } = msg
         const req = tx('chat', 'readwrite').add(rest)
         req.onsuccess = () => resolve()
@@ -445,12 +458,11 @@ export async function importSnapshot(snapshot) {
     }
   }
 
-  // Marquer le moment du dernier import
   await setKV('lastSyncedAt', snapshot.syncedAt || new Date().toISOString())
   return true
 }
 
-// ─── Export complet ─────────────────────────────────────────────
+// ─── Export complet (modal export) ─────────────────────────────
 export async function exportAllData() {
   const [chapters, name, streak, sessions, profile, vrac, chat, leaMemory] = await Promise.all([
     getChapters(),
@@ -470,11 +482,28 @@ export async function exportAllData() {
   }
 }
 
+// ─── Backup local complet v4 (inclut traces) ───────────────────
+export async function buildLocalBackup() {
+  const [chapters, name, streak, sessions, profile, vrac, chat, leaMemory, traces] = await Promise.all([
+    getChapters(),
+    getKV('name',             ''),
+    getKV('streak',           0),
+    getKV('sessions',         0),
+    getKV('caroline_profile', null),
+    getVrac(),
+    getChatHistoryRecent(500),
+    getKV('lea_memory',       null),
+    getTraces(),
+  ])
+  return {
+    name, chapters, streak, sessions, profile, vrac,
+    chat, leaMemory, traces,
+    backedUpAt: new Date().toISOString(),
+    version: 4,
+  }
+}
+
 // ─── Estimation du stockage ─────────────────────────────────────
-/**
- * Estime le quota IndexedDB utilisé.
- * Retourne { usage, quota, ratio } ou null si non supporté.
- */
 export async function getStorageEstimate() {
   if (!navigator.storage?.estimate) return null
   try {
