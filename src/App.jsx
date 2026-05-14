@@ -22,7 +22,7 @@ const VracModal = lazy(() => import('./components/modals/VracModal'))
 const DicoCaroModal = lazy(() => import('./components/modals/DicoCaroModal'))
 const PlanModal = lazy(() => import('./components/modals/PlanModal'))
 const PackOpeningModal = lazy(() => import('./components/modals/PackOpeningModal'))
-// LOT 4C.3 — Mémoire de Léa
+// LOT 4C.3 — Mémoire de Léa : modale dédiée pour visibilité + contrôle utilisateur
 const LeaMemoryModal = lazy(() => import('./components/modals/LeaMemoryModal'))
 
 function AppSkeleton() {
@@ -161,29 +161,37 @@ function AppInner() {
     }
   }, [db.editorTheme])
 
-  // LOT 3.5 — Échelle chat Léa
+  // LOT 3.5 — Applique l'échelle du chat Léa sur la racine HTML
+  // Les éléments du coach panel utilisent calc(... * var(--chat-scale))
   useEffect(() => {
     const v = (typeof db.chatScale === 'number' && db.chatScale > 0) ? db.chatScale : 1
     document.documentElement.style.setProperty('--chat-scale', String(v))
   }, [db.chatScale])
 
-  // LOT 4E.1 — Échelle UI globale
+  // LOT 4E.1 — Applique l'échelle UI globale sur la racine HTML
   useEffect(() => {
     const v = (typeof db.uiScale === 'number' && db.uiScale > 0) ? db.uiScale : 1
     document.documentElement.style.setProperty('--ui-scale', String(v))
   }, [db.uiScale])
 
-  // LOT 4E.2 — Échelle mise en page desktop
+  // LOT 4E.2 — Échelle mise en page desktop (sidebar + header actions)
   useEffect(() => {
     const v = (typeof db.layoutScale === 'number' && db.layoutScale > 0) ? db.layoutScale : 1
     document.documentElement.style.setProperty('--layout-scale', String(v))
   }, [db.layoutScale])
 
-  // LOT 4E.2 — Largeur colonne chapitres
+  // LOT 4E.2 — Largeur de la colonne chapitres (desktop uniquement)
   useEffect(() => {
     const v = (typeof db.sidebarWidth === 'number' && db.sidebarWidth >= 160) ? db.sidebarWidth : 220
     document.documentElement.style.setProperty('--sidebar-w', v + 'px')
   }, [db.sidebarWidth])
+
+  // LOT 4E.2 bis — Largeur du panneau Léa (desktop uniquement)
+  // Mobile : globals.css force --coach-w: 0px via @media (max-width: 768px)
+  useEffect(() => {
+    const v = (typeof db.coachWidth === 'number' && db.coachWidth >= 220) ? db.coachWidth : 270
+    document.documentElement.style.setProperty('--coach-w', v + 'px')
+  }, [db.coachWidth])
 
   useEffect(() => {
     if (!isMobile) {
@@ -218,6 +226,7 @@ function AppInner() {
     updateLeaMemory: db.updateLeaMemory,
   })
 
+  // ── Auto-ouvre le drawer CoachPanel sur mobile quand Léa répond ──
   useEffect(() => {
     if (isMobile && coach.loading && !coachOpen) {
       setCoachOpen(true)
@@ -233,7 +242,7 @@ function AppInner() {
     toast(`Bienvenue ${name} ! Ton atelier est prêt 🌿`, 'success')
   }
 
-  const handleSaveSettings = async ({ name, apiKey, openAiKey, leaVoice, syncToken, editorFont, editorTheme, editorWidth, chatScale, uiScale, layoutScale, sidebarWidth }) => {
+  const handleSaveSettings = async ({ name, apiKey, openAiKey, leaVoice, syncToken, editorFont, editorTheme, editorWidth, chatScale, uiScale, layoutScale, sidebarWidth, coachWidth }) => {
     await db.setName(name)
     await db.setApiKey(apiKey)
     await db.setOaiKey(openAiKey)
@@ -242,10 +251,11 @@ function AppInner() {
     if (editorFont   !== undefined) await db.setEditorFont(editorFont)
     if (editorTheme  !== undefined) await db.setEditorTheme(editorTheme)
     if (editorWidth  !== undefined) await db.setEditorWidth(editorWidth)
-    if (chatScale    !== undefined) await db.setChatScale(chatScale)
-    if (uiScale      !== undefined) await db.setUiScale(uiScale)
-    if (layoutScale  !== undefined) await db.setLayoutScale(layoutScale)   // LOT 4E.2
+    if (chatScale    !== undefined) await db.setChatScale(chatScale)    // LOT 3.5
+    if (uiScale      !== undefined) await db.setUiScale(uiScale)        // LOT 4E.1
+    if (layoutScale  !== undefined) await db.setLayoutScale(layoutScale)  // LOT 4E.2
     if (sidebarWidth !== undefined) await db.setSidebarWidth(sidebarWidth) // LOT 4E.2
+    if (coachWidth   !== undefined) await db.setCoachWidth(coachWidth)     // LOT 4E.2 bis
     toast('Réglages sauvegardés ✓', 'success')
   }
 
@@ -349,6 +359,7 @@ function AppInner() {
             editorFont: db.editorFont, editorTheme: db.editorTheme, editorWidth: db.editorWidth,
             chatScale: db.chatScale, uiScale: db.uiScale,
             layoutScale: db.layoutScale, sidebarWidth: db.sidebarWidth,
+            coachWidth: db.coachWidth,
           }}
           chapters={db.chapters} vracIdeas={db.vracIdeas} name={db.name}
           onClose={() => setModal(null)} onSave={handleSaveSettings} onReset={db.resetAllData}
