@@ -5,14 +5,15 @@ import { useCoach } from './hooks/useCoach'
 import { useMediaQuery } from './hooks/useMediaQuery'
 import { ToastProvider, useToast } from './components/ui/Toast'
 import { buildWelcomeMessage } from './lib/prompts'
-import * as googleDrive from './lib/googleDrive' // LOT 4F.2.4
 
+// ── Imports critiques (chemin de rendu initial) ──────────────────
 import Onboarding from './components/onboarding/Onboarding'
 import Header from './components/layout/Header'
 import Sidebar from './components/layout/Sidebar'
 import WritingArea from './components/writing/WritingArea'
 import CoachPanel from './components/layout/CoachPanel'
 
+// ── Modaux : chargés à la demande uniquement ─────────────────────
 const DictationModal = lazy(() => import('./components/modals/DictationModal'))
 const SettingsModal = lazy(() => import('./components/modals/SettingsModal'))
 const InspirationModal = lazy(() => import('./components/modals/InspirationModal'))
@@ -21,6 +22,7 @@ const VracModal = lazy(() => import('./components/modals/VracModal'))
 const DicoCaroModal = lazy(() => import('./components/modals/DicoCaroModal'))
 const PlanModal = lazy(() => import('./components/modals/PlanModal'))
 const PackOpeningModal = lazy(() => import('./components/modals/PackOpeningModal'))
+// LOT 4C.3 — Mémoire de Léa
 const LeaMemoryModal = lazy(() => import('./components/modals/LeaMemoryModal'))
 
 function AppSkeleton() {
@@ -76,13 +78,6 @@ function AppInner() {
   const [isOnline, setIsOnline] = useState(navigator.onLine)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [coachOpen, setCoachOpen] = useState(false)
-
-  // LOT 4F.2.4 — Auto-sync silencieuse Drive
-  const [lastChangeAt,    setLastChangeAt]    = useState(0)
-  const [lastDriveError,  setLastDriveError]  = useState(null)
-  const hydratedRef = useRef(false)
-  const lastChangeAtRef = useRef(0)
-  const lastDriveSyncedAtRef = useRef(null)
 
   const isMobile = useMediaQuery('(max-width: 767px)')
 
@@ -166,16 +161,29 @@ function AppInner() {
     }
   }, [db.editorTheme])
 
+  // LOT 3.5 — Échelle chat Léa
   useEffect(() => {
     const v = (typeof db.chatScale === 'number' && db.chatScale > 0) ? db.chatScale : 1
     document.documentElement.style.setProperty('--chat-scale', String(v))
   }, [db.chatScale])
 
-  // LOT 4E.1 — Propagation de --ui-scale sur documentElement
+  // LOT 4E.1 — Échelle UI globale
   useEffect(() => {
     const v = (typeof db.uiScale === 'number' && db.uiScale > 0) ? db.uiScale : 1
     document.documentElement.style.setProperty('--ui-scale', String(v))
   }, [db.uiScale])
+
+  // LOT 4E.2 — Échelle mise en page desktop
+  useEffect(() => {
+    const v = (typeof db.layoutScale === 'number' && db.layoutScale > 0) ? db.layoutScale : 1
+    document.documentElement.style.setProperty('--layout-scale', String(v))
+  }, [db.layoutScale])
+
+  // LOT 4E.2 — Largeur colonne chapitres
+  useEffect(() => {
+    const v = (typeof db.sidebarWidth === 'number' && db.sidebarWidth >= 160) ? db.sidebarWidth : 220
+    document.documentElement.style.setProperty('--sidebar-w', v + 'px')
+  }, [db.sidebarWidth])
 
   useEffect(() => {
     if (!isMobile) {
@@ -225,17 +233,19 @@ function AppInner() {
     toast(`Bienvenue ${name} ! Ton atelier est prêt 🌿`, 'success')
   }
 
-  const handleSaveSettings = async ({ name, apiKey, openAiKey, leaVoice, syncToken, editorFont, editorTheme, editorWidth, chatScale, uiScale }) => {
+  const handleSaveSettings = async ({ name, apiKey, openAiKey, leaVoice, syncToken, editorFont, editorTheme, editorWidth, chatScale, uiScale, layoutScale, sidebarWidth }) => {
     await db.setName(name)
     await db.setApiKey(apiKey)
     await db.setOaiKey(openAiKey)
     await db.setVoice(leaVoice)
-    if (syncToken   !== undefined) await db.setSyncToken(syncToken)
-    if (editorFont  !== undefined) await db.setEditorFont(editorFont)
-    if (editorTheme !== undefined) await db.setEditorTheme(editorTheme)
-    if (editorWidth !== undefined) await db.setEditorWidth(editorWidth)
-    if (chatScale   !== undefined) await db.setChatScale(chatScale)
-    if (uiScale     !== undefined) await db.setUiScale(uiScale)  // LOT 4E.1
+    if (syncToken    !== undefined) await db.setSyncToken(syncToken)
+    if (editorFont   !== undefined) await db.setEditorFont(editorFont)
+    if (editorTheme  !== undefined) await db.setEditorTheme(editorTheme)
+    if (editorWidth  !== undefined) await db.setEditorWidth(editorWidth)
+    if (chatScale    !== undefined) await db.setChatScale(chatScale)
+    if (uiScale      !== undefined) await db.setUiScale(uiScale)
+    if (layoutScale  !== undefined) await db.setLayoutScale(layoutScale)   // LOT 4E.2
+    if (sidebarWidth !== undefined) await db.setSidebarWidth(sidebarWidth) // LOT 4E.2
     toast('Réglages sauvegardés ✓', 'success')
   }
 
@@ -262,92 +272,11 @@ function AppInner() {
     })
   }, [db, toast])
 
-  // Sync au boot
   useEffect(() => {
     if (db.ready && db.syncToken && import.meta.env.VITE_SYNC_WORKER_URL) {
       db.syncNow()
     }
   }, [db.ready]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // LOT 4F.1 — Auto-sync silencieuse toutes les 5 min si token configuré
-  useEffect(() => {
-    if (!db.ready || !db.syncToken || !import.meta.env.VITE_SYNC_WORKER_URL) return
-    const intervalId = setInterval(() => {
-      db.syncNow()
-    }, 5 * 60 * 1000)
-    return () => clearInterval(intervalId)
-  }, [db.ready, db.syncToken]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // LOT 4F.1 — Sync best-effort sur visibilitychange
-  useEffect(() => {
-    if (!db.ready || !db.syncToken || !import.meta.env.VITE_SYNC_WORKER_URL) return
-    const handler = () => {
-      if (document.hidden) {
-        db.syncNow()
-      }
-    }
-    document.addEventListener('visibilitychange', handler)
-    return () => document.removeEventListener('visibilitychange', handler)
-  }, [db.ready, db.syncToken]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // LOT 4F.2.4 — Sync refs pour lecture stable dans les setInterval
-  useEffect(() => { lastChangeAtRef.current = lastChangeAt }, [lastChangeAt])
-  useEffect(() => { lastDriveSyncedAtRef.current = db.lastDriveSyncedAt }, [db.lastDriveSyncedAt])
-
-  // LOT 4F.2.4 — Dirty tracking : bump lastChangeAt à chaque modif data après hydrate
-  useEffect(() => {
-    if (!db.ready) return
-    if (!hydratedRef.current) {
-      hydratedRef.current = true
-      return
-    }
-    setLastChangeAt(Date.now())
-  }, [db.ready, db.chapters, db.vracIdeas, db.leaMemory, db.carolineProfile, db.chatHistory])
-
-  // LOT 4F.2.4 — Helper : tente un upload Drive auto (lit refs pour valeurs fraîches)
-  const tryDriveAutoBackup = useCallback(async (opts = {}) => {
-    const { bypassCooldown = false, bypassRecencyDelay = false } = opts
-    const user = googleDrive.getCurrentUser()
-    if (!user) return // Drive non connecté → skip silencieux
-    const lastChange = lastChangeAtRef.current
-    const lastSync = lastDriveSyncedAtRef.current ?? 0
-    if (lastChange <= lastSync) return // rien à sauver
-    const now = Date.now()
-    if (!bypassCooldown && now - lastSync < 30 * 60 * 1000) return // cooldown 30 min
-    if (!bypassRecencyDelay && now - lastChange < 5 * 60 * 1000) return // délai 5 min après modif
-    try {
-      const backup = await db.buildLocalBackup()
-      const result = await googleDrive.uploadSnapshot(JSON.stringify(backup, null, 2))
-      if (result.ok) {
-        await db.setLastDriveSyncedAt(now)
-        setLastDriveError(null)
-      } else {
-        setLastDriveError(result.message || 'Erreur Drive auto')
-      }
-    } catch (err) {
-      setLastDriveError(err?.message || 'Erreur Drive auto')
-    }
-  }, [db.buildLocalBackup, db.setLastDriveSyncedAt])
-
-  // LOT 4F.2.4 — Interval Drive auto-sync : tick toutes les 2 min, conditions strictes
-  useEffect(() => {
-    if (!db.ready) return
-    const intervalId = setInterval(() => {
-      tryDriveAutoBackup()
-    }, 2 * 60 * 1000)
-    return () => clearInterval(intervalId)
-  }, [db.ready, tryDriveAutoBackup])
-
-  // LOT 4F.2.4 — Best-effort on hide : bypass cooldown ET délai 5 min si modif non sauvée
-  useEffect(() => {
-    if (!db.ready) return
-    const handler = () => {
-      if (!document.hidden) return
-      tryDriveAutoBackup({ bypassCooldown: true, bypassRecencyDelay: true })
-    }
-    document.addEventListener('visibilitychange', handler)
-    return () => document.removeEventListener('visibilitychange', handler)
-  }, [db.ready, tryDriveAutoBackup])
 
   if (!db.ready) return <AppSkeleton />
   if (!db.isSetup) return <Onboarding onComplete={handleSetupComplete} />
@@ -417,18 +346,14 @@ function AppInner() {
             name: db.name, apiKey: db.apiKey, openAiKey: db.openAiKey, leaVoice: db.leaVoice,
             syncToken: db.syncToken, syncStatus: db.syncStatus, syncMessage: db.syncMessage,
             lastSyncedAt: db.lastSyncedAt, syncNow: db.syncNow,
-            resetSyncStatus: db.resetSyncStatus,
-            lastDriveSyncedAt: db.lastDriveSyncedAt, setLastDriveSyncedAt: db.setLastDriveSyncedAt,
-            lastDriveError,
             editorFont: db.editorFont, editorTheme: db.editorTheme, editorWidth: db.editorWidth,
-            chatScale: db.chatScale,
-            uiScale: db.uiScale,  // LOT 4E.1
+            chatScale: db.chatScale, uiScale: db.uiScale,
+            layoutScale: db.layoutScale, sidebarWidth: db.sidebarWidth,
           }}
           chapters={db.chapters} vracIdeas={db.vracIdeas} name={db.name}
           onClose={() => setModal(null)} onSave={handleSaveSettings} onReset={db.resetAllData}
           onOpenMemory={() => setModal('memory')}
-          onImport={db.importFromFile}
-          buildLocalBackup={db.buildLocalBackup}
+          isMobile={isMobile}
         />}
         {modal === 'memory' && <LeaMemoryModal
           leaMemory={db.leaMemory}
@@ -456,71 +381,24 @@ function AppInner() {
         )}
       </Suspense>
 
-      {/* LOT 4F.1 — Indicateur permanent de l'état de sauvegarde (desktop only) */}
-      {!isMobile && (() => {
-        const hasToken = !!db.syncToken
-        const lastSync = db.lastSyncedAt ? new Date(db.lastSyncedAt) : null
-        const ageMin   = lastSync ? Math.floor((Date.now() - lastSync.getTime()) / 60000) : null
-
-        let state = 'ok'
-        let label = ''
-
-        if (!isOnline) {
-          state = 'warn'
-          label = 'Hors ligne — sauvegardé localement'
-        } else if (!hasToken) {
-          state = 'warn'
-          label = '⚠ Sauvegarde en ligne inactive — Configure dans Réglages'
-        } else if (!lastSync) {
-          state = 'warn'
-          label = '⚠ Première sauvegarde en attente'
-        } else if (ageMin < 1) {
-          label = '✓ Sauvegardé à l\'instant'
-        } else if (ageMin < 60) {
-          label = `✓ Sauvegardé il y a ${ageMin} min`
-        } else if (ageMin < 60 * 24) {
-          const h = Math.floor(ageMin / 60)
-          label = `✓ Sauvegardé il y a ${h} h`
-        } else {
-          const d = Math.floor(ageMin / (60 * 24))
-          state = 'warn'
-          label = `⚠ Pas de sauvegarde depuis ${d} jour${d > 1 ? 's' : ''}`
-        }
-
-        const colors = state === 'ok'
-          ? { bg: 'rgba(61,107,69,.12)',  border: '#6B8F71', text: '#3D6B45', dot: '#6B8F71' }
-          : { bg: 'rgba(180,83,9,.12)',   border: '#C4956A', text: '#92400E', dot: '#C4956A' }
-
-        const isClickable = isOnline && !hasToken
-
-        return (
-          <div
-            onClick={isClickable ? () => setModal('settings') : undefined}
-            style={{
-              position: 'fixed', bottom: 16, right: 'calc(var(--coach-w) + 16px)',
-              display: 'flex', alignItems: 'center', gap: 6, padding: '5px 12px',
-              background: colors.bg,
-              border: `1px solid ${colors.border}`,
-              borderRadius: 20,
-              fontSize: '.68rem', fontWeight: 600, fontFamily: "'Nunito', sans-serif",
-              color: colors.text,
-              zIndex: 500,
-              pointerEvents: isClickable ? 'auto' : 'none',
-              cursor: isClickable ? 'pointer' : 'default',
-              transition: 'all .4s ease',
-              userSelect: 'none',
-            }}
-            role={isClickable ? 'button' : undefined}
-            aria-label={isClickable ? 'Ouvrir les réglages de sauvegarde' : undefined}
-          >
-            <span style={{
-              width: 6, height: 6, borderRadius: '50%',
-              background: colors.dot, flexShrink: 0,
-            }} />
-            {label}
-          </div>
-        )
-      })()}
+      {!isMobile && (
+        <div style={{
+          position: 'fixed', bottom: 16, right: 'calc(var(--coach-w) + 16px)',
+          display: 'flex', alignItems: 'center', gap: 6, padding: '5px 12px',
+          background: isOnline ? 'rgba(61,107,69,.12)' : 'rgba(180,83,9,.12)',
+          border: `1px solid ${isOnline ? '#6B8F71' : '#C4956A'}`,
+          borderRadius: 20,
+          fontSize: '.68rem', fontWeight: 600, fontFamily: "'Nunito', sans-serif",
+          color: isOnline ? '#3D6B45' : '#92400E',
+          zIndex: 500, pointerEvents: 'none', transition: 'all .4s ease',
+        }}>
+          <span style={{
+            width: 6, height: 6, borderRadius: '50%',
+            background: isOnline ? '#6B8F71' : '#C4956A', flexShrink: 0,
+          }} />
+          {isOnline ? 'En ligne' : 'Hors ligne — sauvegardé localement'}
+        </div>
+      )}
     </div>
   )
 }
