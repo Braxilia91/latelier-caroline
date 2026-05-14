@@ -24,7 +24,6 @@ const CHAT_SCALES = [
   { value: 1.3,  label: 'Grand',   desc: '+30 %' },
 ]
 
-// LOT 4E.1 — Échelle UI globale
 const UI_SCALES = [
   { value: 0.9,  label: 'Compact', desc: '−10 %' },
   { value: 1,    label: 'Normal',  desc: 'Par défaut' },
@@ -75,6 +74,7 @@ export default function SettingsModal({
   state, chapters = [], vracIdeas = [], name = '',
   onClose, onSave, onReset, onOpenMemory,
   onImport, buildLocalBackup,
+  isMobile = false,
 }) {
   const toast = useToast()
 
@@ -86,32 +86,26 @@ export default function SettingsModal({
   const [editorTheme, setEditorTheme] = useState(state.editorTheme || 'jour')
   const [editorWidth, setEditorWidth] = useState(state.editorWidth || 'confort')
   const [chatScale, setChatScale]     = useState(typeof state.chatScale === 'number' && state.chatScale > 0 ? state.chatScale : 1)
-  const [uiScale, setUiScale]         = useState(typeof state.uiScale === 'number' && state.uiScale > 0 ? state.uiScale : 1)  // LOT 4E.1
+  const [uiScale,   setUiScale]       = useState(typeof state.uiScale === 'number' && state.uiScale > 0 ? state.uiScale : 1)
+  // LOT 4E.2 — Mise en page desktop (live preview)
+  const [layoutScale,  setLayoutScaleLocal]  = useState(typeof state.layoutScale === 'number' && state.layoutScale > 0 ? state.layoutScale : 1)
+  const [sidebarWidth, setSidebarWidthLocal] = useState(typeof state.sidebarWidth === 'number' && state.sidebarWidth >= 160 ? state.sidebarWidth : 220)
 
   const [syncTok, setSyncTok] = useState(state.syncToken || '')
 
-  // LOT 4F.1.4 — Visibilité afficher/masquer pour les deux champs sensibles
   const [showApiKey, setShowApiKey]     = useState(false)
   const [showSyncTok, setShowSyncTok]   = useState(false)
   const [copiedSync, setCopiedSync]     = useState(false)
-
-  // LOT 4F.1.5 — Verrou réentrance pendant save+sync
   const [syncBusy, setSyncBusy] = useState(false)
-
-  // LOT 4F.2.1 — État Google Drive
   const [googleUser, setGoogleUser] = useState(() => googleDrive.getCurrentUser())
   const [googleBusy, setGoogleBusy] = useState(false)
-
-  // LOT 4F.2.2/4F.2.3 — Verrou réentrance Drive (upload + download).
   const [driveBusy, setDriveBusy] = useState(false)
-
   const [confirmReset, setConfirmReset] = useState(false)
   const [exportDone, setExportDone] = useState(false)
 
   const fileInputRef = useRef(null)
   const [importing, setImporting] = useState(false)
 
-  // LOT 4F.2.5 — Refs pour cleanup des timers à l'unmount (évite setState sur composant démonté)
   const confirmResetTimerRef = useRef(null)
   const copiedSyncTimerRef   = useRef(null)
   const exportDoneTimerRef   = useRef(null)
@@ -119,13 +113,10 @@ export default function SettingsModal({
   const tokenChanged = state.syncToken && syncTok && syncTok !== state.syncToken
   const tokenValid = syncTok.length === 0 || syncTok.length >= 20
 
-  // LOT 4F.1.6 (2/2) — Reset l'état sync au montage de la modale pour éviter
-  // d'afficher un vieux message d'erreur/succès laissé d'une session précédente.
   useEffect(() => {
     state.resetSyncStatus?.()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // LOT 4F.2.5 — Cleanup des timers à l'unmount pour éviter setState sur composant démonté.
   useEffect(() => {
     return () => {
       clearTimeout(confirmResetTimerRef.current)
@@ -134,7 +125,16 @@ export default function SettingsModal({
     }
   }, [])
 
-  // LOT 4F.2.4 — Formate l'âge de la dernière sauvegarde Drive en texte FR.
+  // LOT 4E.2 — Handlers live : applique le CSS var immédiatement sans attendre Save
+  const handleLayoutScaleChange = (v) => {
+    setLayoutScaleLocal(v)
+    document.documentElement.style.setProperty('--layout-scale', String(v))
+  }
+  const handleSidebarWidthChange = (v) => {
+    setSidebarWidthLocal(v)
+    document.documentElement.style.setProperty('--sidebar-w', v + 'px')
+  }
+
   const formatDriveSyncAge = (ts) => {
     if (!ts) return 'Aucune sauvegarde Drive enregistrée pour l\'instant'
     const ageMin = Math.floor((Date.now() - ts) / 60000)
@@ -154,7 +154,9 @@ export default function SettingsModal({
       syncToken: syncTok,
       editorFont, editorTheme, editorWidth,
       chatScale,
-      uiScale,  // LOT 4E.1
+      uiScale,
+      layoutScale,   // LOT 4E.2
+      sidebarWidth,  // LOT 4E.2
     })
     if (closeAfter) onClose()
   }
@@ -193,13 +195,9 @@ export default function SettingsModal({
     }
   }
 
-  // LOT 4F.2.2 — Sauvegarde manuelle vers Drive.
   const handleUploadDrive = async () => {
     if (driveBusy) return
     if (!googleUser) return
-    // Refresh opportuniste : si le token a expiré pendant que la modale
-    // était ouverte, getCurrentUser() retourne null et on bascule l'UI
-    // proprement sans tenter l'appel API.
     const fresh = googleDrive.getCurrentUser()
     if (!fresh) {
       setGoogleUser(null)
@@ -212,8 +210,6 @@ export default function SettingsModal({
       const data = await buildLocalBackup()
       const jsonString = JSON.stringify(data, null, 2)
       const result = await googleDrive.uploadSnapshot(jsonString)
-      // LOT 4F.2.4 — Maj lastDriveSyncedAt après upload manuel réussi
-      // (cohérent avec auto-sync : tout upload réussi remet le compteur à 0).
       if (result.ok && state.setLastDriveSyncedAt) {
         await state.setLastDriveSyncedAt(Date.now())
       }
@@ -225,11 +221,9 @@ export default function SettingsModal({
     }
   }
 
-  // LOT 4F.2.3 — Restauration manuelle depuis Drive.
   const handleRestoreDrive = async () => {
     if (driveBusy || googleBusy) return
     if (!googleUser) return
-    // Refresh opportuniste (idem handleUploadDrive)
     const fresh = googleDrive.getCurrentUser()
     if (!fresh) {
       setGoogleUser(null)
@@ -262,7 +256,6 @@ export default function SettingsModal({
         toast('Import indisponible', 'error')
         return
       }
-      // Feedback intermédiaire avant l'import (1-3 s IndexedDB)
       toast(result.message, 'info')
       const importResult = await onImport(result.file)
       if (importResult?.ok) {
@@ -449,9 +442,53 @@ export default function SettingsModal({
               <ToggleGroup options={CHAT_SCALES} value={chatScale} onChange={setChatScale} />
             </div>
             <div style={S.fg}>
-              <label style={S.label}>Échelle de l'interface <span style={S.badgeOpt}>global</span></label>
+              <label style={S.label}>Échelle de l'interface</label>
               <ToggleGroup options={UI_SCALES} value={uiScale} onChange={setUiScale} />
             </div>
+          </Section>
+
+          {/* LOT 4E.2 — Mise en page desktop */}
+          <Section title="Mise en page" icon={<span style={S.secIcon}>🖥️</span>}>
+            {isMobile ? (
+              <p style={S.hint}>Ces réglages sont disponibles uniquement sur grand écran.</p>
+            ) : (
+              <>
+                <div style={S.fg}>
+                  <label style={S.label}>
+                    Échelle des éléments de navigation
+                    <span style={S.badgeOpt}> {Math.round(layoutScale * 100)} %</span>
+                  </label>
+                  <input
+                    type="range"
+                    min={0.9} max={1.5} step={0.05}
+                    value={layoutScale}
+                    onChange={e => handleLayoutScaleChange(parseFloat(e.target.value))}
+                    style={S.rangeSlider}
+                    aria-label="Échelle des éléments de navigation"
+                  />
+                  <div style={S.rangeHints}>
+                    <span>90 %</span><span>Normal (100 %)</span><span>150 %</span>
+                  </div>
+                </div>
+                <div style={S.fg}>
+                  <label style={S.label}>
+                    Largeur de la colonne chapitres
+                    <span style={S.badgeOpt}> {sidebarWidth} px</span>
+                  </label>
+                  <input
+                    type="range"
+                    min={160} max={480} step={10}
+                    value={sidebarWidth}
+                    onChange={e => handleSidebarWidthChange(parseInt(e.target.value, 10))}
+                    style={S.rangeSlider}
+                    aria-label="Largeur de la colonne chapitres"
+                  />
+                  <div style={S.rangeHints}>
+                    <span>160 px</span><span>Normal (220 px)</span><span>480 px</span>
+                  </div>
+                </div>
+              </>
+            )}
           </Section>
 
           <Section title="Sauvegarde en ligne" icon={<Wifi size={13} color="#8B6445" />}>
@@ -521,7 +558,6 @@ export default function SettingsModal({
             </button>
           </Section>
 
-          {/* LOT 4F.2.1/4F.2.2/4F.2.3 — Section Google Drive : auth + upload + restore */}
           <Section title="Sauvegarde Google Drive" icon={<HardDrive size={13} color="#8B6445" />}>
             <p style={S.syncTxt}>
               Sauvegarde durable de tes données dans ton Google Drive (dossier invisible,
@@ -531,7 +567,6 @@ export default function SettingsModal({
             {googleUser ? (
               <>
                 <p style={S.okMsg}>✓ Connecté à : {googleUser.email || 'Google Drive'}</p>
-                {/* LOT 4F.2.4 — Indicateur dernière sauvegarde Drive + erreur auto-sync */}
                 <p style={S.hint}>{formatDriveSyncAge(state.lastDriveSyncedAt)}</p>
                 {state.lastDriveError && (
                   <p style={S.driveWarnMsg}>⚠ Erreur sauvegarde auto Drive : {state.lastDriveError}</p>
@@ -718,4 +753,7 @@ const S = {
   footer: { display: 'flex', gap: 10, justifyContent: 'flex-end', padding: '12px 20px', borderTop: '1px solid #EDE7DE', background: '#FAF7F2', flexShrink: 0 },
   cancelBtn: { padding: '9px 18px', background: 'transparent', border: '1.5px solid #EDE7DE', borderRadius: 10, fontSize: '.82rem', fontWeight: 600, fontFamily: "'Nunito', sans-serif", color: '#9C8878', cursor: 'pointer' },
   saveBtn: { display: 'flex', alignItems: 'center', gap: 6, padding: '9px 20px', background: 'linear-gradient(135deg, #8B6445, #C4956A)', color: '#fff', border: 'none', borderRadius: 10, fontSize: '.82rem', fontWeight: 700, fontFamily: "'Nunito', sans-serif", cursor: 'pointer' },
+  // LOT 4E.2 — Sliders mise en page
+  rangeSlider: { width: '100%', accentColor: '#8B6445', cursor: 'pointer', marginTop: 4 },
+  rangeHints: { display: 'flex', justifyContent: 'space-between', fontSize: '.65rem', color: '#9C8878', fontFamily: "'Nunito', sans-serif", marginTop: 2 },
 }
