@@ -97,7 +97,7 @@ function AppInner() {
     const audio = new Audio(`/sounds/${sound}.mp3`)
     audio.loop = true
     audio.volume = Math.max(0, Math.min(1, volume ?? 0.28))
-    audio.play().catch(e => console.warn('[Ambiance] lecture bloquée:', e))
+    audio.play().catch(e => console.warn('[Ambiance] lecture bloquee:', e))
     audioRef.current = audio
   }, [])
 
@@ -141,11 +141,11 @@ function AppInner() {
   useEffect(() => {
     const goOnline = () => {
       setIsOnline(true)
-      toast('Connexion rétablie — Léa est de nouveau disponible 🌿', 'success')
+      toast('Connexion retablie — Lea est de nouveau disponible', 'success')
     }
     const goOffline = () => {
       setIsOnline(false)
-      toast('Connexion perdue — tu peux continuer à écrire, Léa revient dès que possible.', 'info')
+      toast('Connexion perdue — tu peux continuer a ecrire, Lea revient des que possible.', 'info')
     }
     window.addEventListener('online', goOnline)
     window.addEventListener('offline', goOffline)
@@ -161,20 +161,20 @@ function AppInner() {
     }
   }, [db.editorTheme])
 
-  // LOT 3.5 — Applique l'échelle du chat Léa sur la racine HTML
-  // Les éléments du coach panel utilisent calc(... * var(--chat-scale))
+  // LOT 3.5 — Applique l'echelle du chat Lea sur la racine HTML
+  // Les elements du coach panel utilisent calc(... * var(--chat-scale))
   useEffect(() => {
     const v = (typeof db.chatScale === 'number' && db.chatScale > 0) ? db.chatScale : 1
     document.documentElement.style.setProperty('--chat-scale', String(v))
   }, [db.chatScale])
 
-  // LOT 4E.1 — Applique l'échelle UI globale sur la racine HTML
+  // LOT 4E.1 — Applique l'echelle UI globale sur la racine HTML
   useEffect(() => {
     const v = (typeof db.uiScale === 'number' && db.uiScale > 0) ? db.uiScale : 1
     document.documentElement.style.setProperty('--ui-scale', String(v))
   }, [db.uiScale])
 
-  // LOT 4E.2 — Échelle mise en page desktop (sidebar + header actions)
+  // LOT 4E.2 — Echelle mise en page desktop (sidebar + header actions)
   useEffect(() => {
     const v = (typeof db.layoutScale === 'number' && db.layoutScale > 0) ? db.layoutScale : 1
     document.documentElement.style.setProperty('--layout-scale', String(v))
@@ -186,7 +186,7 @@ function AppInner() {
     document.documentElement.style.setProperty('--sidebar-w', v + 'px')
   }, [db.sidebarWidth])
 
-  // LOT 4E.2 bis — Largeur du panneau Léa (desktop uniquement)
+  // LOT 4E.2 bis — Largeur du panneau Lea (desktop uniquement)
   // Mobile : globals.css force --coach-w: 0px via @media (max-width: 768px)
   useEffect(() => {
     const v = (typeof db.coachWidth === 'number' && db.coachWidth >= 220) ? db.coachWidth : 270
@@ -226,7 +226,7 @@ function AppInner() {
     updateLeaMemory: db.updateLeaMemory,
   })
 
-  // ── Auto-ouvre le drawer CoachPanel sur mobile quand Léa répond ──
+  // ── Auto-ouvre le drawer CoachPanel sur mobile quand Lea repond ──
   useEffect(() => {
     if (isMobile && coach.loading && !coachOpen) {
       setCoachOpen(true)
@@ -239,7 +239,7 @@ function AppInner() {
     if (apiKey) await db.setApiKey(apiKey)
     if (profile) await db.setCarolineProfile(profile)
     await db.createChapter()
-    toast(`Bienvenue ${name} ! Ton atelier est prêt 🌿`, 'success')
+    toast(`Bienvenue ${name} ! Ton atelier est pret`, 'success')
   }
 
   const handleSaveSettings = async ({ name, apiKey, openAiKey, leaVoice, syncToken, editorFont, editorTheme, editorWidth, chatScale, uiScale, layoutScale, sidebarWidth, coachWidth }) => {
@@ -256,14 +256,32 @@ function AppInner() {
     if (layoutScale  !== undefined) await db.setLayoutScale(layoutScale)  // LOT 4E.2
     if (sidebarWidth !== undefined) await db.setSidebarWidth(sidebarWidth) // LOT 4E.2
     if (coachWidth   !== undefined) await db.setCoachWidth(coachWidth)     // LOT 4E.2 bis
-    toast('Réglages sauvegardés ✓', 'success')
+    toast('Reglages sauvegardes', 'success')
+  }
+
+  // LOT 4F.2.6 — Wrapper d'import depuis un File DOM (utilise par SettingsModal
+  // pour les deux flux : import fichier local + restauration depuis Drive).
+  // SettingsModal s'occupe du window.location.reload() apres succes,
+  // donc on ne rafraichit pas le state React ici.
+  const handleImportFromBackup = async (file) => {
+    if (!file) return { ok: false, message: 'Aucun fichier fourni' }
+    try {
+      const text = await file.text()
+      const snapshot = JSON.parse(text)
+      const ok = await db.importSnapshot(snapshot)
+      return ok
+        ? { ok: true, message: 'Sauvegarde restauree' }
+        : { ok: false, message: 'Snapshot invalide ou corrompu' }
+    } catch (err) {
+      return { ok: false, message: err?.message || 'Erreur de lecture du fichier' }
+    }
   }
 
   const handleInsertDictation = useCallback((text) => {
     if (!db.currentChapter) return
     const newContent = (db.currentChapter.content || '') + (db.currentChapter.content ? ' ' : '') + text
     db.updateChapter(db.currentId, { content: newContent })
-    toast('Texte inséré ✓', 'success')
+    toast('Texte insere', 'success')
   }, [db])
 
   const handleRemoveChapter = useCallback((id) => {
@@ -273,11 +291,11 @@ function AppInner() {
       return
     }
     db.removeChapter(id)
-    toast(`Chapitre "${chapter.title || 'sans titre'}" supprimé`, 'info', 4000, {
+    toast(`Chapitre "${chapter.title || 'sans titre'}" supprime`, 'info', 4000, {
       label: 'Annuler',
       fn: () => {
         db.restoreChapter(chapter)
-        toast('Chapitre restauré ✓', 'success')
+        toast('Chapitre restaure', 'success')
       },
     })
   }, [db, toast])
@@ -360,10 +378,14 @@ function AppInner() {
             chatScale: db.chatScale, uiScale: db.uiScale,
             layoutScale: db.layoutScale, sidebarWidth: db.sidebarWidth,
             coachWidth: db.coachWidth,
+            lastDriveSyncedAt: db.lastDriveSyncedAt,
+            setLastDriveSyncedAt: db.setLastDriveSyncedAt,
           }}
           chapters={db.chapters} vracIdeas={db.vracIdeas} name={db.name}
           onClose={() => setModal(null)} onSave={handleSaveSettings} onReset={db.resetAllData}
           onOpenMemory={() => setModal('memory')}
+          buildLocalBackup={db.exportAllData}
+          onImport={handleImportFromBackup}
           isMobile={isMobile}
         />}
         {modal === 'memory' && <LeaMemoryModal
@@ -407,7 +429,7 @@ function AppInner() {
             width: 6, height: 6, borderRadius: '50%',
             background: isOnline ? '#6B8F71' : '#C4956A', flexShrink: 0,
           }} />
-          {isOnline ? 'En ligne' : 'Hors ligne — sauvegardé localement'}
+          {isOnline ? 'En ligne' : 'Hors ligne — sauvegarde localement'}
         </div>
       )}
     </div>
