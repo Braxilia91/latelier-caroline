@@ -384,7 +384,7 @@ function AppInner() {
           chapters={db.chapters} vracIdeas={db.vracIdeas} name={db.name}
           onClose={() => setModal(null)} onSave={handleSaveSettings} onReset={db.resetAllData}
           onOpenMemory={() => setModal('memory')}
-          buildLocalBackup={db.exportAllData}
+          buildLocalBackup={db.buildLocalBackup}
           onImport={handleImportFromBackup}
           isMobile={isMobile}
         />}
