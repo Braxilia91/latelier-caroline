@@ -4,6 +4,7 @@ import {
   getChapters, saveChapter, deleteChapter, restoreChapter as dbRestoreChapter,
   getChatHistoryRecent, addChatMessage, clearChatHistory, deleteChatMessage,
   getVrac, addVrac, updateVrac, deleteVrac,
+  getTraces, addTrace, updateTrace, deleteTrace, getTraceBlob,
   exportAllData, resetAllData, importSnapshot, buildLocalBackup, getStorageEstimate,
 } from '../lib/db'
 import { pushSnapshot, pullSnapshot, buildSnapshot, whoWins } from '../lib/sync'
@@ -31,6 +32,8 @@ export function useAppState() {
   const [syncMessage,    setSyncMessage]    = useState('')
   const [lastSyncedAt,   setLastSyncedAt]   = useState(null)
   const [vracIdeas,      setVracIdeas]      = useState([])    // boîte à idées
+  // ── Traces — Le tiroir (LOT 1B) ──────────────────────────────
+  const [traces,         setTraces]         = useState([])    // métadonnées seules, blobs lus à la demande
   // ── Préférences d'affichage ──────────────────────────────────
   const [editorFont,     setEditorFontState]  = useState('m')       // s | m | l | xl
   const [editorTheme,    setEditorThemeState] = useState('jour')     // jour | soir | bougie
@@ -71,7 +74,7 @@ export function useAppState() {
         console.info('[Storage] Mode non-persistant. Le navigateur peut évincer les données en cas de pression mémoire.')
       }
 
-      const [n, k, oai, lv, st, sess, last, mood, chs, chat, prof, mem, vrac, stok, lsa, ef, et, ew, fls, snd, vol, cs, us, ls, sw, cw, lda] = await Promise.all([
+      const [n, k, oai, lv, st, sess, last, mood, chs, chat, prof, mem, vrac, tr, stok, lsa, ef, et, ew, fls, snd, vol, cs, us, ls, sw, cw, lda] = await Promise.all([
         getKV('name',             ''),
         getKV('apiKey',           ''),
         getKV('openAiKey',        ''),
@@ -85,6 +88,7 @@ export function useAppState() {
         getKV('caroline_profile', null),
         getKV('lea_memory',       null),
         getVrac(),
+        getTraces(),                       // LOT 1B — métadonnées traces (triées antéchrono côté DB)
         getKV('syncToken',        ''),
         getKV('lastSyncedAt',     null),
         getKV('editorFont',       'm'),
@@ -113,6 +117,8 @@ export function useAppState() {
       setProfileState(prof)
       setLeaMemoryState(mem)
       setVracIdeas(vrac)
+      // LOT 1B — cap RAM des traces (la DB conserve tout)
+      setTraces(tr.length > TRACES_RAM_CAP ? tr.slice(0, TRACES_RAM_CAP) : tr)
       setSyncTokenState(stok)
       setLastSyncedAt(lsa)
       setEditorFontState(ef)
@@ -428,12 +434,46 @@ export function useAppState() {
     setVracIdeas(prev => prev.filter(v => v.id !== id))
   }, [])
 
-  // ─── Dérivés ──────────────────────────────────────────────────
-  const currentChapter = chapters.find(c => c.id === currentId) ?? null
-  const isSetup        = name.trim().length > 0
-  const totalWords     = chapters.reduce(
-    (acc, c) => acc + (c.content?.split(/\s+/).filter(Boolean).length ?? 0), 0
-  )
+  // ─── Traces — Le tiroir (LOT 1B) ─────────────────────────────
+  // Source : table IDB `traces` (métadonnées). Les Blobs photo vivent dans `traceBlobs`
+  // et ne transitent JAMAIS par le state React — lus à la demande via loadTraceBlob().
+  // Borne le state à 200 traces (la DB conserve tout).
+  const createTrace = useCallback(async (traceData = {}) => {
+    const item = await addTrace(traceData)
+    setTraces(prev => {
+      const next = [item, ...prev]
+      return next.length > TRACES_RAM_CAP ? next.slice(0, TRACES_RAM_CAP) : next
+    })
+    return item
+  }, [])
+
+  const editTrace = useCallback(async (id, fields) => {
+    await updateTrace(id, fields)
+    setTraces(prev => prev.map(t => t.id === id ? { ...t, ...fields } : t))
+  }, [])
+
+  const removeTrace = useCallback(async (id) => {
+    // Cascade trace + blob côté lib/db (deleteTrace gère les 2 stores).
+    await deleteTrace(id)
+    setTraces(prev => prev.filter(t => t.id !== id))
+  }, [])
+
+  /**
+   * Lecture lazy d'un blob de trace — retourne le Blob ou null.
+   * Le Blob n'est JAMAIS stocké dans le state React : on ne charge pas toutes
+   * les photos en mémoire au boot. L'UI fait l'URL.createObjectURL côté composant
+   * et appelle URL.revokeObjectURL au unmount.
+   */
+  const loadTraceBlob = useCallback(async (blobKey) => {
+    if (!blobKey) return null
+    return getTraceBlob(blobKey)
+  }, [])
+// ─── Dérivés ──────────────────────────────────────────────────
+const currentChapter = chapters.find(c => c.id === currentId) ?? null
+const isSetup        = name.trim().length > 0
+const totalWords     = chapters.reduce(
+  (acc, c) => acc + (c.content?.split(/\s+/).filter(Boolean).length ?? 0), 0
+)
   const unusedVrac = vracIdeas.filter(v => !v.used)
 
   return {
@@ -451,6 +491,7 @@ export function useAppState() {
     carolineProfile, setCarolineProfile,
     leaMemory, updateLeaMemory, resetLeaMemory,
     vracIdeas, unusedVrac, addVracIdea, markVracUsed, removeVracIdea,
+    traces, createTrace, editTrace, removeTrace, loadTraceBlob,
     syncToken, setSyncToken, syncStatus, syncMessage, lastSyncedAt, syncNow,
     editorFont, setEditorFont, editorTheme, setEditorTheme, editorWidth, setEditorWidth,
     chatScale, setChatScale,
@@ -465,3 +506,6 @@ export function useAppState() {
     exportAllData, resetAllData, importSnapshot, buildLocalBackup,
   }
 }
+
+// ─── Constantes module-private ───────────────────────────────────
+const TRACES_RAM_CAP = 200   // LOT 1B — cohérent avec CHAT_RAM_CAP côté chat
