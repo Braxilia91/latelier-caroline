@@ -13,24 +13,19 @@ async function openDB() {
       const db  = e.target.result
       const old = e.oldVersion
 
-      // ── Installation fraîche ──────────────────────────────
       if (old < 1) {
         db.createObjectStore('kv',       { keyPath: 'key' })
         db.createObjectStore('chapters', { keyPath: 'id'  })
         db.createObjectStore('chat',     { keyPath: 'id', autoIncrement: true })
       }
-      // ── Migration v1 → v2 ────────────────────────────────
       if (old < 2) {
         if (!db.objectStoreNames.contains('vrac'))
           db.createObjectStore('vrac', { keyPath: 'id' })
       }
-      // ── Migration v2 → v3 ────────────────────────────────
       if (old < 3) {
         if (!db.objectStoreNames.contains('fragments'))
           db.createObjectStore('fragments', { keyPath: 'id' })
       }
-      // ── Migration v3 → v4 ────────────────────────────────
-      // Idempotent : stores déjà présents en prod v4 → rien ne se passe
       if (old < 4) {
         if (!db.objectStoreNames.contains('traces'))
           db.createObjectStore('traces', { keyPath: 'id' })
@@ -277,8 +272,9 @@ export async function deleteFragment(id) {
 }
 
 // ─── Traces — tiroir mémoire photo ─────────────────────────────
-// Schéma trace  : { id, createdAt, updatedAt, ...metadata }
-// Schéma blob   : { traceId, blob, mimeType }
+// Schéma trace    : { id, createdAt, updatedAt, ...metadata }
+// Schéma traceBlob: { key: traceId, blob, mimeType }
+//   keyPath réel en prod = 'key' (migration pré-T1 conservée, idempotente)
 
 export async function getTraces() {
   await openDB()
@@ -353,7 +349,7 @@ export async function deleteTrace(id) {
   })
 }
 
-/** Lecture blob — nom attendu par useDB.js. */
+/** Lecture blob — keyPath réel en prod = 'key', .get(traceId) cherche key === traceId. */
 export async function getTraceBlob(traceId) {
   await openDB()
   return new Promise((resolve) => {
@@ -368,10 +364,15 @@ export async function loadTraceBlob(traceId) {
   return getTraceBlob(traceId)
 }
 
+/**
+ * Sauvegarde un blob de trace.
+ * keyPath du store en prod = 'key' (migration pré-T1 idempotente).
+ * On passe { key: traceId, blob, mimeType } pour satisfaire ce keyPath.
+ */
 export async function saveTraceBlob(traceId, blob, mimeType) {
   await openDB()
   return new Promise((resolve, reject) => {
-    const req = tx('traceBlobs', 'readwrite').put({ traceId, blob, mimeType })
+    const req = tx('traceBlobs', 'readwrite').put({ key: traceId, blob, mimeType })
     req.onsuccess = () => resolve()
     req.onerror   = (e) => reject(e.target.error)
   })
