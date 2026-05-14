@@ -19,35 +19,37 @@ export function useAppState() {
   const [lastSession,    setLastSession]    = useState('')
   const [moodToday,      setMoodTodayState] = useState('')
   const [chapters,       setChapters]       = useState([])
-  const chaptersRef = useRef([])
+  const chaptersRef = useRef([])   // ref miroir — pour les callbacks stables
   const [currentId,      setCurrentId]      = useState(null)
-  const currentIdRef = useRef(null)
+  const currentIdRef = useRef(null) // idem pour currentId
   const [chatHistory,    setChatHistory]    = useState([])
-  const [carolineProfile, setProfileState] = useState(null)
-  const [leaMemory,      setLeaMemoryState] = useState(null)
+  const [carolineProfile, setProfileState] = useState(null)   // profil onboarding
+  const [leaMemory,      setLeaMemoryState] = useState(null)  // mémoire session Léa
   // ── Sync inter-appareils ─────────────────────────────────────
   const [syncToken,      setSyncTokenState] = useState('')
-  const [syncStatus,     setSyncStatus]     = useState('idle')
+  const [syncStatus,     setSyncStatus]     = useState('idle') // idle | syncing | ok | error
   const [syncMessage,    setSyncMessage]    = useState('')
   const [lastSyncedAt,   setLastSyncedAt]   = useState(null)
-  const [vracIdeas,      setVracIdeas]      = useState([])
+  const [vracIdeas,      setVracIdeas]      = useState([])    // boîte à idées
   // ── Préférences d'affichage ──────────────────────────────────
-  const [editorFont,     setEditorFontState]  = useState('m')
-  const [editorTheme,    setEditorThemeState] = useState('jour')
-  const [editorWidth,    setEditorWidthState] = useState('confort')
-  const [firstLaunch,    setFirstLaunchState] = useState(false)
-  // LOT 3.5 — Échelle du chat Léa
-  const [chatScale,      setChatScaleState]   = useState(1)
-  // LOT 4E.1 — Échelle UI globale
-  const [uiScale,        setUiScaleState]     = useState(1)
-  // LOT 4E.2 — Échelle mise en page desktop
-  const [layoutScale,    setLayoutScaleState]  = useState(1)
-  const [sidebarWidth,   setSidebarWidthState] = useState(220)
+  const [editorFont,     setEditorFontState]  = useState('m')       // s | m | l | xl
+  const [editorTheme,    setEditorThemeState] = useState('jour')     // jour | soir | bougie
+  const [editorWidth,    setEditorWidthState] = useState('confort')  // confort | full
+  const [firstLaunch,    setFirstLaunchState] = useState(false)      // true = scène pack opening à afficher
+  // LOT 3.5 — Échelle du chat Léa (multiplicateur appliqué via CSS var --chat-scale)
+  const [chatScale,      setChatScaleState]   = useState(1)          // 1 (Compact) | 1.15 (Confort) | 1.3 (Grand)
+  // LOT 4E.1 — Échelle UI globale (multiplicateur appliqué via CSS var --ui-scale)
+  const [uiScale,        setUiScaleState]     = useState(1)          // 0.9 | 1 | 1.15
+  // LOT 4E.2 — Échelle mise en page desktop (sidebar + header actions)
+  const [layoutScale,    setLayoutScaleState]  = useState(1)         // 0.9–1.5
+  const [sidebarWidth,   setSidebarWidthState] = useState(220)       // 160–480 px
+  // LOT 4E.2 bis — Largeur du panneau Léa (desktop uniquement)
+  const [coachWidth,     setCoachWidthState]   = useState(270)       // 220–480 px
   // ── Ambiance sonore ─────────────────────────────────────────
-  const [ambientSound,   setAmbientSoundState]  = useState(null)
-  const [ambientVolume,  setAmbientVolumeState] = useState(0.28)
-  // ── Alerte stockage ─────────────────────────────────────────
-  const [storageWarning, setStorageWarning] = useState(null)
+  const [ambientSound,   setAmbientSoundState]  = useState(null)    // null | 'pluie'|'cafe'|'feu'|'foret'
+  const [ambientVolume,  setAmbientVolumeState] = useState(0.28)    // 0–1
+  // ── Alerte stockage (>85% du quota) ─────────────────────────
+  const [storageWarning, setStorageWarning] = useState(null)        // null | { ratio, usageMB, quotaMB }
   // ── Lock anti-race recordSession ────────────────────────────
   const recordSessionLockRef = useRef(false)
   const lastSessionRef = useRef('')
@@ -55,6 +57,7 @@ export function useAppState() {
   // ─── Chargement initial ──────────────────────────────────────
   useEffect(() => {
     ;(async () => {
+      // Demander au navigateur de ne pas évincer le stockage de l'app
       let storagePersisted = false
       if (navigator.storage?.persist) {
         try {
@@ -62,10 +65,11 @@ export function useAppState() {
         } catch { /* silencieux si refusé */ }
       }
       if (!storagePersisted) {
+        // Pas critique au boot — sera signalé via storageWarning si quota élevé
         console.info('[Storage] Mode non-persistant. Le navigateur peut évincer les données en cas de pression mémoire.')
       }
 
-      const [n, k, oai, lv, st, sess, last, mood, chs, chat, prof, mem, vrac, stok, lsa, ef, et, ew, fls, snd, vol, cs, us, ls, sw] = await Promise.all([
+      const [n, k, oai, lv, st, sess, last, mood, chs, chat, prof, mem, vrac, stok, lsa, ef, et, ew, fls, snd, vol, cs, us, ls, sw, cw] = await Promise.all([
         getKV('name',             ''),
         getKV('apiKey',           ''),
         getKV('openAiKey',        ''),
@@ -75,7 +79,7 @@ export function useAppState() {
         getKV('lastSession',      ''),
         getKV('moodToday',        ''),
         getChapters(),
-        getChatHistoryRecent(200),
+        getChatHistoryRecent(200),  // ← 200 derniers (cap RAM, persistance complète en DB)
         getKV('caroline_profile', null),
         getKV('lea_memory',       null),
         getVrac(),
@@ -91,6 +95,7 @@ export function useAppState() {
         getKV('uiScale',          1),     // LOT 4E.1
         getKV('layoutScale',      1),     // LOT 4E.2
         getKV('sidebarWidth',     220),   // LOT 4E.2
+        getKV('coachWidth',       270),   // LOT 4E.2 bis
       ])
 
       setNameState(n); setApiKeyState(k); setOAIKey(oai); setLeaVoice(lv)
@@ -110,15 +115,17 @@ export function useAppState() {
       setEditorFontState(ef)
       setEditorThemeState(et)
       setEditorWidthState(ew)
-      setFirstLaunchState(!fls)
+      setFirstLaunchState(!fls)   // firstLaunch = true si jamais vu
       setAmbientSoundState(snd)
       setAmbientVolumeState(vol)
-      setChatScaleState(typeof cs === 'number' && cs > 0 ? cs : 1)
-      setUiScaleState(typeof us === 'number' && us > 0 ? us : 1)
+      setChatScaleState(typeof cs === 'number' && cs > 0 ? cs : 1)   // LOT 3.5 — fallback safe
+      setUiScaleState(typeof us === 'number' && us > 0 ? us : 1)    // LOT 4E.1 — fallback safe
       setLayoutScaleState(typeof ls === 'number' && ls > 0 ? ls : 1)          // LOT 4E.2
       setSidebarWidthState(typeof sw === 'number' && sw >= 160 ? sw : 220)    // LOT 4E.2
+      setCoachWidthState(typeof cw === 'number' && cw >= 220 ? cw : 270)      // LOT 4E.2 bis
       setReady(true)
 
+      // Quota check en arrière-plan — non bloquant
       try {
         const est = await getStorageEstimate()
         if (est && est.ratio > 0.85) {
@@ -132,7 +139,7 @@ export function useAppState() {
     })()
   }, [])
 
-  // ─── Sync refs ───────────────────────────────────────────────
+  // ─── Sync refs (pour callbacks stables sans dépendances instables) ──
   useEffect(() => { chaptersRef.current  = chapters  }, [chapters])
   useEffect(() => { currentIdRef.current = currentId }, [currentId])
   useEffect(() => { lastSessionRef.current = lastSession }, [lastSession])
@@ -170,6 +177,12 @@ export function useAppState() {
     setSidebarWidthState(safe)
     await setKV('sidebarWidth', safe)
   }, [])
+  // LOT 4E.2 bis — Largeur du panneau Léa (desktop uniquement)
+  const setCoachWidth = useCallback(async (v) => {
+    const safe = typeof v === 'number' && v >= 220 ? v : 270
+    setCoachWidthState(safe)
+    await setKV('coachWidth', safe)
+  }, [])
 
   // ── Ambiance sonore ──────────────────────────────────────────
   const setAmbientSound  = useCallback(async (v) => { setAmbientSoundState(v);  await setKV('ambientSound',  v) }, [])
@@ -198,6 +211,7 @@ export function useAppState() {
 
     setSyncStatus('syncing'); setSyncMessage('')
     try {
+      // 1. Construire snapshot local
       const kvData = {
         name:              await getKV('name',             ''),
         leaVoice:          await getKV('leaVoice',         'nova'),
@@ -213,19 +227,26 @@ export function useAppState() {
       const [chapters, vrac, chat] = await Promise.all([
         getChapters(),
         getVrac(),
-        getChatHistoryRecent(500),
+        getChatHistoryRecent(500),  // ← Inclut désormais l'historique de conversation
       ])
+      // Annoter le snapshot avec chat (extension v3 du schema)
       const local = { ...buildSnapshot({ chapters, vrac, kvData }), chat }
+
+      // 2. Tirer le snapshot distant
       const remote = await pullSnapshot({ token })
+
+      // 3. Comparer les timestamps
       const winner = whoWins(local.syncedAt, remote.syncedAt)
 
       if (winner === 'remote' && !remote.empty) {
+        // Le distant est plus récent → valider et importer
         const ok = await importSnapshot(remote)
         if (!ok) {
           setSyncStatus('error')
           setSyncMessage('Snapshot distant corrompu — import annulé, données locales préservées')
           return
         }
+        // Rafraîchir l'état React depuis IndexedDB
         const [chs, v, ch] = await Promise.all([getChapters(), getVrac(), getChatHistoryRecent(200)])
         setChapters(chs)
         if (chs.length > 0) setCurrentId(chs[0].id)
@@ -234,6 +255,7 @@ export function useAppState() {
         setLastSyncedAt(remote.syncedAt)
         setSyncStatus('ok'); setSyncMessage(`Données mises à jour depuis le cloud ✓`)
       } else if (winner === 'local' || remote.empty) {
+        // Le local est plus récent → pousser
         await pushSnapshot({ token, snapshot: local })
         await setKV('lastSyncedAt', local.syncedAt)
         setLastSyncedAt(local.syncedAt)
@@ -247,13 +269,16 @@ export function useAppState() {
     }
   }, [])
 
-  // ─── Profil Caroline ─────────────────────────────────────────
+  // ─── Profil Caroline (onboarding) ────────────────────────────
   const setCarolineProfile = useCallback(async (profile) => {
     setProfileState(profile)
     await setKV('caroline_profile', profile)
   }, [])
 
   // ─── Mémoire Léa ─────────────────────────────────────────────
+  // Accepte soit un objet de patch ({ key: value, ... }),
+  // soit une fonction updater (prev) => patchObject — utile pour des updates
+  // dépendants de l'état précédent (ex. push dans keyPoints sans race).
   const updateLeaMemory = useCallback(async (fieldsOrFn) => {
     setLeaMemoryState(prev => {
       const patch = typeof fieldsOrFn === 'function' ? fieldsOrFn(prev) : fieldsOrFn
@@ -264,12 +289,17 @@ export function useAppState() {
     })
   }, [])
 
+  // LOT 4C.3 — Reset complet de la mémoire de Léa.
+  // updateLeaMemory ignore les valeurs null (garde-fou anti corruption),
+  // donc on a besoin d'une fonction dédiée pour le reset utilisateur.
   const resetLeaMemory = useCallback(async () => {
     setLeaMemoryState(null)
     await setKV('lea_memory', null)
   }, [])
 
   // ─── Streak / sessions ───────────────────────────────────────
+  // Lock anti-race : si recordSession est appelé plusieurs fois en parallèle
+  // (par ex. via useAutoSave → updateChapter → recordSession), un seul exécute.
   const recordSession = useCallback(async () => {
     if (recordSessionLockRef.current) return
     const today = new Date().toDateString()
@@ -291,7 +321,9 @@ export function useAppState() {
     }
   }, [streak, sessions])
 
-  // ─── Chapitres ───────────────────────────────────────────────
+  // ─── Chapitres ────────────────────────────────────────────────
+  // Callbacks stables — lisent chaptersRef/currentIdRef pour éviter
+  // de se recréer à chaque update de chapters/currentId.
   const createChapter = useCallback(async () => {
     const id  = `ch_${Date.now()}`
     const ch  = {
@@ -319,11 +351,16 @@ export function useAppState() {
     })
   }, [])
 
+  /**
+   * Restaure un chapitre supprimé — utilisé par le toast undo dans App.jsx.
+   * Réinsère le chapitre dans IndexedDB + state React + le sélectionne comme courant.
+   */
   const restoreChapter = useCallback(async (chapter) => {
     if (!chapter?.id) return false
     const ok = await dbRestoreChapter(chapter)
     if (!ok) return false
     setChapters(prev => {
+      // Ne pas dupliquer si déjà présent (race avec un autre flow)
       if (prev.some(c => c.id === chapter.id)) return prev
       return [...prev, chapter].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
     })
@@ -338,8 +375,12 @@ export function useAppState() {
   }, [])
 
   // ─── Chat ─────────────────────────────────────────────────────
+  // Borne le state React à 200 derniers messages (la DB IndexedDB conserve tout).
+  // Évite la croissance unbounded de la RAM sur sessions longues.
   const CHAT_RAM_CAP = 200
   const addMessage = useCallback(async (msg) => {
+    // LOT 4C.2 — capture l'id auto-incrémenté retourné par IndexedDB
+    // pour permettre la suppression unitaire des messages ajoutés en session.
     const id = await addChatMessage(msg)
     setChatHistory(prev => {
       const next = [...prev, { ...msg, id }]
@@ -353,13 +394,14 @@ export function useAppState() {
     setChatHistory([])
   }, [])
 
+  // LOT 4C.2 — Suppression unitaire d'un message du chat (DB + state miroir)
   const removeMessage = useCallback(async (id) => {
     if (id == null) return
     await deleteChatMessage(id)
     setChatHistory(prev => prev.filter(m => m.id !== id))
   }, [])
 
-  // ─── Vrac ─────────────────────────────────────────────────────
+  // ─── Vrac — boîte à idées ────────────────────────────────────
   const addVracIdea = useCallback(async (idea) => {
     const item = await addVrac(idea)
     setVracIdeas(prev => [item, ...prev])
@@ -405,6 +447,7 @@ export function useAppState() {
     uiScale, setUiScale,
     layoutScale, setLayoutScale,
     sidebarWidth, setSidebarWidth,
+    coachWidth, setCoachWidth,
     firstLaunch, markFirstLaunchSeen,
     ambientSound, setAmbientSound, ambientVolume, setAmbientVolume,
     storageWarning, dismissStorageWarning: () => setStorageWarning(null),
