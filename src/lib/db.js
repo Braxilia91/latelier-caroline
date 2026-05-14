@@ -470,6 +470,68 @@ export async function deleteTraceBlob(key) {
   })
 }
 
+/**
+ * LOT 3A.1bis — Helper composite pour Le tiroir : crée une trace + stocke son blob
+ * de manière coordonnée, avec rollback en cas d'échec.
+ *
+ * Séquence (3 étapes) :
+ *   1) addTrace({ ...metadata, blobAvailable: false })
+ *      → la trace existe mais s'auto-déclare incomplète tant que le blob n'est
+ *        pas réellement stocké. Honnêteté maximale du flag dès le départ.
+ *   2) putTraceBlob(trace.blobKey, blob)
+ *      → stockage effectif du Blob dans le store traceBlobs.
+ *   3) updateTrace(trace.id, { blobAvailable: true })
+ *      → flip du flag SEULEMENT après succès de l'étape 2.
+ *
+ * Gestion d'erreur :
+ *   - Échec étape 1 → throw propre, rien stocké.
+ *   - Échec étape 2 ou 3 → rollback best-effort via deleteTrace(trace.id)
+ *     (cascade trace + blob) puis rethrow de l'erreur originale.
+ *   - Si le rollback échoue lui-même → swallow. La trace orpheline reste
+ *     avec `blobAvailable: false` (cf. étape 1), donc honnête dans son état :
+ *     détectable côté UI (vignette "image indisponible"), nettoyable par
+ *     deleteTrace ultérieur ou GC différé (dette gcOrphanedBlobs).
+ *
+ * Atomicité produit :
+ *   - La grille ne montre jamais une vignette comme "complète" sans blob :
+ *     soit la trace n'existe pas (échec/rollback), soit elle est marquée
+ *     `blobAvailable: false`, soit elle est complète avec blob et flag à true.
+ *
+ * @param {Object} params
+ * @param {Object} [params.metadata={}] - champs traces (type, mimeType, width, height,
+ *                                         sizeBytes, whyNow, status, …). Les champs
+ *                                         id / blobKey / createdAt / updatedAt fournis
+ *                                         ici sont écrasés par addTrace (cf. son contrat).
+ *                                         `blobAvailable` fourni ici est aussi écrasé
+ *                                         (forcé à false en étape 1 par ce helper).
+ * @param {Blob}   params.blob          - blob compressé à stocker (obligatoire)
+ * @returns {Promise<Object>} la trace complète avec blobAvailable: true
+ *                            (reflète l'état final post-update)
+ * @throws {Error} si blob manquant, ou si addTrace / putTraceBlob / updateTrace échouent
+ */
+export async function createTraceWithBlob({ metadata = {}, blob } = {}) {
+  if (!blob) {
+    throw new Error('createTraceWithBlob: blob requis.')
+  }
+  // Étape 1 — créer la trace en marquant explicitement blobAvailable=false
+  //           tant que le blob n'est pas réellement stocké.
+  const trace = await addTrace({ ...metadata, blobAvailable: false })
+  try {
+    // Étape 2 — stocker le blob.
+    await putTraceBlob(trace.blobKey, blob)
+    // Étape 3 — flipper blobAvailable=true seulement après succès blob.
+    await updateTrace(trace.id, { blobAvailable: true })
+  } catch (err) {
+    // Rollback best-effort : deleteTrace cascade (trace + blob).
+    // Si le rollback échoue lui-même, on swallow : la trace orpheline restera
+    // avec blobAvailable=false (cf. étape 1), honnête dans son état.
+    try { await deleteTrace(trace.id) } catch { /* swallow : trace fantôme assumée */ }
+    throw err
+  }
+  // Retourne la trace avec blobAvailable patché à true pour refléter l'état final.
+  return { ...trace, blobAvailable: true }
+}
+
 // ─── Import snapshot (sync inter-appareils) ───────────────────────
 const KV_KEYS_SYNC = ['name','leaVoice','streak','sessions','lastSession','moodToday','moodValue','caroline_profile','lea_memory']
 
