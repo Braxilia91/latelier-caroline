@@ -24,6 +24,9 @@ const PlanModal = lazy(() => import('./components/modals/PlanModal'))
 const PackOpeningModal = lazy(() => import('./components/modals/PackOpeningModal'))
 // LOT 4C.3 — Mémoire de Léa : modale dédiée pour visibilité + contrôle utilisateur
 const LeaMemoryModal = lazy(() => import('./components/modals/LeaMemoryModal'))
+// LOT 2B.1 — Le tiroir : routing inert (bouton câblé au commit 2B.2 dans Header.jsx)
+const TiroirModal = lazy(() => import('./components/modals/TiroirModal'))
+const TraceDetailModal = lazy(() => import('./components/modals/TraceDetailModal'))
 
 function AppSkeleton() {
   const pulse = {
@@ -78,6 +81,8 @@ function AppInner() {
   const [isOnline, setIsOnline] = useState(navigator.onLine)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [coachOpen, setCoachOpen] = useState(false)
+  // LOT 2B.1 — Trace sélectionnée pour TraceDetailModal (null = pas de fiche ouverte)
+  const [selectedTrace, setSelectedTrace] = useState(null)
 
   const isMobile = useMediaQuery('(max-width: 767px)')
 
@@ -315,6 +320,7 @@ function AppInner() {
         name={db.name} moodToday={db.moodToday} setMood={db.setMood}
         streak={db.streak} moodOpen={moodOpen} setMoodOpen={setMoodOpen}
         onDictate={() => setModal('dictation')} onPlan={() => setModal('plan')}
+        onTiroir={() => setModal('tiroir')}
         onExport={() => setModal('export')} onSettings={() => setModal('settings')}
         onInspir={() => setModal('inspir')} onVocab={() => setModal('vocab')}
         ambientSound={db.ambientSound}
@@ -402,6 +408,24 @@ function AppInner() {
             onClose={() => setModal(null)} vracIdeas={db.vracIdeas}
             addVracIdea={db.addVracIdea} markVracUsed={db.markVracUsed} removeVracIdea={db.removeVracIdea}
             currentChapter={db.currentChapter} onInjectToLea={coach.injectVrac} hasKey={!!db.apiKey}
+          />
+        )}
+        {modal === 'tiroir' && (
+          <TiroirModal
+            traces={db.traces}
+            onClose={() => setModal(null)}
+            onAddTrace={() => { /* LOT 3 : ouvrira AddTraceFlow */ }}
+            onOpenTrace={(trace) => { setSelectedTrace(trace); setModal('traceDetail') }}
+            isMobile={isMobile}
+          />
+        )}
+        {modal === 'traceDetail' && (
+          <TraceDetailModal
+            trace={selectedTrace}
+            onClose={() => { setSelectedTrace(null); setModal('tiroir') }}
+            onEdit={() => { /* LOT futur : ouvrira AddTraceFlow en mode édition */ }}
+            onDelete={() => { /* LOT futur : confirm + db.removeTrace */ }}
+            isMobile={isMobile}
           />
         )}
         {showPack && (
