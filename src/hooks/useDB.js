@@ -45,6 +45,8 @@ export function useAppState() {
   const [sidebarWidth,   setSidebarWidthState] = useState(220)       // 160–480 px
   // LOT 4E.2 bis — Largeur du panneau Léa (desktop uniquement)
   const [coachWidth,     setCoachWidthState]   = useState(270)       // 220–480 px
+  // LOT 4F.2.6 — Timestamp de la dernière sauvegarde Drive réussie
+  const [lastDriveSyncedAt, setLastDriveSyncedAtState] = useState(null) // ms epoch | null
   // ── Ambiance sonore ─────────────────────────────────────────
   const [ambientSound,   setAmbientSoundState]  = useState(null)    // null | 'pluie'|'cafe'|'feu'|'foret'
   const [ambientVolume,  setAmbientVolumeState] = useState(0.28)    // 0–1
@@ -69,7 +71,7 @@ export function useAppState() {
         console.info('[Storage] Mode non-persistant. Le navigateur peut évincer les données en cas de pression mémoire.')
       }
 
-      const [n, k, oai, lv, st, sess, last, mood, chs, chat, prof, mem, vrac, stok, lsa, ef, et, ew, fls, snd, vol, cs, us, ls, sw, cw] = await Promise.all([
+      const [n, k, oai, lv, st, sess, last, mood, chs, chat, prof, mem, vrac, stok, lsa, ef, et, ew, fls, snd, vol, cs, us, ls, sw, cw, lda] = await Promise.all([
         getKV('name',             ''),
         getKV('apiKey',           ''),
         getKV('openAiKey',        ''),
@@ -96,6 +98,7 @@ export function useAppState() {
         getKV('layoutScale',      1),     // LOT 4E.2
         getKV('sidebarWidth',     220),   // LOT 4E.2
         getKV('coachWidth',       270),   // LOT 4E.2 bis
+        getKV('lastDriveSyncedAt', null), // LOT 4F.2.6
       ])
 
       setNameState(n); setApiKeyState(k); setOAIKey(oai); setLeaVoice(lv)
@@ -123,6 +126,7 @@ export function useAppState() {
       setLayoutScaleState(typeof ls === 'number' && ls > 0 ? ls : 1)          // LOT 4E.2
       setSidebarWidthState(typeof sw === 'number' && sw >= 160 ? sw : 220)    // LOT 4E.2
       setCoachWidthState(typeof cw === 'number' && cw >= 220 ? cw : 270)      // LOT 4E.2 bis
+      setLastDriveSyncedAtState(typeof lda === 'number' && lda > 0 ? lda : null) // LOT 4F.2.6
       setReady(true)
 
       // Quota check en arrière-plan — non bloquant
@@ -182,6 +186,12 @@ export function useAppState() {
     const safe = typeof v === 'number' && v >= 220 ? v : 270
     setCoachWidthState(safe)
     await setKV('coachWidth', safe)
+  }, [])
+  // LOT 4F.2.6 — Timestamp de la dernière sauvegarde Drive réussie
+  const setLastDriveSyncedAt = useCallback(async (v) => {
+    const safe = typeof v === 'number' && v > 0 ? v : null
+    setLastDriveSyncedAtState(safe)
+    await setKV('lastDriveSyncedAt', safe)
   }, [])
 
   // ── Ambiance sonore ──────────────────────────────────────────
@@ -448,6 +458,7 @@ export function useAppState() {
     layoutScale, setLayoutScale,
     sidebarWidth, setSidebarWidth,
     coachWidth, setCoachWidth,
+    lastDriveSyncedAt, setLastDriveSyncedAt,
     firstLaunch, markFirstLaunchSeen,
     ambientSound, setAmbientSound, ambientVolume, setAmbientVolume,
     storageWarning, dismissStorageWarning: () => setStorageWarning(null),
