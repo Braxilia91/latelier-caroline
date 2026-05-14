@@ -277,7 +277,7 @@ export async function deleteFragment(id) {
 }
 
 // ─── Traces — tiroir mémoire photo ─────────────────────────────
-// Schéma trace  : { id, title, date, createdAt, updatedAt }
+// Schéma trace  : { id, createdAt, updatedAt, ...metadata }
 // Schéma blob   : { traceId, blob, mimeType }
 
 export async function getTraces() {
@@ -293,16 +293,18 @@ export async function getTraces() {
 
 /**
  * Crée une nouvelle trace — id toujours auto-généré (jamais hérité de l'appelant).
- * Évite tout risque de collision sur id existant.
+ * Spreade l'intégralité du payload metadata (whyNow, status, mimeType, etc.)
+ * avant de fixer les champs système (id, createdAt, updatedAt).
  */
 export async function addTrace(trace) {
   await openDB()
   const item = {
-    id:        `tr_${Date.now()}`,
     title:     trace?.title || '',
     date:      trace?.date  || new Date().toISOString().split('T')[0],
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
+    ...trace,                                 // préserve tous les champs metadata
+    id:        `tr_${Date.now()}`,            // toujours auto-généré — écrase tout id entrant
+    createdAt: new Date().toISOString(),      // toujours serveur
+    updatedAt: new Date().toISOString(),      // toujours serveur
   }
   return new Promise((resolve, reject) => {
     const req = tx('traces', 'readwrite').add(item)
