@@ -21,7 +21,7 @@ const SOUNDS = [
 
 export default function Header({
   name, moodToday, setMood, streak,
-  onDictate, onPlan, onTiroir, onExport, onSettings, onInspir, onVocab,
+  onDictate, onPlan, onExport, onSettings, onInspir, onVocab, onTiroir,
   moodOpen, setMoodOpen,
   // ── Ambiance ──
   ambientSound, ambientPlaying, onAmbientChange,
@@ -32,12 +32,14 @@ export default function Header({
 }) {
   const currentMood = MOODS.find(m => m.value === moodToday)
 
+  // ── Refs pour clickaway ──────────────────────────────────────
   const moodContainerRef    = useRef(null)
   const ambientContainerRef = useRef(null)
 
   useClickAway(moodContainerRef,    () => setMoodOpen(false))
   useClickAway(ambientContainerRef, () => setAmbientOpen(false))
 
+  // ── Escape global ────────────────────────────────────────────
   useEffect(() => {
     function onKeyDown(e) {
       if (e.key !== 'Escape') return
@@ -51,6 +53,7 @@ export default function Header({
   return (
     <header style={styles.hdr}>
 
+      {/* Bouton hamburger mobile (Sidebar) */}
       {isMobile && (
         <button
           style={styles.menuBtn}
@@ -62,11 +65,13 @@ export default function Header({
         </button>
       )}
 
+      {/* Logo */}
       <div style={styles.logo}>
         <Feather size={18} color="var(--gold)" />
         {!isMobile && <span style={styles.logoText}>L'Atelier</span>}
       </div>
 
+      {/* Centre — humeur + streak (caché sur mobile) */}
       {!isMobile && (
         <div style={styles.center}>
           <div ref={moodContainerRef} style={{ position: 'relative' }}>
@@ -107,15 +112,20 @@ export default function Header({
         </div>
       )}
 
+      {/* Actions droite */}
       <div style={styles.actions}>
         <BtnH icon={<Lightbulb size={16} />} label="Inspiration" onClick={onInspir}   isMobile={isMobile} />
         <BtnH icon={<Search   size={16} />} label="Vocabulaire" onClick={onVocab}    isMobile={isMobile} />
         <BtnH icon={<Mic      size={16} />} label="Dicter"      onClick={onDictate}  isMobile={isMobile} />
         <BtnH icon={<BookOpen size={16} />} label="Plan"         onClick={onPlan}     isMobile={isMobile} />
-        {!isMobile && <BtnH icon={<Archive size={16} />} label="Le tiroir"   onClick={onTiroir}   isMobile={isMobile} />}
+        {/* T1 — Le Tiroir : desktop uniquement, mobile reporté à un lot dédié */}
+        {!isMobile && (
+          <BtnH icon={<Archive size={16} />} label="Le tiroir" onClick={onTiroir} isMobile={false} />
+        )}
         <BtnH icon={<Download size={16} />} label="Exporter"    onClick={onExport}   isMobile={isMobile} />
         <BtnH icon={<Settings size={16} />} label="Réglages"    onClick={onSettings} isMobile={isMobile} />
 
+        {/* ── Ambiance sonore ── */}
         <div ref={ambientContainerRef} style={{ position: 'relative' }}>
           <button
             style={{
@@ -171,6 +181,7 @@ export default function Header({
         </div>
       </div>
 
+      {/* Bouton Léa mobile (CoachPanel) */}
       {isMobile && (
         <button
           style={styles.coachBtn}
