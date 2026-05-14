@@ -2,9 +2,10 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   getKV, setKV,
   getChapters, saveChapter, deleteChapter, restoreChapter as dbRestoreChapter,
-  getChatHistoryRecent, addChatMessage, clearChatHistory, deleteChatMessage,
+  getChatHistoryRecent, addChatMessage, clearChatHistory,
   getVrac, addVrac, updateVrac, deleteVrac,
-  exportAllData, resetAllData, importSnapshot, buildLocalBackup, getStorageEstimate,
+  getTraces, addTrace, updateTrace, deleteTrace, getTraceBlob,
+  exportAllData, resetAllData, importSnapshot, getStorageEstimate,
 } from '../lib/db'
 import { pushSnapshot, pullSnapshot, buildSnapshot, whoWins } from '../lib/sync'
 
@@ -31,22 +32,13 @@ export function useAppState() {
   const [syncMessage,    setSyncMessage]    = useState('')
   const [lastSyncedAt,   setLastSyncedAt]   = useState(null)
   const [vracIdeas,      setVracIdeas]      = useState([])    // boîte à idées
+  // ── Traces — Le tiroir (LOT 1B) ──────────────────────────────
+  const [traces,         setTraces]         = useState([])    // métadonnées seules, blobs lus à la demande
   // ── Préférences d'affichage ──────────────────────────────────
-  const [editorFont,     setEditorFontState]  = useState('m')       // s | m | l | xl
+  const [editorFont,     setEditorFontState]  = useState('m')       // s | m | l
   const [editorTheme,    setEditorThemeState] = useState('jour')     // jour | soir | bougie
   const [editorWidth,    setEditorWidthState] = useState('confort')  // confort | full
   const [firstLaunch,    setFirstLaunchState] = useState(false)      // true = scène pack opening à afficher
-  // LOT 3.5 — Échelle du chat Léa (multiplicateur appliqué via CSS var --chat-scale)
-  const [chatScale,      setChatScaleState]   = useState(1)          // 1 (Compact) | 1.15 (Confort) | 1.3 (Grand)
-  // LOT 4E.1 — Échelle UI globale (multiplicateur appliqué via CSS var --ui-scale)
-  const [uiScale,        setUiScaleState]     = useState(1)          // 0.9 | 1 | 1.15
-  // LOT 4E.2 — Échelle mise en page desktop (sidebar + header actions)
-  const [layoutScale,    setLayoutScaleState]  = useState(1)         // 0.9–1.5
-  const [sidebarWidth,   setSidebarWidthState] = useState(220)       // 160–480 px
-  // LOT 4E.2 bis — Largeur du panneau Léa (desktop uniquement)
-  const [coachWidth,     setCoachWidthState]   = useState(270)       // 220–480 px
-  // LOT 4F.2.6 — Timestamp de la dernière sauvegarde Drive réussie
-  const [lastDriveSyncedAt, setLastDriveSyncedAtState] = useState(null) // ms epoch | null
   // ── Ambiance sonore ─────────────────────────────────────────
   const [ambientSound,   setAmbientSoundState]  = useState(null)    // null | 'pluie'|'cafe'|'feu'|'foret'
   const [ambientVolume,  setAmbientVolumeState] = useState(0.28)    // 0–1
@@ -71,7 +63,7 @@ export function useAppState() {
         console.info('[Storage] Mode non-persistant. Le navigateur peut évincer les données en cas de pression mémoire.')
       }
 
-      const [n, k, oai, lv, st, sess, last, mood, chs, chat, prof, mem, vrac, stok, lsa, ef, et, ew, fls, snd, vol, cs, us, ls, sw, cw, lda] = await Promise.all([
+      const [n, k, oai, lv, st, sess, last, mood, chs, chat, prof, mem, vrac, tr, stok, lsa, ef, et, ew, fls, snd, vol] = await Promise.all([
         getKV('name',             ''),
         getKV('apiKey',           ''),
         getKV('openAiKey',        ''),
@@ -85,6 +77,7 @@ export function useAppState() {
         getKV('caroline_profile', null),
         getKV('lea_memory',       null),
         getVrac(),
+        getTraces(),                // ← LOT 1B : métadonnées traces (déjà triées antéchrono côté DB)
         getKV('syncToken',        ''),
         getKV('lastSyncedAt',     null),
         getKV('editorFont',       'm'),
@@ -93,12 +86,6 @@ export function useAppState() {
         getKV('firstLaunchSeen',  false),
         getKV('ambientSound',     null),
         getKV('ambientVolume',    0.28),
-        getKV('chatScale',        1),     // LOT 3.5
-        getKV('uiScale',          1),     // LOT 4E.1
-        getKV('layoutScale',      1),     // LOT 4E.2
-        getKV('sidebarWidth',     220),   // LOT 4E.2
-        getKV('coachWidth',       270),   // LOT 4E.2 bis
-        getKV('lastDriveSyncedAt', null), // LOT 4F.2.6
       ])
 
       setNameState(n); setApiKeyState(k); setOAIKey(oai); setLeaVoice(lv)
@@ -113,6 +100,8 @@ export function useAppState() {
       setProfileState(prof)
       setLeaMemoryState(mem)
       setVracIdeas(vrac)
+      // LOT 1B — cap RAM des traces (la DB conserve tout)
+      setTraces(tr.length > TRACES_RAM_CAP ? tr.slice(0, TRACES_RAM_CAP) : tr)
       setSyncTokenState(stok)
       setLastSyncedAt(lsa)
       setEditorFontState(ef)
@@ -121,12 +110,6 @@ export function useAppState() {
       setFirstLaunchState(!fls)   // firstLaunch = true si jamais vu
       setAmbientSoundState(snd)
       setAmbientVolumeState(vol)
-      setChatScaleState(typeof cs === 'number' && cs > 0 ? cs : 1)   // LOT 3.5 — fallback safe
-      setUiScaleState(typeof us === 'number' && us > 0 ? us : 1)    // LOT 4E.1 — fallback safe
-      setLayoutScaleState(typeof ls === 'number' && ls > 0 ? ls : 1)          // LOT 4E.2
-      setSidebarWidthState(typeof sw === 'number' && sw >= 160 ? sw : 220)    // LOT 4E.2
-      setCoachWidthState(typeof cw === 'number' && cw >= 220 ? cw : 270)      // LOT 4E.2 bis
-      setLastDriveSyncedAtState(typeof lda === 'number' && lda > 0 ? lda : null) // LOT 4F.2.6
       setReady(true)
 
       // Quota check en arrière-plan — non bloquant
@@ -158,41 +141,6 @@ export function useAppState() {
   const setEditorFont  = useCallback(async (v) => { setEditorFontState(v);  await setKV('editorFont',  v) }, [])
   const setEditorTheme = useCallback(async (v) => { setEditorThemeState(v); await setKV('editorTheme', v) }, [])
   const setEditorWidth = useCallback(async (v) => { setEditorWidthState(v); await setKV('editorWidth', v) }, [])
-  // LOT 3.5 — Échelle du chat Léa
-  const setChatScale   = useCallback(async (v) => {
-    const safe = typeof v === 'number' && v > 0 ? v : 1
-    setChatScaleState(safe)
-    await setKV('chatScale', safe)
-  }, [])
-  // LOT 4E.1 — Échelle UI globale
-  const setUiScale     = useCallback(async (v) => {
-    const safe = typeof v === 'number' && v > 0 ? v : 1
-    setUiScaleState(safe)
-    await setKV('uiScale', safe)
-  }, [])
-  // LOT 4E.2 — Échelle mise en page desktop
-  const setLayoutScale  = useCallback(async (v) => {
-    const safe = typeof v === 'number' && v > 0 ? v : 1
-    setLayoutScaleState(safe)
-    await setKV('layoutScale', safe)
-  }, [])
-  const setSidebarWidth = useCallback(async (v) => {
-    const safe = typeof v === 'number' && v >= 160 ? v : 220
-    setSidebarWidthState(safe)
-    await setKV('sidebarWidth', safe)
-  }, [])
-  // LOT 4E.2 bis — Largeur du panneau Léa (desktop uniquement)
-  const setCoachWidth = useCallback(async (v) => {
-    const safe = typeof v === 'number' && v >= 220 ? v : 270
-    setCoachWidthState(safe)
-    await setKV('coachWidth', safe)
-  }, [])
-  // LOT 4F.2.6 — Timestamp de la dernière sauvegarde Drive réussie
-  const setLastDriveSyncedAt = useCallback(async (v) => {
-    const safe = typeof v === 'number' && v > 0 ? v : null
-    setLastDriveSyncedAtState(safe)
-    await setKV('lastDriveSyncedAt', safe)
-  }, [])
 
   // ── Ambiance sonore ──────────────────────────────────────────
   const setAmbientSound  = useCallback(async (v) => { setAmbientSoundState(v);  await setKV('ambientSound',  v) }, [])
@@ -299,14 +247,6 @@ export function useAppState() {
     })
   }, [])
 
-  // LOT 4C.3 — Reset complet de la mémoire de Léa.
-  // updateLeaMemory ignore les valeurs null (garde-fou anti corruption),
-  // donc on a besoin d'une fonction dédiée pour le reset utilisateur.
-  const resetLeaMemory = useCallback(async () => {
-    setLeaMemoryState(null)
-    await setKV('lea_memory', null)
-  }, [])
-
   // ─── Streak / sessions ───────────────────────────────────────
   // Lock anti-race : si recordSession est appelé plusieurs fois en parallèle
   // (par ex. via useAutoSave → updateChapter → recordSession), un seul exécute.
@@ -389,26 +329,16 @@ export function useAppState() {
   // Évite la croissance unbounded de la RAM sur sessions longues.
   const CHAT_RAM_CAP = 200
   const addMessage = useCallback(async (msg) => {
-    // LOT 4C.2 — capture l'id auto-incrémenté retourné par IndexedDB
-    // pour permettre la suppression unitaire des messages ajoutés en session.
-    const id = await addChatMessage(msg)
+    await addChatMessage(msg)
     setChatHistory(prev => {
-      const next = [...prev, { ...msg, id }]
+      const next = [...prev, msg]
       return next.length > CHAT_RAM_CAP ? next.slice(-CHAT_RAM_CAP) : next
     })
-    return id
   }, [])
 
   const clearChat = useCallback(async () => {
     await clearChatHistory()
     setChatHistory([])
-  }, [])
-
-  // LOT 4C.2 — Suppression unitaire d'un message du chat (DB + state miroir)
-  const removeMessage = useCallback(async (id) => {
-    if (id == null) return
-    await deleteChatMessage(id)
-    setChatHistory(prev => prev.filter(m => m.id !== id))
   }, [])
 
   // ─── Vrac — boîte à idées ────────────────────────────────────
@@ -426,6 +356,41 @@ export function useAppState() {
   const removeVracIdea = useCallback(async (id) => {
     await deleteVrac(id)
     setVracIdeas(prev => prev.filter(v => v.id !== id))
+  }, [])
+
+  // ─── Traces — Le tiroir (LOT 1B) ─────────────────────────────
+  // Source : table IDB `traces` (métadonnées). Les Blobs photo vivent dans `traceBlobs`
+  // et ne transitent JAMAIS par le state React — lus à la demande via loadTraceBlob().
+  // Borne le state à 200 traces (la DB conserve tout).
+  const createTrace = useCallback(async (traceData = {}) => {
+    const item = await addTrace(traceData)
+    setTraces(prev => {
+      const next = [item, ...prev]
+      return next.length > TRACES_RAM_CAP ? next.slice(0, TRACES_RAM_CAP) : next
+    })
+    return item
+  }, [])
+
+  const editTrace = useCallback(async (id, fields) => {
+    await updateTrace(id, fields)
+    setTraces(prev => prev.map(t => t.id === id ? { ...t, ...fields } : t))
+  }, [])
+
+  const removeTrace = useCallback(async (id) => {
+    // Cascade trace + blob côté lib/db (deleteTrace gère les 2 stores).
+    await deleteTrace(id)
+    setTraces(prev => prev.filter(t => t.id !== id))
+  }, [])
+
+  /**
+   * Lecture lazy d'un blob de trace — retourne le Blob ou null.
+   * Le Blob n'est JAMAIS stocké dans le state React : on ne charge pas toutes
+   * les photos en mémoire au boot. L'UI fait l'URL.createObjectURL côté composant
+   * et appelle URL.revokeObjectURL au unmount.
+   */
+  const loadTraceBlob = useCallback(async (blobKey) => {
+    if (!blobKey) return null
+    return getTraceBlob(blobKey)
   }, [])
 
   // ─── Dérivés ──────────────────────────────────────────────────
@@ -447,21 +412,19 @@ export function useAppState() {
     chapters, currentId, setCurrentId,
     currentChapter, totalWords,
     createChapter, updateChapter, removeChapter, restoreChapter, reorderChapters,
-    chatHistory, addMessage, clearChat, removeMessage,
+    chatHistory, addMessage, clearChat,
     carolineProfile, setCarolineProfile,
-    leaMemory, updateLeaMemory, resetLeaMemory,
+    leaMemory, updateLeaMemory,
     vracIdeas, unusedVrac, addVracIdea, markVracUsed, removeVracIdea,
+    traces, createTrace, editTrace, removeTrace, loadTraceBlob,
     syncToken, setSyncToken, syncStatus, syncMessage, lastSyncedAt, syncNow,
     editorFont, setEditorFont, editorTheme, setEditorTheme, editorWidth, setEditorWidth,
-    chatScale, setChatScale,
-    uiScale, setUiScale,
-    layoutScale, setLayoutScale,
-    sidebarWidth, setSidebarWidth,
-    coachWidth, setCoachWidth,
-    lastDriveSyncedAt, setLastDriveSyncedAt,
     firstLaunch, markFirstLaunchSeen,
     ambientSound, setAmbientSound, ambientVolume, setAmbientVolume,
     storageWarning, dismissStorageWarning: () => setStorageWarning(null),
-    exportAllData, resetAllData, importSnapshot, buildLocalBackup,
+    exportAllData, resetAllData, importSnapshot,
   }
 }
+
+// ─── Constantes module-private ───────────────────────────────────
+const TRACES_RAM_CAP = 200   // LOT 1B — cohérent avec CHAT_RAM_CAP côté chat
