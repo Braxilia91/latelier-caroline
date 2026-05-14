@@ -261,8 +261,11 @@ const styles = {
     flexDirection: 'column',
     overflow: 'hidden',
   },
+  // LOT 4E.2 bis — Largeur pilotée par CSS var --coach-w (default 270px).
+  // Mobile : globals.css force --coach-w à 0px, mais panelMobile override
+  // ci-dessous avec width: 320 hardcodé (jamais touché).
   panelDesktop: {
-    width: 270,
+    width: 'var(--coach-w, 270px)',
     flexShrink: 0,
   },
   panelMobile: {
