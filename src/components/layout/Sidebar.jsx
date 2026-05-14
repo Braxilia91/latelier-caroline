@@ -32,7 +32,6 @@ export default function Sidebar({
 
   const wordCount = (text) => text?.split(/\s+/).filter(Boolean).length ?? 0
 
-  // Style calculé selon mode (desktop inline / mobile drawer fixed)
   const computedStyle = isMobile
     ? {
         ...styles.sbBase,
@@ -128,7 +127,7 @@ const styles = {
     overflow: 'hidden',
   },
   sbDesktop: {
-    width: 220,
+    width: 'var(--sidebar-w, 220px)',
     flexShrink: 0,
   },
   sbMobile: {
@@ -145,13 +144,13 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-around',
-    padding: '12px 8px',
+    padding: 'calc(12px * var(--layout-scale, 1)) 8px',
     borderBottom: '1px solid var(--border-l)',
     background: 'var(--cream)',
   },
   stat:    { textAlign: 'center' },
-  statNum: { display: 'block', fontFamily: "'Cormorant Garamond', serif", fontSize: '1.15rem', fontWeight: 600, color: 'var(--brown)' },
-  statLbl: { fontSize: '.65rem', color: 'var(--ink-ll)', textTransform: 'uppercase', letterSpacing: '.5px' },
+  statNum: { display: 'block', fontFamily: "'Cormorant Garamond', serif", fontSize: 'calc(1.15rem * var(--layout-scale, 1))', fontWeight: 600, color: 'var(--brown)' },
+  statLbl: { fontSize: 'calc(.65rem * var(--layout-scale, 1))', color: 'var(--ink-ll)', textTransform: 'uppercase', letterSpacing: '.5px' },
   statDiv: { width: 1, height: 28, background: 'var(--border-l)' },
   hdr: {
     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -159,7 +158,7 @@ const styles = {
   },
   hdrTitle: { fontSize: '.72rem', fontWeight: 800, color: 'var(--ink-ll)', textTransform: 'uppercase', letterSpacing: '1px' },
   addBtn: {
-    width: 28, height: 28,
+    width: 'calc(28px * var(--layout-scale, 1))', height: 'calc(28px * var(--layout-scale, 1))',
     borderRadius: 8,
     display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
     background: 'linear-gradient(135deg, var(--brown), var(--gold))',
@@ -185,7 +184,7 @@ const styles = {
   },
   item: {
     display: 'flex', alignItems: 'flex-start', gap: 6,
-    padding: '9px 8px',
+    padding: 'calc(9px * var(--layout-scale, 1)) 8px',
     borderRadius: 10,
     cursor: 'pointer',
     transition: 'background .15s',
@@ -198,7 +197,7 @@ const styles = {
   itemBody: { flex: 1, minWidth: 0 },
   itemTitle: {
     fontFamily: "'Lora', serif",
-    fontSize: '.85rem', fontWeight: 500,
+    fontSize: 'calc(.85rem * var(--layout-scale, 1))', fontWeight: 500,
     color: 'var(--ink)',
     whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
   },
