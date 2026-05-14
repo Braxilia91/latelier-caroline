@@ -5,7 +5,6 @@ import {
   getChatHistoryRecent, addChatMessage, clearChatHistory, deleteChatMessage,
   getVrac, addVrac, updateVrac, deleteVrac,
   exportAllData, resetAllData, importSnapshot, getStorageEstimate,
-  buildLocalBackup,
 } from '../lib/db'
 import { pushSnapshot, pullSnapshot, buildSnapshot, whoWins } from '../lib/sync'
 
@@ -26,24 +25,34 @@ export function useAppState() {
   const [chatHistory,    setChatHistory]    = useState([])
   const [carolineProfile, setProfileState] = useState(null)
   const [leaMemory,      setLeaMemoryState] = useState(null)
+  // ── Sync inter-appareils ─────────────────────────────────────
   const [syncToken,      setSyncTokenState] = useState('')
   const [syncStatus,     setSyncStatus]     = useState('idle')
   const [syncMessage,    setSyncMessage]    = useState('')
   const [lastSyncedAt,   setLastSyncedAt]   = useState(null)
-  const [lastDriveSyncedAt, setLastDriveSyncedAtState] = useState(null) // LOT 4F.2.4
   const [vracIdeas,      setVracIdeas]      = useState([])
+  // ── Préférences d'affichage ──────────────────────────────────
   const [editorFont,     setEditorFontState]  = useState('m')
   const [editorTheme,    setEditorThemeState] = useState('jour')
   const [editorWidth,    setEditorWidthState] = useState('confort')
   const [firstLaunch,    setFirstLaunchState] = useState(false)
+  // LOT 3.5 — Échelle du chat Léa
   const [chatScale,      setChatScaleState]   = useState(1)
-  const [uiScale,        setUiScaleState]     = useState(1)  // LOT 4E.1
+  // LOT 4E.1 — Échelle UI globale
+  const [uiScale,        setUiScaleState]     = useState(1)
+  // LOT 4E.2 — Échelle mise en page desktop
+  const [layoutScale,    setLayoutScaleState]  = useState(1)
+  const [sidebarWidth,   setSidebarWidthState] = useState(220)
+  // ── Ambiance sonore ─────────────────────────────────────────
   const [ambientSound,   setAmbientSoundState]  = useState(null)
   const [ambientVolume,  setAmbientVolumeState] = useState(0.28)
+  // ── Alerte stockage ─────────────────────────────────────────
   const [storageWarning, setStorageWarning] = useState(null)
+  // ── Lock anti-race recordSession ────────────────────────────
   const recordSessionLockRef = useRef(false)
   const lastSessionRef = useRef('')
 
+  // ─── Chargement initial ──────────────────────────────────────
   useEffect(() => {
     ;(async () => {
       let storagePersisted = false
@@ -56,7 +65,7 @@ export function useAppState() {
         console.info('[Storage] Mode non-persistant. Le navigateur peut évincer les données en cas de pression mémoire.')
       }
 
-      const [n, k, oai, lv, st, sess, last, mood, chs, chat, prof, mem, vrac, stok, lsa, lds, ef, et, ew, fls, snd, vol, cs, us] = await Promise.all([
+      const [n, k, oai, lv, st, sess, last, mood, chs, chat, prof, mem, vrac, stok, lsa, ef, et, ew, fls, snd, vol, cs, us, ls, sw] = await Promise.all([
         getKV('name',             ''),
         getKV('apiKey',           ''),
         getKV('openAiKey',        ''),
@@ -72,15 +81,16 @@ export function useAppState() {
         getVrac(),
         getKV('syncToken',        ''),
         getKV('lastSyncedAt',     null),
-        getKV('lastDriveSyncedAt', null),
         getKV('editorFont',       'm'),
         getKV('editorTheme',      'jour'),
         getKV('editorWidth',      'confort'),
         getKV('firstLaunchSeen',  false),
         getKV('ambientSound',     null),
         getKV('ambientVolume',    0.28),
-        getKV('chatScale',        1),
-        getKV('uiScale',          1),   // LOT 4E.1
+        getKV('chatScale',        1),     // LOT 3.5
+        getKV('uiScale',          1),     // LOT 4E.1
+        getKV('layoutScale',      1),     // LOT 4E.2
+        getKV('sidebarWidth',     220),   // LOT 4E.2
       ])
 
       setNameState(n); setApiKeyState(k); setOAIKey(oai); setLeaVoice(lv)
@@ -97,7 +107,6 @@ export function useAppState() {
       setVracIdeas(vrac)
       setSyncTokenState(stok)
       setLastSyncedAt(lsa)
-      setLastDriveSyncedAtState(lds)
       setEditorFontState(ef)
       setEditorThemeState(et)
       setEditorWidthState(ew)
@@ -105,7 +114,9 @@ export function useAppState() {
       setAmbientSoundState(snd)
       setAmbientVolumeState(vol)
       setChatScaleState(typeof cs === 'number' && cs > 0 ? cs : 1)
-      setUiScaleState(typeof us === 'number' && us > 0 ? us : 1)  // LOT 4E.1
+      setUiScaleState(typeof us === 'number' && us > 0 ? us : 1)
+      setLayoutScaleState(typeof ls === 'number' && ls > 0 ? ls : 1)          // LOT 4E.2
+      setSidebarWidthState(typeof sw === 'number' && sw >= 160 ? sw : 220)    // LOT 4E.2
       setReady(true)
 
       try {
@@ -121,29 +132,46 @@ export function useAppState() {
     })()
   }, [])
 
+  // ─── Sync refs ───────────────────────────────────────────────
   useEffect(() => { chaptersRef.current  = chapters  }, [chapters])
   useEffect(() => { currentIdRef.current = currentId }, [currentId])
   useEffect(() => { lastSessionRef.current = lastSession }, [lastSession])
 
+  // ─── Helpers persist ─────────────────────────────────────────
   const setName   = useCallback(async (v) => { setNameState(v);   await setKV('name',      v) }, [])
   const setApiKey = useCallback(async (v) => { setApiKeyState(v); await setKV('apiKey',     v) }, [])
   const setOaiKey = useCallback(async (v) => { setOAIKey(v);      await setKV('openAiKey',  v) }, [])
   const setVoice  = useCallback(async (v) => { setLeaVoice(v);    await setKV('leaVoice',   v) }, [])
 
+  // ── Préférences d'affichage ──────────────────────────────────
   const setEditorFont  = useCallback(async (v) => { setEditorFontState(v);  await setKV('editorFont',  v) }, [])
   const setEditorTheme = useCallback(async (v) => { setEditorThemeState(v); await setKV('editorTheme', v) }, [])
   const setEditorWidth = useCallback(async (v) => { setEditorWidthState(v); await setKV('editorWidth', v) }, [])
+  // LOT 3.5 — Échelle du chat Léa
   const setChatScale   = useCallback(async (v) => {
     const safe = typeof v === 'number' && v > 0 ? v : 1
     setChatScaleState(safe)
     await setKV('chatScale', safe)
   }, [])
-  const setUiScale     = useCallback(async (v) => {  // LOT 4E.1
+  // LOT 4E.1 — Échelle UI globale
+  const setUiScale     = useCallback(async (v) => {
     const safe = typeof v === 'number' && v > 0 ? v : 1
     setUiScaleState(safe)
     await setKV('uiScale', safe)
   }, [])
+  // LOT 4E.2 — Échelle mise en page desktop
+  const setLayoutScale  = useCallback(async (v) => {
+    const safe = typeof v === 'number' && v > 0 ? v : 1
+    setLayoutScaleState(safe)
+    await setKV('layoutScale', safe)
+  }, [])
+  const setSidebarWidth = useCallback(async (v) => {
+    const safe = typeof v === 'number' && v >= 160 ? v : 220
+    setSidebarWidthState(safe)
+    await setKV('sidebarWidth', safe)
+  }, [])
 
+  // ── Ambiance sonore ──────────────────────────────────────────
   const setAmbientSound  = useCallback(async (v) => { setAmbientSoundState(v);  await setKV('ambientSound',  v) }, [])
   const setAmbientVolume = useCallback(async (v) => { setAmbientVolumeState(v); await setKV('ambientVolume', v) }, [])
   const markFirstLaunchSeen = useCallback(async () => {
@@ -157,20 +185,16 @@ export function useAppState() {
     await setKV('moodToday', new Date().toDateString())
   }, [])
 
+  // ─── Token de synchronisation ────────────────────────────────
   const setSyncToken = useCallback(async (v) => {
     setSyncTokenState(v)
     await setKV('syncToken', v)
   }, [])
 
-  // LOT 4F.1.2 — syncNow retourne désormais {ok, message} pour éviter la race
-  // condition entre setState et lecture par le composant appelant.
+  // ─── Sync inter-appareils (last-write-wins) ──────────────────
   const syncNow = useCallback(async () => {
     const token = await getKV('syncToken', '')
-    if (!token) {
-      const message = 'Configure un token dans Réglages'
-      setSyncMessage(message); setSyncStatus('error')
-      return { ok: false, message }
-    }
+    if (!token) { setSyncMessage('Configure un token dans Réglages'); setSyncStatus('error'); return }
 
     setSyncStatus('syncing'); setSyncMessage('')
     try {
@@ -192,17 +216,15 @@ export function useAppState() {
         getChatHistoryRecent(500),
       ])
       const local = { ...buildSnapshot({ chapters, vrac, kvData }), chat }
-
       const remote = await pullSnapshot({ token })
-
       const winner = whoWins(local.syncedAt, remote.syncedAt)
 
       if (winner === 'remote' && !remote.empty) {
         const ok = await importSnapshot(remote)
         if (!ok) {
-          const message = 'Snapshot distant corrompu — import annulé, données locales préservées'
-          setSyncStatus('error'); setSyncMessage(message)
-          return { ok: false, message }
+          setSyncStatus('error')
+          setSyncMessage('Snapshot distant corrompu — import annulé, données locales préservées')
+          return
         }
         const [chs, v, ch] = await Promise.all([getChapters(), getVrac(), getChatHistoryRecent(200)])
         setChapters(chs)
@@ -210,47 +232,28 @@ export function useAppState() {
         setVracIdeas(v)
         setChatHistory(ch)
         setLastSyncedAt(remote.syncedAt)
-        const message = 'Données mises à jour depuis le cloud ✓'
-        setSyncStatus('ok'); setSyncMessage(message)
-        return { ok: true, message }
+        setSyncStatus('ok'); setSyncMessage(`Données mises à jour depuis le cloud ✓`)
       } else if (winner === 'local' || remote.empty) {
         await pushSnapshot({ token, snapshot: local })
         await setKV('lastSyncedAt', local.syncedAt)
         setLastSyncedAt(local.syncedAt)
-        const message = 'Sauvegardé dans le cloud ✓'
-        setSyncStatus('ok'); setSyncMessage(message)
-        return { ok: true, message }
+        setSyncStatus('ok'); setSyncMessage(`Sauvegardé dans le cloud ✓`)
       } else {
-        const message = 'Déjà synchronisé ✓'
-        setSyncStatus('ok'); setSyncMessage(message)
-        return { ok: true, message }
+        setSyncStatus('ok'); setSyncMessage(`Déjà synchronisé ✓`)
       }
     } catch (err) {
-      const message = err.message || 'Erreur de synchronisation'
-      setSyncStatus('error'); setSyncMessage(message)
-      return { ok: false, message }
+      setSyncStatus('error')
+      setSyncMessage(err.message || 'Erreur de synchronisation')
     }
   }, [])
 
-  // LOT 4F.1.2 — Permet à la modale Réglages de repartir d'un état propre
-  // au montage (pas d'affichage d'un vieux message de sync).
-  const resetSyncStatus = useCallback(() => {
-    setSyncStatus('idle')
-    setSyncMessage('')
-  }, [])
-
-  // LOT 4F.2.4 — Setter persisté pour la dernière sauvegarde Drive
-  // (utilisé par l'upload manuel ET par l'auto-sync dans App.jsx).
-  const setLastDriveSyncedAt = useCallback(async (ts) => {
-    setLastDriveSyncedAtState(ts)
-    await setKV('lastDriveSyncedAt', ts)
-  }, [])
-
+  // ─── Profil Caroline ─────────────────────────────────────────
   const setCarolineProfile = useCallback(async (profile) => {
     setProfileState(profile)
     await setKV('caroline_profile', profile)
   }, [])
 
+  // ─── Mémoire Léa ─────────────────────────────────────────────
   const updateLeaMemory = useCallback(async (fieldsOrFn) => {
     setLeaMemoryState(prev => {
       const patch = typeof fieldsOrFn === 'function' ? fieldsOrFn(prev) : fieldsOrFn
@@ -266,6 +269,7 @@ export function useAppState() {
     await setKV('lea_memory', null)
   }, [])
 
+  // ─── Streak / sessions ───────────────────────────────────────
   const recordSession = useCallback(async () => {
     if (recordSessionLockRef.current) return
     const today = new Date().toDateString()
@@ -287,6 +291,7 @@ export function useAppState() {
     }
   }, [streak, sessions])
 
+  // ─── Chapitres ───────────────────────────────────────────────
   const createChapter = useCallback(async () => {
     const id  = `ch_${Date.now()}`
     const ch  = {
@@ -332,6 +337,7 @@ export function useAppState() {
     await Promise.all(reordered.map(saveChapter))
   }, [])
 
+  // ─── Chat ─────────────────────────────────────────────────────
   const CHAT_RAM_CAP = 200
   const addMessage = useCallback(async (msg) => {
     const id = await addChatMessage(msg)
@@ -353,6 +359,7 @@ export function useAppState() {
     setChatHistory(prev => prev.filter(m => m.id !== id))
   }, [])
 
+  // ─── Vrac ─────────────────────────────────────────────────────
   const addVracIdea = useCallback(async (idea) => {
     const item = await addVrac(idea)
     setVracIdeas(prev => [item, ...prev])
@@ -369,40 +376,7 @@ export function useAppState() {
     setVracIdeas(prev => prev.filter(v => v.id !== id))
   }, [])
 
-  // LOT 4F.1 — Import d'une sauvegarde depuis fichier JSON
-  const importFromFile = useCallback(async (file) => {
-    if (!file) return { ok: false, message: 'Aucun fichier sélectionné' }
-    try {
-      const text = await file.text()
-      let parsed
-      try { parsed = JSON.parse(text) }
-      catch { return { ok: false, message: 'Fichier JSON invalide' } }
-
-      const ok = await importSnapshot(parsed)
-      if (!ok) return { ok: false, message: 'Format de sauvegarde non reconnu ou corrompu' }
-
-      const [chs, v, ch, prof, mem, lsa] = await Promise.all([
-        getChapters(),
-        getVrac(),
-        getChatHistoryRecent(200),
-        getKV('caroline_profile', null),
-        getKV('lea_memory',       null),
-        getKV('lastSyncedAt',     null),
-      ])
-      setChapters(chs)
-      if (chs.length > 0) setCurrentId(chs[0].id)
-      setVracIdeas(v)
-      setChatHistory(ch)
-      setProfileState(prof)
-      setLeaMemoryState(mem)
-      setLastSyncedAt(lsa)
-
-      return { ok: true, message: 'Sauvegarde importée avec succès' }
-    } catch (err) {
-      return { ok: false, message: err.message || 'Erreur lors de l\'import' }
-    }
-  }, [])
-
+  // ─── Dérivés ──────────────────────────────────────────────────
   const currentChapter = chapters.find(c => c.id === currentId) ?? null
   const isSetup        = name.trim().length > 0
   const totalWords     = chapters.reduce(
@@ -426,15 +400,14 @@ export function useAppState() {
     leaMemory, updateLeaMemory, resetLeaMemory,
     vracIdeas, unusedVrac, addVracIdea, markVracUsed, removeVracIdea,
     syncToken, setSyncToken, syncStatus, syncMessage, lastSyncedAt, syncNow,
-    resetSyncStatus,
-    lastDriveSyncedAt, setLastDriveSyncedAt, // LOT 4F.2.4
     editorFont, setEditorFont, editorTheme, setEditorTheme, editorWidth, setEditorWidth,
     chatScale, setChatScale,
-    uiScale, setUiScale,  // LOT 4E.1
+    uiScale, setUiScale,
+    layoutScale, setLayoutScale,
+    sidebarWidth, setSidebarWidth,
     firstLaunch, markFirstLaunchSeen,
     ambientSound, setAmbientSound, ambientVolume, setAmbientVolume,
     storageWarning, dismissStorageWarning: () => setStorageWarning(null),
     exportAllData, resetAllData, importSnapshot,
-    importFromFile, buildLocalBackup,
   }
 }
