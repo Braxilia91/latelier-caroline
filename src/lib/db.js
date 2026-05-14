@@ -1,6 +1,6 @@
 // ─── IndexedDB wrapper v4 ──────────────────────────────────────
 const DB_NAME    = 'atelier_v3'
-const DB_VERSION = 4          // v4 : ajout stores 'traces' + 'traceBlobs' (LOT 1A Le tiroir)
+const DB_VERSION = 4          // v4 : ajout stores 'traces' et 'traceBlobs' (tiroir)
 
 let _db = null
 
@@ -29,16 +29,14 @@ async function openDB() {
         if (!db.objectStoreNames.contains('fragments'))
           db.createObjectStore('fragments', { keyPath: 'id' })
       }
-      // ── Migration v3 → v4 — Le tiroir (LOT 1A) ───────────
+      // ── Migration v3 → v4 ────────────────────────────────
+      // Tiroir : traces (métadonnées) + traceBlobs (binaires)
+      // Idempotent : stores déjà présents en prod v4 → rien ne se passe
       if (old < 4) {
-        if (!db.objectStoreNames.contains('traces')) {
-          const store = db.createObjectStore('traces', { keyPath: 'id' })
-          store.createIndex('createdAt', 'createdAt', { unique: false })
-          store.createIndex('status',    'status',    { unique: false })
-        }
-        if (!db.objectStoreNames.contains('traceBlobs')) {
-          db.createObjectStore('traceBlobs', { keyPath: 'key' })
-        }
+        if (!db.objectStoreNames.contains('traces'))
+          db.createObjectStore('traces', { keyPath: 'id' })
+        if (!db.objectStoreNames.contains('traceBlobs'))
+          db.createObjectStore('traceBlobs', { keyPath: 'traceId' })
       }
     }
 
@@ -293,46 +291,10 @@ export async function deleteFragment(id) {
   })
 }
 
-// ─── Traces — Le tiroir (LOT 1A, IDB v4) ──────────────────────
-// Schéma traces (cf docs/le-tiroir-v1.md §5) :
-// {
-//   id              : "tr_<ts>"
-//   type            : 'photo' | 'document'
-//   createdAt       : ISO
-//   updatedAt       : ISO
-//   blobKey         : "blob_<id>"     // référence vers store traceBlobs
-//   blobAvailable   : boolean         // true si blob présent localement
-//   status          : 'private' | 'vrac' | 'note' | 'scene' | 'letter'
-//   ... (whyNow, whatItStirs, detail, unseen, leftToday, ocrText, etc.)
-// }
-//
-// Schéma traceBlobs : { key, blob, originalSizeBytes, storedAt }
-//
-// Convention figée LOT 1A : blobKey = `blob_${trace.id}` (séparation namespace).
-// Cascade delete : lecture trace → delete trace → delete blob (clé réelle, fallback `blob_${id}`).
-// Si la suppression blob échoue, l'erreur remonte ; un GC différé pourra nettoyer
-// les blobs orphelins dans un lot ultérieur (dette assumée, non traitée en 1A).
-// Backup Drive V1 : `traces` métadonnées seulement (allowlist explicite), `traceBlobs` exclu.
-
-// Allowlist des champs sérialisés dans buildLocalBackup (cf docs/le-tiroir-v1.md §5).
-// Tout autre champ stocké sur une trace est volontairement écarté du backup.
-const TRACE_BACKUP_FIELDS = [
-  'id', 'type', 'createdAt', 'updatedAt',
-  'blobKey', 'blobAvailable',
-  'mimeType', 'width', 'height', 'sizeBytes',
-  'ocrText', 'ocrConfidence', 'ocrLang', 'ocrRunAt',
-  'whyNow', 'whatItStirs', 'detail', 'unseen', 'leftToday',
-  'status', 'linkedChapterId', 'linkedVracId',
-  'archived', 'hiddenFromGrid',
-]
-
-function pickTraceMetadata(t) {
-  const out = {}
-  for (const k of TRACE_BACKUP_FIELDS) {
-    if (t?.[k] !== undefined) out[k] = t[k]
-  }
-  return out
-}
+// ─── Traces — tiroir mémoire photo ─────────────────────────────
+// T1 : CRUD fondation. AddTraceFlow + OCR ajoutés en T3/T4.
+// Schéma trace  : { id, title, date, createdAt, updatedAt }
+// Schéma blob   : { traceId, blob, mimeType }
 
 export async function getTraces() {
   await openDB()
@@ -345,191 +307,52 @@ export async function getTraces() {
   })
 }
 
-export async function getTrace(id) {
-  await openDB()
-  return new Promise((resolve) => {
-    const req = tx('traces').get(id)
-    req.onsuccess = () => resolve(req.result || null)
-    req.onerror   = () => resolve(null)
-  })
-}
-
-/**
- * Crée une trace avec id/blobKey/createdAt/updatedAt générés.
- * `status: 'private'` et `blobAvailable: true` par défaut (surchargeables via traceData).
- * Les champs id/blobKey/createdAt/updatedAt fournis par le caller sont écrasés.
- * Retourne l'objet trace complet créé.
- */
-export async function addTrace(traceData = {}) {
-  await openDB()
-  const id  = `tr_${Date.now()}`
-  const now = new Date().toISOString()
-  const trace = {
-    status:        'private',
-    blobAvailable: true,
-    ...traceData,
-    id,
-    blobKey:   `blob_${id}`,
-    createdAt: now,
-    updatedAt: now,
-  }
-  return new Promise((resolve, reject) => {
-    const req = tx('traces', 'readwrite').add(trace)
-    req.onsuccess = () => resolve(trace)
-    req.onerror   = (e) => reject(e.target.error)
-  })
-}
-
-/**
- * Patch d'une trace existante + maj updatedAt.
- * id / blobKey / createdAt sont préservés et ne peuvent pas être modifiés via fields.
- */
-export async function updateTrace(id, fields) {
+export async function saveTrace(trace) {
   await openDB()
   return new Promise((resolve, reject) => {
-    const getReq = tx('traces').get(id)
-    getReq.onsuccess = () => {
-      const item = getReq.result
-      if (!item) return reject(new Error('Trace not found'))
-      const putReq = tx('traces', 'readwrite').put({
-        ...item,
-        ...fields,
-        id:        item.id,
-        blobKey:   item.blobKey,
-        createdAt: item.createdAt,
-        updatedAt: new Date().toISOString(),
-      })
-      putReq.onsuccess = () => resolve()
-      putReq.onerror   = (e) => reject(e.target.error)
-    }
-    getReq.onerror = (e) => reject(e.target.error)
-  })
-}
-
-/**
- * Cascade delete — lecture préalable puis 2 transactions séquentielles.
- * 1) Lit la trace pour récupérer `item.blobKey` réel
- *    (résilient face à une trace restaurée ou legacy qui aurait un blobKey divergent
- *    de la convention `blob_${id}`).
- * 2) Delete dans `traces`.
- * 3) Delete dans `traceBlobs` à la clé réelle de la trace, ou fallback `blob_${id}`
- *    si la trace est introuvable ou n'a pas de blobKey enregistré.
- * Aucune erreur n'est catchée localement : elles remontent au caller.
- */
-export async function deleteTrace(id) {
-  await openDB()
-  const trace = await new Promise((resolve) => {
-    const req = tx('traces').get(id)
-    req.onsuccess = () => resolve(req.result || null)
-    req.onerror   = () => resolve(null)
-  })
-  const blobKey = trace?.blobKey || `blob_${id}`
-
-  await new Promise((resolve, reject) => {
-    const req = tx('traces', 'readwrite').delete(id)
-    req.onsuccess = () => resolve()
-    req.onerror   = (e) => reject(e.target.error)
-  })
-  await new Promise((resolve, reject) => {
-    const req = tx('traceBlobs', 'readwrite').delete(blobKey)
-    req.onsuccess = () => resolve()
-    req.onerror   = (e) => reject(e.target.error)
-  })
-}
-
-export async function putTraceBlob(key, blob) {
-  await openDB()
-  return new Promise((resolve, reject) => {
-    const req = tx('traceBlobs', 'readwrite').put({
-      key,
-      blob,
-      originalSizeBytes: blob?.size ?? 0,
-      storedAt:          new Date().toISOString(),
+    const req = tx('traces', 'readwrite').put({
+      ...trace,
+      updatedAt: new Date().toISOString(),
     })
     req.onsuccess = () => resolve()
     req.onerror   = (e) => reject(e.target.error)
   })
 }
 
-/** Retourne le Blob stocké, ou null si la clé n'existe pas. */
-export async function getTraceBlob(key) {
-  await openDB()
-  return new Promise((resolve) => {
-    const req = tx('traceBlobs').get(key)
-    req.onsuccess = () => resolve(req.result?.blob ?? null)
-    req.onerror   = () => resolve(null)
-  })
-}
-
-export async function deleteTraceBlob(key) {
+export async function deleteTrace(id) {
   await openDB()
   return new Promise((resolve, reject) => {
-    const req = tx('traceBlobs', 'readwrite').delete(key)
+    const req = tx('traces', 'readwrite').delete(id)
     req.onsuccess = () => resolve()
     req.onerror   = (e) => reject(e.target.error)
   })
 }
 
-/**
- * LOT 3A.1bis — Helper composite pour Le tiroir : crée une trace + stocke son blob
- * de manière coordonnée, avec rollback en cas d'échec.
- *
- * Séquence (3 étapes) :
- *   1) addTrace({ ...metadata, blobAvailable: false })
- *      → la trace existe mais s'auto-déclare incomplète tant que le blob n'est
- *        pas réellement stocké. Honnêteté maximale du flag dès le départ.
- *   2) putTraceBlob(trace.blobKey, blob)
- *      → stockage effectif du Blob dans le store traceBlobs.
- *   3) updateTrace(trace.id, { blobAvailable: true })
- *      → flip du flag SEULEMENT après succès de l'étape 2.
- *
- * Gestion d'erreur :
- *   - Échec étape 1 → throw propre, rien stocké.
- *   - Échec étape 2 ou 3 → rollback best-effort via deleteTrace(trace.id)
- *     (cascade trace + blob) puis rethrow de l'erreur originale.
- *   - Si le rollback échoue lui-même → swallow. La trace orpheline reste
- *     avec `blobAvailable: false` (cf. étape 1), donc honnête dans son état :
- *     détectable côté UI (vignette "image indisponible"), nettoyable par
- *     deleteTrace ultérieur ou GC différé (dette gcOrphanedBlobs).
- *
- * Atomicité produit :
- *   - La grille ne montre jamais une vignette comme "complète" sans blob :
- *     soit la trace n'existe pas (échec/rollback), soit elle est marquée
- *     `blobAvailable: false`, soit elle est complète avec blob et flag à true.
- *
- * @param {Object} params
- * @param {Object} [params.metadata={}] - champs traces (type, mimeType, width, height,
- *                                         sizeBytes, whyNow, status, …). Les champs
- *                                         id / blobKey / createdAt / updatedAt fournis
- *                                         ici sont écrasés par addTrace (cf. son contrat).
- *                                         `blobAvailable` fourni ici est aussi écrasé
- *                                         (forcé à false en étape 1 par ce helper).
- * @param {Blob}   params.blob          - blob compressé à stocker (obligatoire)
- * @returns {Promise<Object>} la trace complète avec blobAvailable: true
- *                            (reflète l'état final post-update)
- * @throws {Error} si blob manquant, ou si addTrace / putTraceBlob / updateTrace échouent
- */
-export async function createTraceWithBlob({ metadata = {}, blob } = {}) {
-  if (!blob) {
-    throw new Error('createTraceWithBlob: blob requis.')
-  }
-  // Étape 1 — créer la trace en marquant explicitement blobAvailable=false
-  //           tant que le blob n'est pas réellement stocké.
-  const trace = await addTrace({ ...metadata, blobAvailable: false })
-  try {
-    // Étape 2 — stocker le blob.
-    await putTraceBlob(trace.blobKey, blob)
-    // Étape 3 — flipper blobAvailable=true seulement après succès blob.
-    await updateTrace(trace.id, { blobAvailable: true })
-  } catch (err) {
-    // Rollback best-effort : deleteTrace cascade (trace + blob).
-    // Si le rollback échoue lui-même, on swallow : la trace orpheline restera
-    // avec blobAvailable=false (cf. étape 1), honnête dans son état.
-    try { await deleteTrace(trace.id) } catch { /* swallow : trace fantôme assumée */ }
-    throw err
-  }
-  // Retourne la trace avec blobAvailable patché à true pour refléter l'état final.
-  return { ...trace, blobAvailable: true }
+export async function loadTraceBlob(traceId) {
+  await openDB()
+  return new Promise((resolve) => {
+    const req = tx('traceBlobs').get(traceId)
+    req.onsuccess = () => resolve(req.result || null)
+    req.onerror   = () => resolve(null)
+  })
+}
+
+export async function saveTraceBlob(traceId, blob, mimeType) {
+  await openDB()
+  return new Promise((resolve, reject) => {
+    const req = tx('traceBlobs', 'readwrite').put({ traceId, blob, mimeType })
+    req.onsuccess = () => resolve()
+    req.onerror   = (e) => reject(e.target.error)
+  })
+}
+
+export async function deleteTraceBlob(traceId) {
+  await openDB()
+  return new Promise((resolve, reject) => {
+    const req = tx('traceBlobs', 'readwrite').delete(traceId)
+    req.onsuccess = () => resolve()
+    req.onerror   = (e) => reject(e.target.error)
+  })
 }
 
 // ─── Import snapshot (sync inter-appareils) ───────────────────────
@@ -546,8 +369,6 @@ export function isValidSnapshot(data) {
   if (!Array.isArray(data.vrac))                      return false
   // chat est optionnel pour rétrocompatibilité (anciens snapshots)
   if (data.chat != null && !Array.isArray(data.chat)) return false
-  // traces est optionnel — backward-compat v3 (LOT 1A)
-  if (data.traces != null && !Array.isArray(data.traces)) return false
   if (typeof data.kv !== 'object' || !data.kv)        return false
   // Guard syncedAt — doit être une date ISO 8601 parseable (rejette '' et les strings invalides)
   if (data.syncedAt != null && (!data.syncedAt || isNaN(Date.parse(data.syncedAt)))) return false
@@ -559,54 +380,14 @@ export function isValidSnapshot(data) {
 }
 
 /**
- * LOT 4F.1 — Convertit un export "ancien format" en snapshot moderne v3.
- * Détecte les exports minimaux antérieurs (sans `version`, avec `vracIdeas` ou `vrac`).
- * Retourne le snapshot moderne si conversion possible, sinon retourne l'input tel quel
- * (laisse isValidSnapshot rejeter si vraiment invalide).
- */
-function normalizeLegacyExport(data) {
-  if (!data || typeof data !== 'object') return data
-  // Déjà au format moderne (version présente)
-  if (typeof data.version === 'number') return data
-  // Détection legacy : chapters[] + (vracIdeas[] ou vrac[]) sans version
-  if (Array.isArray(data.chapters) && (Array.isArray(data.vracIdeas) || Array.isArray(data.vrac))) {
-    const vracSrc = Array.isArray(data.vracIdeas) ? data.vracIdeas : data.vrac
-    return {
-      version: 3,
-      syncedAt: data.exportedAt || new Date().toISOString(),
-      chapters: data.chapters,
-      vrac: (vracSrc || []).map(v => ({
-        id:        v.id        || `vrac_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-        text:      v.text      || '',
-        tag:       v.tag       || 'idée',
-        chapterId: v.chapterId ?? null,
-        used:      !!v.used,
-        createdAt: v.createdAt || new Date().toISOString(),
-      })),
-      chat: [],
-      kv: {
-        name: data.name || '',
-      },
-    }
-  }
-  return data
-}
-
-/**
  * Écrase les données locales avec un snapshot distant.
  * Retourne false si le snapshot est invalide — jamais de corruption silencieuse.
  * Les clés sensibles (apiKey, openAiKey) ne sont jamais remplacées.
  * NB : le store 'fragments' n'est pas inclus dans le snapshot pour l'instant
  * (sera ajouté dans une livraison ultérieure quand le format sera stabilisé).
- *
- * LOT 4F.1 — Tolère les anciens exports JSON via normalizeLegacyExport.
- * LOT 1A   — Si data.traces présent : clear store `traces` puis put chaque trace
- *            en réconciliant `blobAvailable` avec l'existence réelle du blob local.
- *            Le store `traceBlobs` n'est jamais touché (blobs locaux préservés).
  */
 export async function importSnapshot(snapshot) {
-  const data = normalizeLegacyExport(snapshot)
-  if (!isValidSnapshot(data)) {
+  if (!isValidSnapshot(snapshot)) {
     console.error('[Sync] Snapshot invalide — import annulé', snapshot)
     return false
   }
@@ -618,7 +399,7 @@ export async function importSnapshot(snapshot) {
     req.onsuccess = () => resolve()
     req.onerror   = (e) => reject(e.target.error)
   })
-  for (const ch of (data.chapters || [])) {
+  for (const ch of (snapshot.chapters || [])) {
     await saveChapter(ch)
   }
 
@@ -628,7 +409,7 @@ export async function importSnapshot(snapshot) {
     req.onsuccess = () => resolve()
     req.onerror   = (e) => reject(e.target.error)
   })
-  const kv = data.kv || {}
+  const kv = snapshot.kv || {}
   for (const [key, value] of Object.entries(kv)) {
     if (KV_KEYS_SYNC.includes(key) && value !== undefined) {
       await setKV(key, value)
@@ -636,7 +417,7 @@ export async function importSnapshot(snapshot) {
   }
 
   // ── Vrac items ───────────────────────────────────────────────
-  for (const idea of (data.vrac || [])) {
+  for (const idea of (snapshot.vrac || [])) {
     await new Promise((resolve, reject) => {
       const req = tx('vrac', 'readwrite').put(idea)
       req.onsuccess = () => resolve()
@@ -647,13 +428,13 @@ export async function importSnapshot(snapshot) {
   // ── Chat history (sync) ─────────────────────────────────────
   // Si le snapshot contient chat, on remplace l'historique local par le distant
   // (last-write-wins par snapshot, pas par message — simple et lisible)
-  if (Array.isArray(data.chat)) {
+  if (Array.isArray(snapshot.chat)) {
     await new Promise((resolve, reject) => {
       const req = tx('chat', 'readwrite').clear()
       req.onsuccess = () => resolve()
       req.onerror   = (e) => reject(e.target.error)
     })
-    for (const msg of data.chat.slice(-500)) {
+    for (const msg of snapshot.chat.slice(-500)) {
       await new Promise((resolve, reject) => {
         // On laisse IndexedDB générer l'id auto-incrémenté
         const { id, ...rest } = msg
@@ -664,31 +445,8 @@ export async function importSnapshot(snapshot) {
     }
   }
 
-  // ── Traces (LOT 1A — métadonnées seulement) ─────────────────
-  // Le store `traceBlobs` n'est jamais touché : les blobs locaux survivent.
-  // Pour chaque trace importée, blobAvailable est réconcilié avec la
-  // présence (ou non) du blob correspondant dans traceBlobs local.
-  if (Array.isArray(data.traces)) {
-    await new Promise((resolve, reject) => {
-      const req = tx('traces', 'readwrite').clear()
-      req.onsuccess = () => resolve()
-      req.onerror   = (e) => reject(e.target.error)
-    })
-    for (const tr of data.traces) {
-      const localBlob = tr?.blobKey ? await getTraceBlob(tr.blobKey) : null
-      await new Promise((resolve, reject) => {
-        const req = tx('traces', 'readwrite').put({
-          ...tr,
-          blobAvailable: localBlob !== null,
-        })
-        req.onsuccess = () => resolve()
-        req.onerror   = (e) => reject(e.target.error)
-      })
-    }
-  }
-
   // Marquer le moment du dernier import
-  await setKV('lastSyncedAt', data.syncedAt || new Date().toISOString())
+  await setKV('lastSyncedAt', snapshot.syncedAt || new Date().toISOString())
   return true
 }
 
@@ -709,60 +467,6 @@ export async function exportAllData() {
     chat, leaMemory,
     exportedAt: new Date().toISOString(),
     version: 3,
-  }
-}
-
-// ─── LOT 4F.1 — Sauvegarde locale complète au format importable ───
-/**
- * Construit un snapshot complet de l'app au MÊME format que `importSnapshot` attend.
- * = ce qu'on exporte peut être réimporté tel quel, sans conversion.
- *
- * Inclut : chapitres, vrac, chat (500 derniers), traces (métadonnées allowlistées), KV non-sensible.
- * Exclut : apiKey, openAiKey (sécurité), traceBlobs (poids — cf le-tiroir-v1 §9),
- *          tout champ trace hors `TRACE_BACKUP_FIELDS`.
- *
- * LOT 1A — version 3→4 ; `traces` sérialisé via pickTraceMetadata (mapping explicite).
- */
-export async function buildLocalBackup() {
-  const [
-    chapters, vrac, chat, traces,
-    name, leaVoice, streak, sessions, lastSession, moodToday, moodValue,
-    profile, leaMemory, lastSyncedAt,
-  ] = await Promise.all([
-    getChapters(),
-    getVrac(),
-    getChatHistoryRecent(500),
-    getTraces(),
-    getKV('name',             ''),
-    getKV('leaVoice',         'nova'),
-    getKV('streak',           0),
-    getKV('sessions',         0),
-    getKV('lastSession',      ''),
-    getKV('moodToday',        ''),
-    getKV('moodValue',        ''),
-    getKV('caroline_profile', null),
-    getKV('lea_memory',       null),
-    getKV('lastSyncedAt',     null),
-  ])
-  return {
-    version:  4,
-    syncedAt: new Date().toISOString(),
-    chapters,
-    vrac,
-    chat,
-    traces:   traces.map(pickTraceMetadata),
-    kv: {
-      name,
-      leaVoice,
-      streak,
-      sessions,
-      lastSession,
-      moodToday,
-      moodValue,
-      caroline_profile: profile,
-      lea_memory:       leaMemory,
-      lastSyncedAt,
-    },
   }
 }
 
