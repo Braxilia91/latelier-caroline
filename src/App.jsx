@@ -5,6 +5,7 @@ import { useCoach } from './hooks/useCoach'
 import { useMediaQuery } from './hooks/useMediaQuery'
 import { ToastProvider, useToast } from './components/ui/Toast'
 import { buildWelcomeMessage } from './lib/prompts'
+import { putTraceBlob } from './lib/db'
 
 // ── Imports critiques (chemin de rendu initial) ──────────────────
 import Onboarding from './components/onboarding/Onboarding'
@@ -26,6 +27,9 @@ const PackOpeningModal= lazy(() => import('./components/modals/PackOpeningModal'
 const LeaMemoryModal  = lazy(() => import('./components/modals/LeaMemoryModal'))
 // T1 — Le Tiroir : socle inert (grille vide), AddTraceFlow ajouté en T3
 const TiroirModal     = lazy(() => import('./components/modals/TiroirModal'))
+// T2 — Composants tiroir (fichiers déjà présents dans le repo)
+const AddTraceFlow    = lazy(() => import('./components/modals/AddTraceFlow'))
+const TraceDetailModal= lazy(() => import('./components/modals/TraceDetailModal'))
 
 function AppSkeleton() {
   const pulse = {
@@ -80,6 +84,8 @@ function AppInner() {
   const [isOnline, setIsOnline] = useState(navigator.onLine)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [coachOpen, setCoachOpen] = useState(false)
+  // T2 — trace sélectionnée pour TraceDetailModal
+  const [selectedTrace, setSelectedTrace] = useState(null)
 
   const isMobile = useMediaQuery('(max-width: 767px)')
 
@@ -164,7 +170,6 @@ function AppInner() {
   }, [db.editorTheme])
 
   // LOT 3.5 — Applique l'échelle du chat Léa sur la racine HTML
-  // Les éléments du coach panel utilisent calc(... * var(--chat-scale))
   useEffect(() => {
     const v = (typeof db.chatScale === 'number' && db.chatScale > 0) ? db.chatScale : 1
     document.documentElement.style.setProperty('--chat-scale', String(v))
@@ -377,7 +382,35 @@ function AppInner() {
           />
         )}
         {modal === 'tiroir' && (
-          <TiroirModal onClose={() => setModal(null)} />
+          <TiroirModal
+            onClose={() => setModal(null)}
+            traces={db.traces}
+            onAddTrace={() => setModal('addTrace')}
+            onSelectTrace={(t) => { setSelectedTrace(t); setModal('traceDetail') }}
+          />
+        )}
+        {modal === 'addTrace' && (
+          <AddTraceFlow
+            onClose={() => setModal('tiroir')}
+            onCreateTrace={async ({ metadata, blob }) => {
+              const trace = await db.createTrace(metadata)
+              await putTraceBlob(trace.id, blob, metadata.mimeType)
+              return trace
+            }}
+          />
+        )}
+        {modal === 'traceDetail' && selectedTrace && (
+          <TraceDetailModal
+            trace={selectedTrace}
+            onClose={() => { setModal('tiroir'); setSelectedTrace(null) }}
+            onEdit={() => {}}
+            onDelete={async (t) => {
+              await db.removeTrace(t.id)
+              setSelectedTrace(null)
+              setModal('tiroir')
+            }}
+            isMobile={isMobile}
+          />
         )}
         {showPack && (
           <PackOpeningModal
