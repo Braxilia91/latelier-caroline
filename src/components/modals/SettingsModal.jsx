@@ -90,24 +90,24 @@ export default function SettingsModal({
   // LOT 4E.2 — Mise en page desktop (live preview)
   const [layoutScale,  setLayoutScaleLocal]  = useState(typeof state.layoutScale === 'number' && state.layoutScale > 0 ? state.layoutScale : 1)
   const [sidebarWidth, setSidebarWidthLocal] = useState(typeof state.sidebarWidth === 'number' && state.sidebarWidth >= 160 ? state.sidebarWidth : 220)
-  // LOT 4E.2 bis — Largeur du panneau Léa (live preview, desktop uniquement)
+  // LOT 4E.2 bis — Largeur du panneau Lea (live preview, desktop uniquement)
   const [coachWidth,   setCoachWidthLocal]   = useState(typeof state.coachWidth === 'number' && state.coachWidth >= 220 ? state.coachWidth : 270)
 
   const [syncTok, setSyncTok] = useState(state.syncToken || '')
 
-  // LOT 4F.1.4 — Visibilité afficher/masquer pour les deux champs sensibles
+  // LOT 4F.1.4 — Visibilite afficher/masquer pour les deux champs sensibles
   const [showApiKey, setShowApiKey]     = useState(false)
   const [showSyncTok, setShowSyncTok]   = useState(false)
   const [copiedSync, setCopiedSync]     = useState(false)
 
-  // LOT 4F.1.5 — Verrou réentrance pendant save+sync
+  // LOT 4F.1.5 — Verrou reentrance pendant save+sync
   const [syncBusy, setSyncBusy] = useState(false)
 
-  // LOT 4F.2.1 — État Google Drive
+  // LOT 4F.2.1 — Etat Google Drive
   const [googleUser, setGoogleUser] = useState(() => googleDrive.getCurrentUser())
   const [googleBusy, setGoogleBusy] = useState(false)
 
-  // LOT 4F.2.2/4F.2.3 — Verrou réentrance Drive (upload + download).
+  // LOT 4F.2.2/4F.2.3 — Verrou reentrance Drive (upload + download).
   const [driveBusy, setDriveBusy] = useState(false)
 
   const [confirmReset, setConfirmReset] = useState(false)
@@ -116,7 +116,7 @@ export default function SettingsModal({
   const fileInputRef = useRef(null)
   const [importing, setImporting] = useState(false)
 
-  // LOT 4F.2.5 — Refs pour cleanup des timers à l'unmount (évite setState sur composant démonté)
+  // LOT 4F.2.5 — Refs pour cleanup des timers a l'unmount (evite setState sur composant demonte)
   const confirmResetTimerRef = useRef(null)
   const copiedSyncTimerRef   = useRef(null)
   const exportDoneTimerRef   = useRef(null)
@@ -124,13 +124,13 @@ export default function SettingsModal({
   const tokenChanged = state.syncToken && syncTok && syncTok !== state.syncToken
   const tokenValid = syncTok.length === 0 || syncTok.length >= 20
 
-  // LOT 4F.1.6 (2/2) — Reset l'état sync au montage de la modale pour éviter
-  // d'afficher un vieux message d'erreur/succès laissé d'une session précédente.
+  // LOT 4F.1.6 (2/2) — Reset l'etat sync au montage de la modale pour eviter
+  // d'afficher un vieux message d'erreur/succes laisse d'une session precedente.
   useEffect(() => {
     state.resetSyncStatus?.()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // LOT 4F.2.5 — Cleanup des timers à l'unmount pour éviter setState sur composant démonté.
+  // LOT 4F.2.5 — Cleanup des timers a l'unmount pour eviter setState sur composant demonte.
   useEffect(() => {
     return () => {
       clearTimeout(confirmResetTimerRef.current)
@@ -139,7 +139,7 @@ export default function SettingsModal({
     }
   }, [])
 
-  // LOT 4E.2 — Handlers live : applique le CSS var immédiatement sans attendre Save
+  // LOT 4E.2 — Handlers live : applique le CSS var immediatement sans attendre Save
   const handleLayoutScaleChange = (v) => {
     setLayoutScaleLocal(v)
     document.documentElement.style.setProperty('--layout-scale', String(v))
@@ -148,21 +148,21 @@ export default function SettingsModal({
     setSidebarWidthLocal(v)
     document.documentElement.style.setProperty('--sidebar-w', v + 'px')
   }
-  // LOT 4E.2 bis — Live preview de la largeur du panneau Léa
+  // LOT 4E.2 bis — Live preview de la largeur du panneau Lea
   const handleCoachWidthChange = (v) => {
     setCoachWidthLocal(v)
     document.documentElement.style.setProperty('--coach-w', v + 'px')
   }
 
-  // LOT 4F.2.4 — Formate l'âge de la dernière sauvegarde Drive en texte FR.
+  // LOT 4F.2.4 — Formate l'age de la derniere sauvegarde Drive en texte FR.
   const formatDriveSyncAge = (ts) => {
-    if (!ts) return 'Aucune sauvegarde Drive enregistrée pour l\'instant'
+    if (!ts) return 'Aucune sauvegarde Drive enregistree pour l\'instant'
     const ageMin = Math.floor((Date.now() - ts) / 60000)
-    if (ageMin < 1) return 'Dernière sauvegarde Drive : à l\'instant'
-    if (ageMin < 60) return `Dernière sauvegarde Drive : il y a ${ageMin} min`
-    if (ageMin < 60 * 24) return `Dernière sauvegarde Drive : il y a ${Math.floor(ageMin / 60)} h`
+    if (ageMin < 1) return 'Derniere sauvegarde Drive : a l\'instant'
+    if (ageMin < 60) return `Derniere sauvegarde Drive : il y a ${ageMin} min`
+    if (ageMin < 60 * 24) return `Derniere sauvegarde Drive : il y a ${Math.floor(ageMin / 60)} h`
     const d = Math.floor(ageMin / (60 * 24))
-    return `Dernière sauvegarde Drive : il y a ${d} jour${d > 1 ? 's' : ''}`
+    return `Derniere sauvegarde Drive : il y a ${d} jour${d > 1 ? 's' : ''}`
   }
 
   const handleSave = async (closeAfter = true) => {
@@ -175,9 +175,9 @@ export default function SettingsModal({
       editorFont, editorTheme, editorWidth,
       chatScale,
       uiScale,
-      layoutScale,   // LOT 4E.2
-      sidebarWidth,  // LOT 4E.2
-      coachWidth,    // LOT 4E.2 bis
+      layoutScale,
+      sidebarWidth,
+      coachWidth,
     })
     if (closeAfter) onClose()
   }
@@ -206,27 +206,23 @@ export default function SettingsModal({
       const user = await googleDrive.signIn()
       setGoogleUser(googleDrive.getCurrentUser())
       toast(
-        user.email ? `Connecté à ${user.email} ✓` : 'Connecté à Google Drive ✓',
+        user.email ? `Connecte a ${user.email} OK` : 'Connecte a Google Drive OK',
         'success'
       )
     } catch (err) {
-      toast(err?.message || 'Échec de la connexion Google Drive', 'error')
+      toast(err?.message || 'Echec de la connexion Google Drive', 'error')
     } finally {
       setGoogleBusy(false)
     }
   }
 
-  // LOT 4F.2.2 — Sauvegarde manuelle vers Drive.
   const handleUploadDrive = async () => {
     if (driveBusy) return
     if (!googleUser) return
-    // Refresh opportuniste : si le token a expiré pendant que la modale
-    // était ouverte, getCurrentUser() retourne null et on bascule l'UI
-    // proprement sans tenter l'appel API.
     const fresh = googleDrive.getCurrentUser()
     if (!fresh) {
       setGoogleUser(null)
-      toast('Session Google Drive expirée. Reconnecte-toi.', 'info')
+      toast('Session Google Drive expiree. Reconnecte-toi.', 'info')
       return
     }
     setDriveBusy(true)
@@ -235,8 +231,6 @@ export default function SettingsModal({
       const data = await buildLocalBackup()
       const jsonString = JSON.stringify(data, null, 2)
       const result = await googleDrive.uploadSnapshot(jsonString)
-      // LOT 4F.2.4 — Maj lastDriveSyncedAt après upload manuel réussi
-      // (cohérent avec auto-sync : tout upload réussi remet le compteur à 0).
       if (result.ok && state.setLastDriveSyncedAt) {
         await state.setLastDriveSyncedAt(Date.now())
       }
@@ -248,27 +242,25 @@ export default function SettingsModal({
     }
   }
 
-  // LOT 4F.2.3 — Restauration manuelle depuis Drive.
   const handleRestoreDrive = async () => {
     if (driveBusy || googleBusy) return
     if (!googleUser) return
-    // Refresh opportuniste (idem handleUploadDrive)
     const fresh = googleDrive.getCurrentUser()
     if (!fresh) {
       setGoogleUser(null)
-      toast('Session Google Drive expirée. Reconnecte-toi.', 'info')
+      toast('Session Google Drive expiree. Reconnecte-toi.', 'info')
       return
     }
 
     const confirmed = window.confirm(
-      '⚠️ Attention\n\n' +
-      'Cela va remplacer TES DONNÉES ACTUELLES par celles de la sauvegarde Drive :\n' +
-      '• Chapitres\n' +
-      '• Idées vrac\n' +
-      '• Historique du chat\n' +
-      '• Profil et mémoire de Léa\n\n' +
-      'Cette action est irréversible.\n\n' +
-      'Astuce : tu peux faire "Exporter une sauvegarde" en bas avant pour avoir un filet de sécurité local.\n\n' +
+      'Attention\n\n' +
+      'Cela va remplacer TES DONNEES ACTUELLES par celles de la sauvegarde Drive :\n' +
+      '- Chapitres\n' +
+      '- Idees vrac\n' +
+      '- Historique du chat\n' +
+      '- Profil et memoire de Lea\n\n' +
+      'Cette action est irreversible.\n\n' +
+      'Astuce : tu peux faire "Exporter une sauvegarde" en bas avant pour avoir un filet de securite local.\n\n' +
       'Continuer ?'
     )
     if (!confirmed) return
@@ -277,7 +269,7 @@ export default function SettingsModal({
     try {
       const result = await googleDrive.downloadSnapshot()
       if (!result.ok) {
-        const tone = result.message === 'Aucune sauvegarde Drive trouvée' ? 'info' : 'error'
+        const tone = result.message === 'Aucune sauvegarde Drive trouvee' ? 'info' : 'error'
         toast(result.message, tone)
         return
       }
@@ -285,14 +277,13 @@ export default function SettingsModal({
         toast('Import indisponible', 'error')
         return
       }
-      // Feedback intermédiaire avant l'import (1-3 s IndexedDB)
       toast(result.message, 'info')
       const importResult = await onImport(result.file)
       if (importResult?.ok) {
-        alert('✓ Sauvegarde Drive restaurée avec succès.\n\nL\'application va redémarrer pour rafraîchir.')
+        alert('OK Sauvegarde Drive restauree avec succes.\n\nL\'application va redemarrer pour rafraichir.')
         window.location.reload()
       } else {
-        toast(importResult?.message || 'Échec de la restauration', 'error')
+        toast(importResult?.message || 'Echec de la restauration', 'error')
       }
     } catch (err) {
       toast(err?.message || 'Erreur lors de la restauration Drive', 'error')
@@ -307,9 +298,9 @@ export default function SettingsModal({
     try {
       await googleDrive.signOut()
       setGoogleUser(null)
-      toast('Déconnecté de Google Drive', 'info')
+      toast('Deconnecte de Google Drive', 'info')
     } catch {
-      toast('Déconnexion partielle — état local nettoyé', 'info')
+      toast('Deconnexion partielle — etat local nettoye', 'info')
       setGoogleUser(null)
     } finally {
       setGoogleBusy(false)
@@ -333,7 +324,7 @@ export default function SettingsModal({
       setCopiedSync(true)
       copiedSyncTimerRef.current = setTimeout(() => setCopiedSync(false), 1500)
     } catch {
-      alert('Impossible de copier automatiquement. Sélectionne et copie manuellement le mot secret.')
+      alert('Impossible de copier automatiquement. Selectionne et copie manuellement le mot secret.')
     }
   }
 
@@ -359,7 +350,7 @@ export default function SettingsModal({
       setExportDone(true)
       exportDoneTimerRef.current = setTimeout(() => setExportDone(false), 3000)
     } catch (err) {
-      alert('Échec de l\'export : ' + (err.message || 'erreur inconnue'))
+      alert('Echec de l\'export : ' + (err.message || 'erreur inconnue'))
     }
   }
 
@@ -373,13 +364,13 @@ export default function SettingsModal({
     if (!file) return
 
     const confirmed = window.confirm(
-      '⚠️ Attention\n\n' +
-      'Cela va remplacer TES DONNÉES ACTUELLES par celles du fichier :\n' +
-      '• Chapitres\n' +
-      '• Idées vrac\n' +
-      '• Historique du chat\n' +
-      '• Profil et mémoire de Léa\n\n' +
-      'Cette action est irréversible. Continuer ?'
+      'Attention\n\n' +
+      'Cela va remplacer TES DONNEES ACTUELLES par celles du fichier :\n' +
+      '- Chapitres\n' +
+      '- Idees vrac\n' +
+      '- Historique du chat\n' +
+      '- Profil et memoire de Lea\n\n' +
+      'Cette action est irreversible. Continuer ?'
     )
     if (!confirmed) return
 
@@ -387,10 +378,10 @@ export default function SettingsModal({
     try {
       const result = await onImport?.(file)
       if (result?.ok) {
-        alert('✓ Sauvegarde restaurée avec succès.\n\nL\'application va redémarrer pour rafraîchir.')
+        alert('OK Sauvegarde restauree avec succes.\n\nL\'application va redemarrer pour rafraichir.')
         window.location.reload()
       } else {
-        alert('✗ Échec de l\'import : ' + (result?.message || 'erreur inconnue'))
+        alert('Echec de l\'import : ' + (result?.message || 'erreur inconnue'))
       }
     } finally {
       setImporting(false)
@@ -400,25 +391,25 @@ export default function SettingsModal({
   return (
     <Modal
       onClose={onClose}
-      ariaLabel="Réglages"
+      ariaLabel="Reglages"
       overlayStyle={S.overlay}
       modalStyle={S.modal}
     >
         <div style={S.hdr}>
-          <span style={S.hdrTitle}>Réglages</span>
-          <button type="button" style={S.closeBtn} onClick={onClose} aria-label="Fermer les réglages"><X size={16} /></button>
+          <span style={S.hdrTitle}>Reglages</span>
+          <button type="button" style={S.closeBtn} onClick={onClose} aria-label="Fermer les reglages"><X size={16} /></button>
         </div>
 
         <div style={S.body}>
 
-          <Section title="Profil" icon={<span style={S.secIcon}>👤</span>}>
+          <Section title="Profil" icon={<span style={S.secIcon}>P</span>}>
             <div style={S.fg}>
-              <label htmlFor="settings-name" style={S.label}>Ton prénom</label>
+              <label htmlFor="settings-name" style={S.label}>Ton prenom</label>
               <input id="settings-name" style={S.input} value={sName} onChange={e => setSName(e.target.value)} placeholder="Caroline" />
             </div>
 
             <div style={S.fg}>
-              <label htmlFor="settings-api-key" style={S.label}>Mot de passe Léa <span style={S.badge}>active le coach</span></label>
+              <label htmlFor="settings-api-key" style={S.label}>Mot de passe Lea <span style={S.badge}>active le coach</span></label>
               <div style={S.inputWrap}>
                 <input
                   id="settings-api-key"
@@ -426,8 +417,8 @@ export default function SettingsModal({
                   type={showApiKey ? 'text' : 'password'}
                   value={apiKey}
                   onChange={e => setApiKey(e.target.value)}
-                  placeholder="Le mot que Mourad t'a donné…"
-                  aria-label="Mot de passe Léa"
+                  placeholder="Le mot que Mourad t'a donne…"
+                  aria-label="Mot de passe Lea"
                 />
                 <button
                   type="button"
@@ -439,12 +430,12 @@ export default function SettingsModal({
                   {showApiKey ? <EyeOff size={16} /> : <Eye size={16} />}
                 </button>
               </div>
-              <p style={S.hint}>🔒 Stocké sur cet appareil uniquement. Ce mot de passe active les réponses de Léa et sa voix via un serveur sécurisé — les vraies clés API ne transitent jamais sur ton appareil.</p>
+              <p style={S.hint}>Stocke sur cet appareil uniquement. Ce mot de passe active les reponses de Lea et sa voix via un serveur securise — les vraies cles API ne transitent jamais sur ton appareil.</p>
             </div>
 
             {apiKey && (
               <div style={S.fg}>
-                <label htmlFor="settings-voice" style={S.label}>Voix de Léa</label>
+                <label htmlFor="settings-voice" style={S.label}>Voix de Lea</label>
                 <select id="settings-voice" style={S.select} value={voice} onChange={e => setVoice(e.target.value)}>
                   {VOICES.map(v => <option key={v.value} value={v.value}>{v.label}</option>)}
                 </select>
@@ -452,40 +443,39 @@ export default function SettingsModal({
             )}
           </Section>
 
-          <Section title="Écriture" icon={<span style={S.secIcon}>✍️</span>}>
+          <Section title="Ecriture" icon={<span style={S.secIcon}>E</span>}>
             <div style={S.row}>
               <div style={S.fg}>
                 <label style={S.label}>Taille du texte</label>
                 <ToggleGroup options={FONT_SIZES} value={editorFont} onChange={setEditorFont} />
               </div>
               <div style={S.fg}>
-                <label style={S.label}>Largeur de l'éditeur</label>
+                <label style={S.label}>Largeur de l'editeur</label>
                 <ToggleGroup options={WIDTHS} value={editorWidth} onChange={setEditorWidth} />
               </div>
             </div>
             <div style={S.fg}>
-              <label style={S.label}>Thème visuel</label>
+              <label style={S.label}>Theme visuel</label>
               <ToggleGroup options={THEMES} value={editorTheme} onChange={setEditorTheme} />
             </div>
             <div style={S.fg}>
-              <label style={S.label}>Taille du chat avec Léa</label>
+              <label style={S.label}>Taille du chat avec Lea</label>
               <ToggleGroup options={CHAT_SCALES} value={chatScale} onChange={setChatScale} />
             </div>
             <div style={S.fg}>
-              <label style={S.label}>Échelle de l'interface</label>
+              <label style={S.label}>Echelle de l'interface</label>
               <ToggleGroup options={UI_SCALES} value={uiScale} onChange={setUiScale} />
             </div>
           </Section>
 
-          {/* LOT 4E.2 + 4E.2 bis — Mise en page desktop */}
-          <Section title="Mise en page" icon={<span style={S.secIcon}>🖥️</span>}>
+          <Section title="Mise en page" icon={<span style={S.secIcon}>L</span>}>
             {isMobile ? (
-              <p style={S.hint}>Ces réglages sont disponibles uniquement sur grand écran.</p>
+              <p style={S.hint}>Ces reglages sont disponibles uniquement sur grand ecran.</p>
             ) : (
               <>
                 <div style={S.fg}>
                   <label style={S.label}>
-                    Échelle des éléments de navigation
+                    Echelle des elements de navigation
                     <span style={S.badgeOpt}> {Math.round(layoutScale * 100)} %</span>
                   </label>
                   <input
@@ -494,7 +484,7 @@ export default function SettingsModal({
                     value={layoutScale}
                     onChange={e => handleLayoutScaleChange(parseFloat(e.target.value))}
                     style={S.rangeSlider}
-                    aria-label="Échelle des éléments de navigation"
+                    aria-label="Echelle des elements de navigation"
                   />
                   <div style={S.rangeHints}>
                     <span>90 %</span><span>Normal (100 %)</span><span>150 %</span>
@@ -517,10 +507,9 @@ export default function SettingsModal({
                     <span>160 px</span><span>Normal (220 px)</span><span>480 px</span>
                   </div>
                 </div>
-                {/* LOT 4E.2 bis — Largeur du panneau Léa */}
                 <div style={S.fg}>
                   <label style={S.label}>
-                    Largeur panneau Léa
+                    Largeur panneau Lea
                     <span style={S.badgeOpt}> {coachWidth} px</span>
                   </label>
                   <input
@@ -529,7 +518,7 @@ export default function SettingsModal({
                     value={coachWidth}
                     onChange={e => handleCoachWidthChange(parseInt(e.target.value, 10))}
                     style={S.rangeSlider}
-                    aria-label="Largeur du panneau Léa"
+                    aria-label="Largeur du panneau Lea"
                   />
                   <div style={S.rangeHints}>
                     <span>220 px</span><span>Normal (270 px)</span><span>480 px</span>
@@ -541,9 +530,9 @@ export default function SettingsModal({
 
           <Section title="Sauvegarde en ligne" icon={<Wifi size={13} color="#8B6445" />}>
             <p style={S.syncTxt}>
-              Tes données sont enregistrées dans le cloud et restaurables si tu changes d'appareil ou
-              si ton navigateur est nettoyé. Choisis un mot secret <strong>(20+ caractères)</strong> —
-              le même sur tous tes appareils. Ne le partage pas.
+              Tes donnees sont enregistrees dans le cloud et restaurables si tu changes d'appareil ou
+              si ton navigateur est nettoye. Choisis un mot secret <strong>(20+ caracteres)</strong> —
+              le meme sur tous tes appareils. Ne le partage pas.
             </p>
             <div style={S.inputWrap}>
               <input
@@ -555,7 +544,7 @@ export default function SettingsModal({
                 type={showSyncTok ? 'text' : 'password'}
                 value={syncTok}
                 onChange={e => setSyncTok(e.target.value)}
-                placeholder="Mon-mot-secret-très-long-2024"
+                placeholder="Mon-mot-secret-tres-long-2024"
                 aria-label="Mot secret de sauvegarde"
               />
               <button
@@ -577,23 +566,23 @@ export default function SettingsModal({
                 }}
                 onClick={handleCopySync}
                 disabled={!syncTok}
-                aria-label={copiedSync ? 'Mot secret copié' : 'Copier le mot secret'}
-                title={copiedSync ? 'Copié ✓' : 'Copier'}
+                aria-label={copiedSync ? 'Mot secret copie' : 'Copier le mot secret'}
+                title={copiedSync ? 'Copie' : 'Copier'}
               >
                 {copiedSync ? <Check size={16} /> : <Copy size={16} />}
               </button>
             </div>
             {syncTok.length > 0 && syncTok.length < 20 && (
-              <p style={S.errMsg}>⚠ Minimum 20 caractères ({syncTok.length}/20)</p>
+              <p style={S.errMsg}>Minimum 20 caracteres ({syncTok.length}/20)</p>
             )}
             {tokenChanged && (
               <div style={S.warnBox}>
-                ⚠️ Changer le mot secret déconnecte la sauvegarde existante. Tes données locales sont conservées,
-                mais la sauvegarde en ligne repartira de zéro avec le nouveau mot secret.
+                Changer le mot secret deconnecte la sauvegarde existante. Tes donnees locales sont conservees,
+                mais la sauvegarde en ligne repartira de zero avec le nouveau mot secret.
               </div>
             )}
             {state.syncStatus === 'ok' && state.lastSyncedAt && (
-              <p style={S.okMsg}>✓ Dernière sauvegarde : {new Date(state.lastSyncedAt).toLocaleString('fr-FR')}</p>
+              <p style={S.okMsg}>Derniere sauvegarde : {new Date(state.lastSyncedAt).toLocaleString('fr-FR')}</p>
             )}
             <button
               type="button"
@@ -606,20 +595,18 @@ export default function SettingsModal({
             </button>
           </Section>
 
-          {/* LOT 4F.2.1/4F.2.2/4F.2.3 — Section Google Drive : auth + upload + restore */}
           <Section title="Sauvegarde Google Drive" icon={<HardDrive size={13} color="#8B6445" />}>
             <p style={S.syncTxt}>
-              Sauvegarde durable de tes données dans ton Google Drive (dossier invisible,
-              ~50 KB). Complémentaire à la sauvegarde en ligne ci-dessus : sert de filet
-              de sécurité si tu perds tes données locales ou changes d'appareil.
+              Sauvegarde durable de tes donnees dans ton Google Drive (dossier invisible,
+              ~50 KB). Complementaire a la sauvegarde en ligne ci-dessus : sert de filet
+              de securite si tu perds tes donnees locales ou changes d'appareil.
             </p>
             {googleUser ? (
               <>
-                <p style={S.okMsg}>✓ Connecté à : {googleUser.email || 'Google Drive'}</p>
-                {/* LOT 4F.2.4 — Indicateur dernière sauvegarde Drive + erreur auto-sync */}
+                <p style={S.okMsg}>Connecte a : {googleUser.email || 'Google Drive'}</p>
                 <p style={S.hint}>{formatDriveSyncAge(state.lastDriveSyncedAt)}</p>
                 {state.lastDriveError && (
-                  <p style={S.driveWarnMsg}>⚠ Erreur sauvegarde auto Drive : {state.lastDriveError}</p>
+                  <p style={S.driveWarnMsg}>Erreur sauvegarde auto Drive : {state.lastDriveError}</p>
                 )}
                 <button
                   type="button"
@@ -628,7 +615,7 @@ export default function SettingsModal({
                   disabled={driveBusy || googleBusy}
                 >
                   <Upload size={13} />
-                  {driveBusy ? 'Opération Drive en cours…' : 'Sauvegarder sur Drive maintenant'}
+                  {driveBusy ? 'Operation Drive en cours…' : 'Sauvegarder sur Drive maintenant'}
                 </button>
                 <button
                   type="button"
@@ -637,7 +624,7 @@ export default function SettingsModal({
                   disabled={driveBusy || googleBusy}
                 >
                   <Download size={13} />
-                  {driveBusy ? 'Opération Drive en cours…' : 'Restaurer depuis Drive'}
+                  {driveBusy ? 'Operation Drive en cours…' : 'Restaurer depuis Drive'}
                 </button>
                 <button
                   type="button"
@@ -645,7 +632,7 @@ export default function SettingsModal({
                   onClick={handleGoogleSignOut}
                   disabled={googleBusy || driveBusy}
                 >
-                  {googleBusy ? 'Déconnexion…' : 'Déconnecter'}
+                  {googleBusy ? 'Deconnexion…' : 'Deconnecter'}
                 </button>
               </>
             ) : (
@@ -660,16 +647,16 @@ export default function SettingsModal({
               </button>
             )}
             <p style={{ ...S.hint, marginTop: 8 }}>
-              🔒 La connexion reste active jusqu'à la fermeture de l'app. Aucun jeton n'est stocké.
+              La connexion reste active jusqu'a la fermeture de l'app. Aucun jeton n'est stocke.
             </p>
           </Section>
 
-          <Section title="Mémoire de Léa" icon={<span style={S.secIcon}>🧠</span>}>
+          <Section title="Memoire de Lea" icon={<span style={S.secIcon}>M</span>}>
             <div style={S.actionRow}>
               <div>
-                <div style={S.actionTitle}>Ce que Léa se rappelle</div>
+                <div style={S.actionTitle}>Ce que Lea se rappelle</div>
                 <div style={S.actionDesc}>
-                  Voir, supprimer ou effacer les souvenirs que Léa retient de vos échanges.
+                  Voir, supprimer ou effacer les souvenirs que Lea retient de vos echanges.
                 </div>
               </div>
               <button
@@ -686,14 +673,14 @@ export default function SettingsModal({
             </div>
           </Section>
 
-          <Section title="Sécurité & données" icon={<Lock size={13} color="#8B6445" />}>
+          <Section title="Securite et donnees" icon={<Lock size={13} color="#8B6445" />}>
 
             <div style={S.actionRow}>
               <div>
                 <div style={S.actionTitle}>Importer une sauvegarde</div>
                 <div style={S.actionDesc}>
-                  Restaure tes données depuis un fichier JSON exporté précédemment.
-                  Remplace les données actuelles.
+                  Restaure tes donnees depuis un fichier JSON exporte precedemment.
+                  Remplace les donnees actuelles.
                 </div>
               </div>
               <button
@@ -719,12 +706,12 @@ export default function SettingsModal({
               <div>
                 <div style={S.actionTitle}>Exporter une sauvegarde</div>
                 <div style={S.actionDesc}>
-                  Télécharge tes chapitres, idées, chat et profil en JSON horodaté.
+                  Telecharge tes chapitres, idees, chat et profil en JSON horodate.
                 </div>
               </div>
               <button type="button" style={{ ...S.actionBtn, ...(exportDone ? S.actionBtnOk : {}) }} onClick={handleExport}>
                 <Download size={13} />
-                {exportDone ? 'Téléchargé ✓' : 'Exporter'}
+                {exportDone ? 'Telecharge' : 'Exporter'}
               </button>
             </div>
 
@@ -734,10 +721,10 @@ export default function SettingsModal({
                 <span style={S.dangerTitle}>Zone dangereuse</span>
               </div>
               <p style={S.dangerTxt}>
-                Supprimer toutes les données efface définitivement tous tes chapitres et paramètres.
+                Supprimer toutes les donnees efface definitivement tous tes chapitres et parametres.
               </p>
               <button type="button" style={S.dangerBtn} onClick={handleReset}>
-                {confirmReset ? '⚠️ Confirmer — effacer tout ?' : 'Supprimer toutes mes données'}
+                {confirmReset ? 'Confirmer — effacer tout ?' : 'Supprimer toutes mes donnees'}
               </button>
             </div>
           </Section>
@@ -753,6 +740,7 @@ export default function SettingsModal({
     </Modal>
   )
 }
+
 const S = {
   overlay: { position: 'fixed', inset: 0, background: 'rgba(42,26,14,.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 },
   modal: { background: '#FFFEFB', borderRadius: 18, width: '100%', maxWidth: 560, maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 24px 60px rgba(42,26,14,.25)', overflow: 'hidden' },
@@ -771,14 +759,7 @@ const S = {
   badgeOpt: { fontSize: '.7rem', fontWeight: 400, color: '#9C8878', marginLeft: 4 },
   input: { width: '100%', boxSizing: 'border-box', padding: '9px 12px', border: '1.5px solid #DDD5C8', borderRadius: 8, fontFamily: "'Nunito', sans-serif", fontSize: '.85rem', background: '#FFFEFB', color: '#2A1A0E', outline: 'none', caretColor: '#8B6445' },
   inputWrap: { position: 'relative', width: '100%' },
-  iconBtn: {
-    position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)',
-    width: 32, height: 32, padding: 0,
-    background: 'transparent', border: 'none', borderRadius: 6,
-    color: '#9C8878', cursor: 'pointer',
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    transition: 'color .15s, background .15s',
-  },
+  iconBtn: { position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', width: 32, height: 32, padding: 0, background: 'transparent', border: 'none', borderRadius: 6, color: '#9C8878', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'color .15s, background .15s' },
   hint: { fontSize: '.72rem', color: '#9C8878', fontFamily: "'Nunito', sans-serif", lineHeight: 1.5, marginTop: 4 },
   select: { width: '100%', padding: '9px 12px', border: '1.5px solid #DDD5C8', borderRadius: 8, fontFamily: "'Nunito', sans-serif", fontSize: '.85rem', background: '#FFFEFB', color: '#2A1A0E', outline: 'none' },
   toggleGroup: { display: 'flex', gap: 6, flexWrap: 'wrap' },
@@ -788,7 +769,7 @@ const S = {
   syncBtn: { display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: 'linear-gradient(135deg,#8B6445,#C4956A)', color: '#fff', border: 'none', borderRadius: 8, fontSize: '.78rem', fontWeight: 700, fontFamily: "'Nunito', sans-serif", cursor: 'pointer', marginTop: 8 },
   okMsg: { fontSize: '.72rem', color: '#3D6B45', margin: '4px 0 0', fontFamily: "'Nunito', sans-serif" },
   errMsg: { fontSize: '.72rem', color: '#C0392B', margin: '4px 0 0', fontFamily: "'Nunito', sans-serif" },
-  driveWarnMsg: { fontSize: '.72rem', color: '#92400E', margin: '6px 0 0', fontFamily: "'Nunito', sans-serif" }, // LOT 4F.2.4
+  driveWarnMsg: { fontSize: '.72rem', color: '#92400E', margin: '6px 0 0', fontFamily: "'Nunito', sans-serif" },
   warnBox: { fontSize: '.72rem', color: '#92400E', background: '#FEF3C7', border: '1px solid #FCD34D', borderRadius: 8, padding: '8px 10px', marginTop: 6, lineHeight: 1.5, fontFamily: "'Nunito', sans-serif" },
   actionRow: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 12, padding: '10px 12px', background: '#FFFEFB', border: '1px solid #EDE7DE', borderRadius: 10 },
   actionTitle: { fontSize: '.82rem', fontWeight: 700, color: '#2A1A0E', fontFamily: "'Nunito', sans-serif" },
@@ -803,4 +784,6 @@ const S = {
   footer: { display: 'flex', gap: 10, justifyContent: 'flex-end', padding: '12px 20px', borderTop: '1px solid #EDE7DE', background: '#FAF7F2', flexShrink: 0 },
   cancelBtn: { padding: '9px 18px', background: 'transparent', border: '1.5px solid #EDE7DE', borderRadius: 10, fontSize: '.82rem', fontWeight: 600, fontFamily: "'Nunito', sans-serif", color: '#9C8878', cursor: 'pointer' },
   saveBtn: { display: 'flex', alignItems: 'center', gap: 6, padding: '9px 20px', background: 'linear-gradient(135deg, #8B6445, #C4956A)', color: '#fff', border: 'none', borderRadius: 10, fontSize: '.82rem', fontWeight: 700, fontFamily: "'Nunito', sans-serif", cursor: 'pointer' },
-  // LOT 4E
+  rangeSlider: { width: '100%', accentColor: '#8B6445', cursor: 'pointer', marginTop: 4 },
+  rangeHints: { display: 'flex', justifyContent: 'space-between', fontSize: '.65rem', color: '#9C8878', fontFamily: "'Nunito', sans-serif", marginTop: 2 },
+}
