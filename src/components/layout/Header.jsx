@@ -112,73 +112,81 @@ export default function Header({
         </div>
       )}
 
-      {/* Actions droite */}
+      {/* Actions droite
+          Réorganisation mobile (mini-lot dédié) :
+          - Tiroir : visible PARTOUT (avant : desktop uniquement)
+          - Exporter : visible DESKTOP UNIQUEMENT (avant : partout)
+          - Ambiance/Musique : visible DESKTOP UNIQUEMENT (avant : partout)
+          Desktop strictement inchangé. */}
       <div style={styles.actions}>
         <BtnH icon={<Lightbulb size={16} />} label="Inspiration" onClick={onInspir}   isMobile={isMobile} />
         <BtnH icon={<Search   size={16} />} label="Vocabulaire" onClick={onVocab}    isMobile={isMobile} />
         <BtnH icon={<Mic      size={16} />} label="Dicter"      onClick={onDictate}  isMobile={isMobile} />
         <BtnH icon={<BookOpen size={16} />} label="Plan"         onClick={onPlan}     isMobile={isMobile} />
-        {/* T1 — Le Tiroir : desktop uniquement, mobile reporté à un lot dédié */}
+        {/* Le Tiroir — accessible mobile + desktop depuis ce mini-lot */}
+        <BtnH icon={<Archive size={16} />} label="Le tiroir" onClick={onTiroir} isMobile={isMobile} />
+        {/* Exporter — desktop uniquement (masqué sur mobile, callback onExport conservé en props) */}
         {!isMobile && (
-          <BtnH icon={<Archive size={16} />} label="Le tiroir" onClick={onTiroir} isMobile={false} />
+          <BtnH icon={<Download size={16} />} label="Exporter" onClick={onExport} isMobile={false} />
         )}
-        <BtnH icon={<Download size={16} />} label="Exporter"    onClick={onExport}   isMobile={isMobile} />
         <BtnH icon={<Settings size={16} />} label="Réglages"    onClick={onSettings} isMobile={isMobile} />
 
-        {/* ── Ambiance sonore ── */}
-        <div ref={ambientContainerRef} style={{ position: 'relative' }}>
-          <button
-            style={{
-              ...styles.hdrBtn,
-              ...(ambientPlaying ? styles.hdrBtnPlaying : {}),
-            }}
-            onClick={() => { setAmbientOpen(o => !o); setMoodOpen(false) }}
-            title="Ambiance sonore"
-            aria-label="Ambiance sonore"
-          >
-            <Music size={16} />
-            {!isMobile && <span style={styles.hdrBtnLbl}>Ambiance</span>}
-            {ambientPlaying && <span style={styles.playDot} aria-hidden="true" />}
-          </button>
+        {/* Ambiance sonore — desktop uniquement (callbacks et state conservés en props) */}
+        {!isMobile && (
+          <div ref={ambientContainerRef} style={{ position: 'relative' }}>
+            <button
+              style={{
+                ...styles.hdrBtn,
+                ...(ambientPlaying ? styles.hdrBtnPlaying : {}),
+              }}
+              onClick={() => { setAmbientOpen(o => !o); setMoodOpen(false) }}
+              title="Ambiance sonore"
+              aria-label="Ambiance sonore"
+            >
+              <Music size={16} />
+              <span style={styles.hdrBtnLbl}>Ambiance</span>
+              {ambientPlaying && <span style={styles.playDot} aria-hidden="true" />}
+            </button>
 
-          {ambientOpen && (
-            <div style={styles.ambientDrop}>
-              <div style={styles.ambientTitle}>Ambiance d'écriture</div>
+            {ambientOpen && (
+              <div style={styles.ambientDrop}>
+                <div style={styles.ambientTitle}>Ambiance d'écriture</div>
 
-              <div style={styles.soundList}>
-                {SOUNDS.map(s => (
-                  <button
-                    key={String(s.value)}
-                    style={{
-                      ...styles.soundBtn,
-                      ...(ambientSound === s.value ? styles.soundBtnAct : {}),
-                    }}
-                    onClick={() => onAmbientChange(s.value)}
-                  >
-                    <span style={styles.soundEmoji}>{s.emoji}</span>
-                    <span style={styles.soundLabel}>{s.label}</span>
-                    {ambientSound === s.value && ambientPlaying && s.value !== null && (
-                      <span style={styles.soundPlaying}>▶</span>
-                    )}
-                  </button>
-                ))}
+                <div style={styles.soundList}>
+                  {SOUNDS.map(s => (
+                    <button
+                      key={String(s.value)}
+                      style={{
+                        ...styles.soundBtn,
+                        ...(ambientSound === s.value ? styles.soundBtnAct : {}),
+                      }}
+                      onClick={() => onAmbientChange(s.value)}
+                    >
+                      <span style={styles.soundEmoji}>{s.emoji}</span>
+                      <span style={styles.soundLabel}>{s.label}</span>
+                      {ambientSound === s.value && ambientPlaying && s.value !== null && (
+                        <span style={styles.soundPlaying}>▶</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+
+                <div style={styles.volRow}>
+                  <span style={styles.volLbl}>Volume</span>
+                  <input
+                    type="range"
+                    min={0} max={1} step={0.01}
+                    value={ambientVolume}
+                    onChange={e => onVolumeChange(parseFloat(e.target.value))}
+                    style={styles.volSlider}
+                    aria-label="Volume de l'ambiance"
+                  />
+                  <span style={styles.volVal}>{Math.round(ambientVolume * 100)}%</span>
+                </div>
               </div>
-
-              <div style={styles.volRow}>
-                <span style={styles.volLbl}>Volume</span>
-                <input
-                  type="range"
-                  min={0} max={1} step={0.01}
-                  value={ambientVolume}
-                  onChange={e => onVolumeChange(parseFloat(e.target.value))}
-                  style={styles.volSlider}
-                  aria-label="Volume de l'ambiance"
-                />
-                <span style={styles.volVal}>{Math.round(ambientVolume * 100)}%</span>
-              </div>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Bouton Léa mobile (CoachPanel) */}
