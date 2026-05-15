@@ -159,10 +159,18 @@ export async function askClaude({ apiKey, systemPrompt, messages, maxTokens = 60
 // Nettoyage du texte + speed param (0.5 - 2.0 selon préférence)
 // Modèle tts-1-hd pour qualité supérieure (× 2 coût mais accents français mieux)
 // LOT 2.1 — passe désormais par normalizeForNarrationFR (cleanForTTS + lexique FR)
-export async function speakWithOpenAI({ openAiKey, text, voice = 'nova', speed = 1.0, hd = true }) {
+// TTS/Phase 0 — paramètre optionnel `onLatencyLog(event, extras)` :
+//   rétrocompatible (signature inchangée si non fourni). Émet 3 points de mesure
+//   internes pour prouver le goulot G2 (await res.blob()) vs proxy/headers.
+//   Le caller (useCoach) injecte runId + elapsedMs via sa propre fonction ttsLog.
+export async function speakWithOpenAI({ openAiKey, text, voice = 'nova', speed = 1.0, hd = true, onLatencyLog }) {
   if (!openAiKey) throw new Error('Mot de passe Léa manquant')
   const cleanText = normalizeForNarrationFR(text).slice(0, 4096)
   if (!cleanText) throw new Error('Texte vide après nettoyage')
+
+  // TTS/Phase 0 — point n°1 : juste avant le fetch (mesure inclus déjà toute la prépa)
+  try { onLatencyLog?.('tts_fetch_start', { cleanTextLen: cleanText.length }) } catch (_) {}
+
   const res = await fetch(TTS_PROXY, {
     method: 'POST',
     headers: {
@@ -176,6 +184,10 @@ export async function speakWithOpenAI({ openAiKey, text, voice = 'nova', speed =
       speed: Math.max(0.5, Math.min(2.0, speed)),
     }),
   })
+
+  // TTS/Phase 0 — point n°2 : headers HTTP arrivés (latence proxy + génération OpenAI démarrée)
+  try { onLatencyLog?.('tts_response_headers', { status: res.status, ok: res.ok }) } catch (_) {}
+
   if (!res.ok) {
     let detail = ''
     try { detail = (await res.text()).slice(0, 300) } catch {}
@@ -185,6 +197,11 @@ export async function speakWithOpenAI({ openAiKey, text, voice = 'nova', speed =
     throw err
   }
   const blob = await res.blob()
+
+  // TTS/Phase 0 — point n°3 (CRITIQUE pour G2) : blob complet téléchargé.
+  //   delta (tts_blob_ready - tts_response_headers) = coût pur du téléchargement MP3.
+  try { onLatencyLog?.('tts_blob_ready', { blobSizeKB: Math.round((blob?.size ?? 0) / 1024) }) } catch (_) {}
+
   const url = URL.createObjectURL(blob)
   const audio = new Audio(url)
   audio.play()
