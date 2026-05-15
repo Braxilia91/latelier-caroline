@@ -61,10 +61,21 @@ button { font-family: var(--fu); cursor: pointer; border: none; background: none
 input, textarea { font-family: var(--fu); }
 a { color: var(--brown); }
 
-/* ─── Scrollbars ──────────────────────────────────────────── */
-::-webkit-scrollbar { width: 4px; }
+/* ─── Scrollbars (T10 #11 — 4px → 8px pour ergonomie souris) ─ */
+::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+  transition: background .18s;
+}
+::-webkit-scrollbar-thumb:hover { background: var(--gold); }
+
+/* Firefox / Safari moderne */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
 
 /* ─── Utility classes ─────────────────────────────────────── */
 .serif { font-family: var(--fd); }
@@ -232,6 +243,20 @@ a { color: var(--brown); }
 /* ─── Focus visible (LOT 3 — caret + halo desktop visible) ── */
 input:focus,
 textarea:focus {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+/* T10 #7 — Focus visible clavier sur boutons.
+   :focus-visible (et non :focus) → l'outline n'apparaît qu'à la
+   navigation clavier (Tab), jamais au clic souris. Navigation au
+   Tab désormais visible pour Caroline. */
+button:focus-visible,
+.btn:focus-visible,
+.btn-icon:focus-visible,
+.btn-ghost:focus-visible,
+.btn-primary:focus-visible,
+.modal-close:focus-visible {
   outline: 2px solid var(--gold);
   outline-offset: 2px;
 }
