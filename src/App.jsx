@@ -6,15 +6,18 @@ import { useMediaQuery } from './hooks/useMediaQuery'
 import { ToastProvider, useToast } from './components/ui/Toast'
 import { buildWelcomeMessage } from './lib/prompts'
 import { putTraceBlob } from './lib/db'
+// T11/#4 — Surveillance expiration token Drive
+import { onTokenExpiring, onTokenExpired } from './lib/googleDrive'
 
-// ── Imports critiques (chemin de rendu initial) ──────────────────
+// ── Imports critiques (chemin de rendu initial) ──────────────────────────────
+const Onboarding = Onboarding || await import('./components/onboarding/Onboarding').then(m => m.default)
 import Onboarding from './components/onboarding/Onboarding'
 import Header from './components/layout/Header'
 import Sidebar from './components/layout/Sidebar'
 import WritingArea from './components/writing/WritingArea'
 import CoachPanel from './components/layout/CoachPanel'
 
-// ── Modaux : chargés à la demande uniquement ─────────────────────
+// ── Modaux : chargés à la demande uniquement ────────────────────────────
 const DictationModal  = lazy(() => import('./components/modals/DictationModal'))
 const SettingsModal   = lazy(() => import('./components/modals/SettingsModal'))
 const InspirationModal= lazy(() => import('./components/modals/InspirationModal'))
@@ -28,7 +31,7 @@ const TiroirModal     = lazy(() => import('./components/modals/TiroirModal'))
 const AddTraceFlow    = lazy(() => import('./components/modals/AddTraceFlow'))
 const TraceDetailModal= lazy(() => import('./components/modals/TraceDetailModal'))
 
-// ── Durée idle avant auto-sync (ms) ─────────────────────────────
+// ── Durée idle avant auto-sync (ms) ─────────────────────────────────────
 const IDLE_SYNC_DELAY = 30_000
 
 function AppSkeleton() {
@@ -140,7 +143,7 @@ function AppInner() {
     if (db.ready && db.isSetup && db.firstLaunch) setShowPack(true)
   }, [db.ready, db.isSetup, db.firstLaunch])
 
-  // ── Online / offline ─────────────────────────────────────────
+  // ── Online / offline ───────────────────────────────────────────────
   useEffect(() => {
     const goOnline = () => {
       setIsOnline(true)
@@ -160,12 +163,34 @@ function AppInner() {
     }
   }, [db.syncNow]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Thème ────────────────────────────────────────────────────
+  // ── T11/#4 — Surveillance expiration token Drive ─────────────────────
+  // Au signIn, googleDrive.js programme 2 setTimeout (5 min avant + à
+  // l'expiration). Les callbacks ici affichent un toast pour que Caroline
+  // sache qu'elle doit se reconnecter avant la coupure silencieuse de Drive.
+  useEffect(() => {
+    const unsubExpiring = onTokenExpiring(() => {
+      toast(
+        'Ta connexion Drive expire dans 5 minutes — reconnecte-toi depuis Réglages pour continuer à sauvegarder.',
+        'info',
+        10000,
+      )
+    })
+    const unsubExpired = onTokenExpired(() => {
+      toast(
+        'Connexion Drive expirée. Tes données restent enregistrées localement — reconnecte-toi depuis Réglages.',
+        'error',
+        12000,
+      )
+    })
+    return () => { unsubExpiring(); unsubExpired() }
+  }, [toast])
+
+  // ── Thème ─────────────────────────────────────────────────────────
   useEffect(() => {
     if (db.editorTheme) document.documentElement.setAttribute('data-theme', db.editorTheme)
   }, [db.editorTheme])
 
-  // ── CSS vars ─────────────────────────────────────────────────
+  // ── CSS vars ───────────────────────────────────────────────────
   useEffect(() => {
     const v = (typeof db.chatScale === 'number' && db.chatScale > 0) ? db.chatScale : 1
     document.documentElement.style.setProperty('--chat-scale', String(v))
@@ -205,7 +230,7 @@ function AppInner() {
     return () => window.removeEventListener('keydown', handler)
   }, [sidebarOpen, coachOpen])
 
-  // ── Coach ────────────────────────────────────────────────────
+  // ── Coach ──────────────────────────────────────────────────────────
   const coach = useCoach({
     apiKey: db.apiKey,
     openAiKey: db.openAiKey,
@@ -224,7 +249,7 @@ function AppInner() {
     if (isMobile && coach.loading && !coachOpen) { setCoachOpen(true); setSidebarOpen(false) }
   }, [coach.loading, isMobile, coachOpen])
 
-  // ── Sync au boot ─────────────────────────────────────────────
+  // ── Sync au boot ───────────────────────────────────────────────────
   useEffect(() => {
     if (db.ready && db.syncToken && import.meta.env.VITE_SYNC_WORKER_URL) {
       db.syncNow()
@@ -232,7 +257,7 @@ function AppInner() {
     }
   }, [db.ready]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── T9 — Auto-sync idle (30s sans frappe) ────────────────────
+  // ── T9 — Auto-sync idle (30s sans frappe) ──────────────────────────
   // Réinitialise le timer à chaque frappe clavier ou clic dans l'app.
   // Sur pagehide (onglet fermé / navigateur tué sur mobile), sync forcé.
   useEffect(() => {
@@ -264,7 +289,7 @@ function AppInner() {
     }
   }, [db.ready, db.syncToken, db.syncNow])
 
-  // ── Handlers ─────────────────────────────────────────────────
+  // ── Handlers ──────────────────────────────────────────────────────
   const handleSetupComplete = async ({ name, apiKey, profile }) => {
     await db.setName(name)
     if (apiKey)  await db.setApiKey(apiKey)
