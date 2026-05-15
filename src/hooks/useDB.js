@@ -12,6 +12,29 @@ import { uploadAllBlobs, downloadAllBlobs } from '../lib/driveSync'
 // T8.4b — Check session Drive pour décider download blobs vs toast offline
 import { getCurrentUser } from '../lib/googleDrive'
 
+// T11b — Date ISO du jour 'YYYY-MM-DD' (local, pas UTC, pour cohérence
+// avec le ressenti utilisateur — Caroline considère "aujourd'hui" selon
+// son fuseau, pas selon UTC).
+function todayIso() {
+  const d = new Date()
+  const yyyy = d.getFullYear()
+  const mm   = String(d.getMonth() + 1).padStart(2, '0')
+  const dd   = String(d.getDate()).padStart(2, '0')
+  return `${yyyy}-${mm}-${dd}`
+}
+
+// T11b — Seuils de streak qui déclenchent une félicitation Léa.
+// Ton : valorisant, jamais pressant. Pas de "continue", pas de
+// "ne casse pas la chaîne". Caroline doit se sentir libre.
+const STREAK_MILESTONES = {
+  7:   '🌿 7 jours consécutifs — un rythme qui te ressemble.',
+  14:  '🌿 Deux semaines d\'affilée — ton atelier prend racine.',
+  30:  '🌿 Un mois entier — ta voix s\'installe.',
+  60:  '🌿 Soixante jours — ce livre devient une présence.',
+  100: '🌿 Cent jours — tu construis quelque chose qui te dépasse.',
+  365: '🌿 Une année — ton livre est devenu un compagnon.',
+}
+
 export function useAppState() {
   const [ready,          setReady]          = useState(false)
   const [name,           setNameState]      = useState('')
@@ -41,6 +64,14 @@ export function useAppState() {
   // mais que Drive n'est pas connecté (les blobs restent en attente).
   // App.jsx watch ce state et déclenche un toast info + dismiss.
   const [pendingBlobsMessage, setPendingBlobsMessage] = useState(null)
+  // T11b — Historique des jours d'écriture pour la heatmap de progression.
+  // Format : array de strings ISO 'YYYY-MM-DD'. Pas de gradient intensité
+  // au MVP (binaire visité/vide). Croît sans bornes (1 entrée par jour
+  // = ~365 strings/an, négligeable).
+  const [sessionDates, setSessionDates] = useState([])
+  // T11b — Signal de franchissement d'un seuil de streak (7/14/30/60/100/365).
+  // App.jsx watch et affiche un toast valorisant, puis dismiss.
+  const [streakMilestone, setStreakMilestone] = useState(null) // { days, message } | null
   // ── Préférences d'affichage ──────────────────────────────────
   const [editorFont,     setEditorFontState]  = useState('m')       // s | m | l | xl
   const [editorTheme,    setEditorThemeState] = useState('jour')     // jour | soir | bougie
@@ -81,7 +112,7 @@ export function useAppState() {
         console.info('[Storage] Mode non-persistant. Le navigateur peut évincer les données en cas de pression mémoire.')
       }
 
-      const [n, k, oai, lv, st, sess, last, mood, chs, chat, prof, mem, vrac, tr, stok, lsa, ef, et, ew, fls, snd, vol, cs, us, ls, sw, cw, lda] = await Promise.all([
+      const [n, k, oai, lv, st, sess, last, mood, chs, chat, prof, mem, vrac, tr, stok, lsa, ef, et, ew, fls, snd, vol, cs, us, ls, sw, cw, lda, sd] = await Promise.all([
         getKV('name',             ''),
         getKV('apiKey',           ''),
         getKV('openAiKey',        ''),
@@ -110,6 +141,7 @@ export function useAppState() {
         getKV('sidebarWidth',     220),   // LOT 4E.2
         getKV('coachWidth',       270),   // LOT 4E.2 bis
         getKV('lastDriveSyncedAt', null), // LOT 4F.2.6
+        getKV('sessionDates',     []),    // T11b
       ])
 
       setNameState(n); setApiKeyState(k); setOAIKey(oai); setLeaVoice(lv)
@@ -140,6 +172,8 @@ export function useAppState() {
       setSidebarWidthState(typeof sw === 'number' && sw >= 160 ? sw : 220)    // LOT 4E.2
       setCoachWidthState(typeof cw === 'number' && cw >= 220 ? cw : 270)      // LOT 4E.2 bis
       setLastDriveSyncedAtState(typeof lda === 'number' && lda > 0 ? lda : null) // LOT 4F.2.6
+      // T11b — sessionDates : fallback array vide si KV inexistante ou format invalide
+      setSessionDates(Array.isArray(sd) ? sd : [])
       setReady(true)
 
       // Quota check en arrière-plan — non bloquant
@@ -271,19 +305,14 @@ export function useAppState() {
         }
 
         // T8.4b — Restaurer les blobs depuis Drive pour les traces inbound.
-        // Bug fix : on passe remote.traces (les traces qui viennent d'être
-        // importées), PAS currentTraces (les traces locales d'avant l'import
-        // qui peuvent être vides sur un device fraîchement synchronisé).
         const importedTraces = Array.isArray(remote.traces) ? remote.traces : []
         if (importedTraces.length > 0) {
           const driveUser = getCurrentUser()
           if (driveUser) {
-            // Drive connecté → download best-effort en background
             downloadAllBlobs(importedTraces).catch(err =>
               console.warn('[Sync] downloadAllBlobs partiel:', err?.message)
             )
           } else {
-            // Drive non connecté → signal à App.jsx pour toast info
             setPendingBlobsMessage('Reconnecte Google Drive depuis Réglages pour télécharger tes photos.')
           }
         }
@@ -299,17 +328,13 @@ export function useAppState() {
         if (chs.length > 0) setCurrentId(chs[0].id)
         setVracIdeas(v)
         setChatHistory(ch)
-        // T8.4b — state traces synchronisé avec IDB après import (était omis)
         setTraces(freshTraces.length > TRACES_RAM_CAP ? freshTraces.slice(0, TRACES_RAM_CAP) : freshTraces)
         setLastSyncedAt(remote.syncedAt)
         setSyncStatus('ok'); setSyncMessage(`Données mises à jour depuis le cloud ✓`)
       } else if (winner === 'local' || remote.empty) {
-        // Le local est plus récent → pousser
         await pushSnapshot({ token, snapshot: local })
         await setKV('lastSyncedAt', local.syncedAt)
         setLastSyncedAt(local.syncedAt)
-        // T8.2 — Upload des blobs vers Drive (best-effort, non bloquant)
-        // Côté push, currentTraces (= traces locales) est bien le bon argument.
         uploadAllBlobs(currentTraces).catch(err =>
           console.warn('[Sync] uploadAllBlobs partiel:', err?.message)
         )
@@ -325,6 +350,9 @@ export function useAppState() {
 
   // T8.4b — Dismiss du message pending blobs (appelé par App.jsx après toast)
   const dismissPendingBlobsMessage = useCallback(() => setPendingBlobsMessage(null), [])
+
+  // T11b — Dismiss du milestone après affichage du toast
+  const dismissStreakMilestone = useCallback(() => setStreakMilestone(null), [])
 
   // ─── Profil Caroline (onboarding) ────────────────────────────
   const setCarolineProfile = useCallback(async (profile) => {
@@ -349,6 +377,10 @@ export function useAppState() {
   }, [])
 
   // ─── Streak / sessions ───────────────────────────────────────
+  // T11b — recordSession enrichi :
+  //   1. logique streak/sessions/lastSession existante
+  //   2. push date ISO du jour dans sessionDates (dédoublonné, persisté KV)
+  //   3. détection franchissement seuil → setStreakMilestone
   const recordSession = useCallback(async () => {
     if (recordSessionLockRef.current) return
     const today = new Date().toDateString()
@@ -360,6 +392,26 @@ export function useAppState() {
       const newSessions = sessions + 1
       lastSessionRef.current = today
       setStreakState(newStreak); setSessionsState(newSessions); setLastSession(today)
+
+      // T11b — Push date ISO du jour dans sessionDates (déduplication via includes).
+      // Pattern setter pour éviter stale closure (sessionDates pas dans useCallback deps).
+      const todayIsoStr = todayIso()
+      setSessionDates(prev => {
+        if (prev.includes(todayIsoStr)) return prev
+        const next = [...prev, todayIsoStr]
+        // Persistance KV fire-and-forget — non bloquant pour recordSession
+        setKV('sessionDates', next).catch(() => {})
+        return next
+      })
+
+      // T11b — Détection franchissement de seuil.
+      // Le streak vient d'être incrémenté à newStreak. Si c'est exactement
+      // un seuil, on signale. L'incrémentation étant +1, on ne peut pas
+      // "sauter" un seuil (sauf reset à 1, qui n'est pas un seuil).
+      if (STREAK_MILESTONES[newStreak]) {
+        setStreakMilestone({ days: newStreak, message: STREAK_MILESTONES[newStreak] })
+      }
+
       await Promise.all([
         setKV('streak',      newStreak),
         setKV('sessions',    newSessions),
@@ -508,6 +560,9 @@ const totalWords     = chapters.reduce(
     syncToken, setSyncToken, syncStatus, syncMessage, lastSyncedAt, syncNow,
     // T8.4b — Signal Drive offline pour blobs en attente
     pendingBlobsMessage, dismissPendingBlobsMessage,
+    // T11b — Heatmap progression + signal seuil franchi
+    sessionDates,
+    streakMilestone, dismissStreakMilestone,
     editorFont, setEditorFont, editorTheme, setEditorTheme, editorWidth, setEditorWidth,
     chatScale, setChatScale,
     uiScale, setUiScale,
