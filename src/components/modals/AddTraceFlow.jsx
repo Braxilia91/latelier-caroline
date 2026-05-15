@@ -46,8 +46,10 @@ export default function AddTraceFlow({ onClose, onCreateTrace }) {
 
   const fileInputRef = useRef(null)
   const textareaRef = useRef(null)
-  // Fichier original conservé pour OCR — pas de dégradation JPEG lossy.
-  // Preview et stockage restent sur compressed.blob.
+  // T5/Phase 3 — Référence au fichier original conservée pour compatibilité / rollback.
+  // L'OCR utilise compressed.blob (cf. useEffect ci-dessous), pas l'original :
+  // mesures T5/Phase 2 = 0 pp de perte d'accuracy sur 16 cas + ×6-18 gain de durée
+  // sur photos smartphone modernes (validé en prod : 89s → ~5-15s estimés).
   const originalFileRef = useRef(null)
 
   // Libère l'ObjectURL au démontage ou remplacement du blob.
@@ -69,14 +71,16 @@ export default function AddTraceFlow({ onClose, onCreateTrace }) {
 
   // Lance l'OCR en parallèle dès l'arrivée sur étape 2.
   // Non bloquant : si OCR en cours au Save, on sauve sans attendre.
-  // OCR sur originalFileRef.current (fichier source non dégradé).
+  // T5/Phase 3 — OCR sur compressed.blob (1600px JPEG q=0.85, cf. imageCompress.js).
+  //   Mesures T5/Phase 2 : accuracy identique vs original sur 16 cas test, durée
+  //   divisée ×6-18 sur grosses photos. Économise CPU/batterie sans dégrader l'OCR.
   // Dépendances explicites [step, compressed] — pas de stale closure.
   // Guard cancelled dans le cleanup : retours tardifs ignorés.
   useEffect(() => {
     if (step !== 'firstListen' || !compressed || !originalFileRef.current) return
 
     let cancelled = false
-    const sourceFile = originalFileRef.current
+    const sourceFile = compressed.blob
 
     setOcrStatus('running')
     setOcrResult(null)
@@ -111,7 +115,7 @@ export default function AddTraceFlow({ onClose, onCreateTrace }) {
     const file = e.target.files?.[0]
     e.target.value = ''
     if (!file) return
-    // Stocke l'original avant compression — utilisé par l'OCR.
+    // Stocke l'original — conservé pour compat / rollback, plus utilisé par l'OCR (T5/Phase 3).
     originalFileRef.current = file
     setSubmitting(true)
     setError(null)
