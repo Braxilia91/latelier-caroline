@@ -1,20 +1,22 @@
 import { useState } from 'react'
 
 import Modal from '../ui/Modal'
-import { X, Download, FileText } from 'lucide-react'
+import { X, Download, FileText, BookOpen } from 'lucide-react'
 // T8.4c — buildLocalBackup v5 inclut traces metadata + blobs base64.
-// Remplace exportAllData (v3, sans traces) pour que la sauvegarde
-// .json ramène vraiment TOUT — textes et photos.
 import { buildLocalBackup } from '../../lib/db'
 
-export default function ExportModal({ chapters, name, onClose }) {
+export default function ExportModal({ chapters, name, traces = [], loadTraceBlob = null, onClose }) {
   // T15 — 3 modes : 'full' (tout) | 'written' (contenu non vide) | 'public' (non privé + contenu)
   const [mode, setMode] = useState('full')
   const [exporting, setExporting] = useState(false)
+  // T12 — État bloquant pendant la génération PDF
+  const [generatingPdf, setGeneratingPdf] = useState(false)
+
+  // Fix #6 — Sentinelle défensive pour name : évite crash sur null,
+  // évite "MON HISTOIRE — " avec tiret trailing si vide.
+  const safeName = (name || '').trim()
 
   // T15 — Sélection adaptée au mode courant.
-  // Note : le mode 'public' filtre les private=true ET les chapitres vides
-  // (intention : version partageable propre à donner à un tiers).
   const selectChapters = () => {
     if (mode === 'public')  return chapters.filter(c => c.private !== true && c.content?.trim())
     if (mode === 'written') return chapters.filter(c => c.content?.trim())
@@ -23,7 +25,8 @@ export default function ExportModal({ chapters, name, onClose }) {
 
   const exportTXT = () => {
     const lines = []
-    lines.push(`MON HISTOIRE — ${name.toUpperCase()}`)
+    // Fix #6 — en-tête défensif (pas de tiret trailing si name vide)
+    lines.push(safeName ? `MON HISTOIRE — ${safeName.toUpperCase()}` : 'MON HISTOIRE')
     lines.push(`Exporté le ${new Date().toLocaleDateString('fr', { dateStyle: 'long' })}`)
     lines.push('─'.repeat(50))
     lines.push('')
@@ -31,7 +34,7 @@ export default function ExportModal({ chapters, name, onClose }) {
     const selected = selectChapters()
 
     selected.forEach((ch, i) => {
-      lines.push(`CHAPITRE ${i + 1} — ${ch.title.toUpperCase()}`)
+      lines.push(`CHAPITRE ${i + 1} — ${(ch.title || 'Sans titre').toUpperCase()}`)
       lines.push('')
       lines.push(ch.content || '(vide)')
       lines.push('')
@@ -45,16 +48,42 @@ export default function ExportModal({ chapters, name, onClose }) {
     const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
-    // Nom de fichier suffixé par le mode pour ne pas écraser une autre version
     const suffix = mode === 'public' ? '-public' : (mode === 'written' ? '-ecrits' : '')
     a.href = url; a.download = `mon-histoire${suffix}-${new Date().toISOString().slice(0,10)}.txt`
     a.click(); URL.revokeObjectURL(url)
   }
 
+  // T12 — Génère le livre en PDF (couverture + TOC + chapitres + photos).
+  // Dynamic import : jsPDF (~200 KB) chargé seulement au clic.
+  const exportPDF = async () => {
+    if (generatingPdf) return
+    setGeneratingPdf(true)
+    try {
+      const { generateBookPDF } = await import('../../lib/pdfExport')
+      const selected = selectChapters()
+      const blob = await generateBookPDF({
+        name: safeName,
+        chapters: selected,
+        traces,
+        loadTraceBlob,
+        options: { includePhotos: true },
+      })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      const suffix = mode === 'public' ? '-public' : ''
+      a.href = url
+      a.download = `mon-livre${suffix}-${new Date().toISOString().slice(0,10)}.pdf`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      console.warn('[PDF] generation failed:', err?.message)
+    } finally {
+      setGeneratingPdf(false)
+    }
+  }
+
   // T8.4c — Sauvegarde complète : textes + photos en base64.
-  // T15 — NON FILTRÉE par mode private : §9 protection des données, la
-  // sauvegarde locale doit toujours contenir l'intégralité pour permettre
-  // une restauration fidèle. Le filtre privé est limité au partage TXT.
+  // T15 — NON FILTRÉE par mode private : §9 protection des données.
   const exportBackup = async () => {
     if (exporting) return
     setExporting(true)
@@ -99,7 +128,7 @@ export default function ExportModal({ chapters, name, onClose }) {
         )}
       </div>
 
-      {/* T15 — 3 modes pour TXT */}
+      {/* T15 — 3 modes pour TXT/PDF */}
       <div style={styles.opts}>
         <label style={{ ...styles.opt, ...(mode === 'full' ? styles.optAct : {}) }}>
           <input type="radio" name="mode" value="full" checked={mode === 'full'} onChange={() => setMode('full')} hidden />
@@ -117,12 +146,30 @@ export default function ExportModal({ chapters, name, onClose }) {
 
       {mode === 'public' && (
         <p style={styles.modeHint}>
-          Les chapitres marqués privés (🔒) seront <strong>exclus</strong> de ce fichier — version à partager avec ta famille.
+          Les chapitres marqués privés (🔒) seront <strong>exclus</strong> du fichier — version à partager avec ta famille.
         </p>
       )}
 
       <button style={styles.btn} onClick={exportTXT}>
         <FileText size={16} /> Exporter en .txt <span style={styles.hint2}>(Word, LibreOffice…)</span>
+      </button>
+
+      {/* T12 — Le livre PDF */}
+      <button
+        style={{
+          ...styles.btnBook,
+          opacity: generatingPdf ? 0.6 : 1,
+          cursor: generatingPdf ? 'wait' : 'pointer',
+        }}
+        onClick={exportPDF}
+        disabled={generatingPdf}
+        aria-busy={generatingPdf}
+      >
+        <BookOpen size={16} />
+        {generatingPdf
+          ? 'Composition du livre…'
+          : <>Générer le livre (.pdf) <span style={styles.hint2}>(à imprimer ou partager)</span></>
+        }
       </button>
 
       <div style={styles.sep}>
@@ -163,7 +210,6 @@ const styles = {
     transition: 'all .15s',
   },
   optAct: { background: '#F7EFE3', borderColor: '#C4956A', color: '#8B6445' },
-  // T15 — Hint actif quand mode 'public' sélectionné
   modeHint: {
     fontSize: '.74rem', color: '#8B6445',
     background: '#F7EFE3', borderRadius: 8,
@@ -178,7 +224,18 @@ const styles = {
     color: '#fff', border: 'none',
     borderRadius: 12, fontSize: '.88rem', fontWeight: 700,
     fontFamily: "'Nunito', sans-serif", cursor: 'pointer',
+    marginBottom: 10,
+  },
+  // T12 — Bouton "Le livre" : gradient inversé brun→or-clair plus chaud
+  btnBook: {
+    width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+    padding: '12px 16px',
+    background: 'linear-gradient(135deg, #C4956A, #E8D5B8)',
+    color: '#5C3D1E', border: '1.5px solid #C4956A',
+    borderRadius: 12, fontSize: '.88rem', fontWeight: 700,
+    fontFamily: "'Nunito', sans-serif", cursor: 'pointer',
     marginBottom: 12,
+    transition: 'opacity .15s',
   },
   hint2: { opacity: .75, fontWeight: 400 },
   sep: {
