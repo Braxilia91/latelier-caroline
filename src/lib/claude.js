@@ -159,16 +159,17 @@ export async function askClaude({ apiKey, systemPrompt, messages, maxTokens = 60
 // Nettoyage du texte + speed param (0.5 - 2.0 selon préférence)
 // Modèle tts-1-hd pour qualité supérieure (× 2 coût mais accents français mieux)
 // LOT 2.1 — passe désormais par normalizeForNarrationFR (cleanForTTS + lexique FR)
-// TTS/Phase 0 — paramètre optionnel `onLatencyLog(event, extras)` :
-//   rétrocompatible (signature inchangée si non fourni). Émet 3 points de mesure
-//   internes pour prouver le goulot G2 (await res.blob()) vs proxy/headers.
-//   Le caller (useCoach) injecte runId + elapsedMs via sa propre fonction ttsLog.
-export async function speakWithOpenAI({ openAiKey, text, voice = 'nova', speed = 1.0, hd = true, onLatencyLog }) {
+// TTS/Phase 0 — paramètre `onLatencyLog(event, extras)` optionnel : 3 events internes
+//   pour isoler le goulot G2 (await res.blob()) vs proxy/headers/Audio init.
+// TTS/V1.1 — paramètre `autoPlay = true` : par défaut on appelle audio.play() après
+//   création (rétrocompat). Le caller V1 passe `autoPlay: false` pour attacher
+//   les listeners (play, ended, error) AVANT de jouer, évitant la race condition
+//   où l'event 'play' partirait avant que l'écouteur soit branché.
+export async function speakWithOpenAI({ openAiKey, text, voice = 'nova', speed = 1.0, hd = true, autoPlay = true, onLatencyLog }) {
   if (!openAiKey) throw new Error('Mot de passe Léa manquant')
   const cleanText = normalizeForNarrationFR(text).slice(0, 4096)
   if (!cleanText) throw new Error('Texte vide après nettoyage')
 
-  // TTS/Phase 0 — point n°1 : juste avant le fetch (mesure inclus déjà toute la prépa)
   try { onLatencyLog?.('tts_fetch_start', { cleanTextLen: cleanText.length }) } catch (_) {}
 
   const res = await fetch(TTS_PROXY, {
@@ -185,7 +186,6 @@ export async function speakWithOpenAI({ openAiKey, text, voice = 'nova', speed =
     }),
   })
 
-  // TTS/Phase 0 — point n°2 : headers HTTP arrivés (latence proxy + génération OpenAI démarrée)
   try { onLatencyLog?.('tts_response_headers', { status: res.status, ok: res.ok }) } catch (_) {}
 
   if (!res.ok) {
@@ -198,13 +198,11 @@ export async function speakWithOpenAI({ openAiKey, text, voice = 'nova', speed =
   }
   const blob = await res.blob()
 
-  // TTS/Phase 0 — point n°3 (CRITIQUE pour G2) : blob complet téléchargé.
-  //   delta (tts_blob_ready - tts_response_headers) = coût pur du téléchargement MP3.
   try { onLatencyLog?.('tts_blob_ready', { blobSizeKB: Math.round((blob?.size ?? 0) / 1024) }) } catch (_) {}
 
   const url = URL.createObjectURL(blob)
   const audio = new Audio(url)
-  audio.play()
+  if (autoPlay) audio.play()
   return audio
 }
 
