@@ -73,6 +73,11 @@ export default function PackOpeningModal({ onClose }) {
           <button style={S.cta} onClick={onClose}>
             Entrer dans mon atelier ✨
           </button>
+          {/* #19 — Hint discret : voix Léa nécessite clé OpenAI dans Réglages */}
+          <p style={S.voiceHint}>
+            Pour entendre la voix de Léa, ajoute ta clé OpenAI dans les{' '}
+            <strong>Réglages</strong> (icône ⚙️ en haut à droite).
+          </p>
         </div>
       </div>
     </div>
@@ -156,5 +161,15 @@ const S = {
     boxShadow: '0 4px 24px rgba(196,149,106,.35)',
     letterSpacing: '0.02em',
     transition: 'filter .2s',
+  },
+  // #19 — note discrète sous le CTA pour la voix Léa
+  voiceHint: {
+    marginTop: 4,
+    fontSize: 'clamp(.72rem, 1.8vw, .8rem)',
+    color: '#6B5A3E',
+    fontFamily: "'Nunito', sans-serif",
+    lineHeight: 1.55,
+    maxWidth: 340,
+    textAlign: 'center',
   },
 }
