@@ -9,6 +9,8 @@ import {
 } from '../lib/db'
 import { pushSnapshot, pullSnapshot, buildSnapshot, whoWins } from '../lib/sync'
 import { uploadAllBlobs, downloadAllBlobs } from '../lib/driveSync'
+// T8.4b — Check session Drive pour décider download blobs vs toast offline
+import { getCurrentUser } from '../lib/googleDrive'
 
 export function useAppState() {
   const [ready,          setReady]          = useState(false)
@@ -35,6 +37,10 @@ export function useAppState() {
   const [vracIdeas,      setVracIdeas]      = useState([])    // boîte à idées
   // ── Traces — Le tiroir (LOT 1B) ──────────────────────────────
   const [traces,         setTraces]         = useState([])    // métadonnées seules, blobs lus à la demande
+  // T8.4b — Message à afficher quand un import inbound apporte des traces
+  // mais que Drive n'est pas connecté (les blobs restent en attente).
+  // App.jsx watch ce state et déclenche un toast info + dismiss.
+  const [pendingBlobsMessage, setPendingBlobsMessage] = useState(null)
   // ── Préférences d'affichage ──────────────────────────────────
   const [editorFont,     setEditorFontState]  = useState('m')       // s | m | l | xl
   const [editorTheme,    setEditorThemeState] = useState('jour')     // jour | soir | bougie
@@ -263,16 +269,38 @@ export function useAppState() {
           setSyncMessage('Snapshot distant corrompu — import annulé, données locales préservées')
           return
         }
-        // T8.2 — Restaurer les blobs manquants depuis Drive (best-effort, non bloquant)
-        downloadAllBlobs(currentTraces).catch(err =>
-          console.warn('[Sync] downloadAllBlobs partiel:', err?.message)
-        )
-        // Rafraîchir l'état React depuis IndexedDB
-        const [chs, v, ch] = await Promise.all([getChapters(), getVrac(), getChatHistoryRecent(200)])
+
+        // T8.4b — Restaurer les blobs depuis Drive pour les traces inbound.
+        // Bug fix : on passe remote.traces (les traces qui viennent d'être
+        // importées), PAS currentTraces (les traces locales d'avant l'import
+        // qui peuvent être vides sur un device fraîchement synchronisé).
+        const importedTraces = Array.isArray(remote.traces) ? remote.traces : []
+        if (importedTraces.length > 0) {
+          const driveUser = getCurrentUser()
+          if (driveUser) {
+            // Drive connecté → download best-effort en background
+            downloadAllBlobs(importedTraces).catch(err =>
+              console.warn('[Sync] downloadAllBlobs partiel:', err?.message)
+            )
+          } else {
+            // Drive non connecté → signal à App.jsx pour toast info
+            setPendingBlobsMessage('Reconnecte Google Drive depuis Réglages pour télécharger tes photos.')
+          }
+        }
+
+        // Rafraîchir l'état React depuis IndexedDB (traces + chapters + vrac + chat)
+        const [chs, v, ch, freshTraces] = await Promise.all([
+          getChapters(),
+          getVrac(),
+          getChatHistoryRecent(200),
+          getTraces(),
+        ])
         setChapters(chs)
         if (chs.length > 0) setCurrentId(chs[0].id)
         setVracIdeas(v)
         setChatHistory(ch)
+        // T8.4b — state traces synchronisé avec IDB après import (était omis)
+        setTraces(freshTraces.length > TRACES_RAM_CAP ? freshTraces.slice(0, TRACES_RAM_CAP) : freshTraces)
         setLastSyncedAt(remote.syncedAt)
         setSyncStatus('ok'); setSyncMessage(`Données mises à jour depuis le cloud ✓`)
       } else if (winner === 'local' || remote.empty) {
@@ -281,6 +309,7 @@ export function useAppState() {
         await setKV('lastSyncedAt', local.syncedAt)
         setLastSyncedAt(local.syncedAt)
         // T8.2 — Upload des blobs vers Drive (best-effort, non bloquant)
+        // Côté push, currentTraces (= traces locales) est bien le bon argument.
         uploadAllBlobs(currentTraces).catch(err =>
           console.warn('[Sync] uploadAllBlobs partiel:', err?.message)
         )
@@ -293,6 +322,9 @@ export function useAppState() {
       setSyncMessage(err.message || 'Erreur de synchronisation')
     }
   }, [])
+
+  // T8.4b — Dismiss du message pending blobs (appelé par App.jsx après toast)
+  const dismissPendingBlobsMessage = useCallback(() => setPendingBlobsMessage(null), [])
 
   // ─── Profil Caroline (onboarding) ────────────────────────────
   const setCarolineProfile = useCallback(async (profile) => {
@@ -474,6 +506,8 @@ const totalWords     = chapters.reduce(
     vracIdeas, unusedVrac, addVracIdea, markVracUsed, removeVracIdea,
     traces, createTrace, editTrace, removeTrace, loadTraceBlob,
     syncToken, setSyncToken, syncStatus, syncMessage, lastSyncedAt, syncNow,
+    // T8.4b — Signal Drive offline pour blobs en attente
+    pendingBlobsMessage, dismissPendingBlobsMessage,
     editorFont, setEditorFont, editorTheme, setEditorTheme, editorWidth, setEditorWidth,
     chatScale, setChatScale,
     uiScale, setUiScale,
