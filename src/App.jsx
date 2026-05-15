@@ -387,6 +387,7 @@ function AppInner() {
             traces={db.traces}
             onAddTrace={() => setModal('addTrace')}
             onSelectTrace={(t) => { setSelectedTrace(t); setModal('traceDetail') }}
+            loadTraceBlob={db.loadTraceBlob}
           />
         )}
         {modal === 'addTrace' && (
@@ -410,6 +411,7 @@ function AppInner() {
               setModal('tiroir')
             }}
             isMobile={isMobile}
+            loadTraceBlob={db.loadTraceBlob}
           />
         )}
         {showPack && (
