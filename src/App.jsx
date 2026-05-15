@@ -404,7 +404,7 @@ function AppInner() {
           <TraceDetailModal
             trace={selectedTrace}
             onClose={() => { setModal('tiroir'); setSelectedTrace(null) }}
-            onEdit={() => {}}
+            editTrace={db.editTrace}
             onDelete={async (t) => {
               await db.removeTrace(t.id)
               setSelectedTrace(null)
