@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import Modal from '../ui/Modal'
-import { X, Edit3, Check, Trash2, Archive } from 'lucide-react'
+import { X, Edit3, Check, Trash2, Archive, Tag } from 'lucide-react'
+import useClickAway from '../../hooks/useClickAway'
 
 const STATUS_LABELS = {
   private: { label: 'Gardée dans le tiroir', color: '#B0A090' },
@@ -9,6 +10,10 @@ const STATUS_LABELS = {
   scene:   { label: 'Scène avec Léa',        color: '#6B8F71' },
   letter:  { label: 'Lettre',                color: '#8FA8D8' },
 }
+
+// T6A — ordre d'affichage des options dans le popover statut
+// (correspond à la progression naturelle : privé → exploré → matière d'écriture)
+const STATUS_ORDER = ['private', 'vrac', 'note', 'scene', 'letter']
 
 // Champs de réponses Caroline — scope LOT 2A (cf docs/le-tiroir-v1.md §5)
 // Strict : 4 champs uniquement (pas whatItStirs ni autre, qui viendront en LOT 5)
@@ -32,15 +37,16 @@ export default function TraceDetailModal({
   const [blobUrl, setBlobUrl] = useState(null)
 
   // T7 — état édition inline
-  // localTrace : reflet optimiste de la trace courante (mis à jour après save)
-  // editingField : clé du champ en édition, ou null en lecture
-  // draftValue   : valeur du textarea en cours
-  // saving       : flag anti double-clic / disable boutons pendant l'écriture IDB
   const [localTrace,   setLocalTrace]   = useState(trace)
   const [editingField, setEditingField] = useState(null)
   const [draftValue,   setDraftValue]   = useState('')
   const [saving,       setSaving]       = useState(false)
   const textareaRef = useRef(null)
+
+  // T6A — état popover statut
+  const [statusOpen, setStatusOpen] = useState(false)
+  const statusContainerRef = useRef(null)
+  useClickAway(statusContainerRef, () => setStatusOpen(false))
 
   // Resync localTrace quand on change de trace (réouverture sur une autre fiche)
   useEffect(() => {
@@ -48,6 +54,7 @@ export default function TraceDetailModal({
     setEditingField(null)
     setDraftValue('')
     setSaving(false)
+    setStatusOpen(false)
   }, [trace?.id, trace])
 
   useEffect(() => {
@@ -89,13 +96,30 @@ export default function TraceDetailModal({
     }
   }, [editingField])
 
+  // T6A — Escape ferme le popover statut en priorité (capture phase pour
+  // passer AVANT le listener Escape de Modal qui ferme la modale entière).
+  useEffect(() => {
+    if (!statusOpen) return
+    const onKey = (e) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation()
+        setStatusOpen(false)
+      }
+    }
+    document.addEventListener('keydown', onKey, true)
+    return () => document.removeEventListener('keydown', onKey, true)
+  }, [statusOpen])
+
   if (!localTrace) return null
 
   // T7 — capacité d'édition : si editTrace n'est pas branchée, on grise les crayons
   // (état défensif : ne devrait jamais arriver en prod car App.jsx fournit db.editTrace).
   const canEdit = typeof editTrace === 'function'
 
-  const status = STATUS_LABELS[localTrace.status] || STATUS_LABELS.private
+  const currentStatusKey = localTrace.status && STATUS_LABELS[localTrace.status]
+    ? localTrace.status
+    : 'private'
+  const status = STATUS_LABELS[currentStatusKey]
   const dateStr = localTrace.createdAt
     ? new Date(localTrace.createdAt).toLocaleDateString('fr-FR', {
         day: 'numeric',
@@ -148,6 +172,26 @@ export default function TraceDetailModal({
     }
   }
 
+  // ── T6A — Changement de statut (aucun effet de bord) ─────────
+  // Touche uniquement le champ status de la trace via editTrace. Aucune création
+  // automatique côté vrac/scene/note/letter à ce stade — décisions T6B basées
+  // sur l'usage testeur. updatedAt bumpé par db.updateTrace.
+  const handleChangeStatus = async (newStatus) => {
+    setStatusOpen(false)
+    if (!canEdit) return
+    if (newStatus === currentStatusKey) return   // idempotent : pas d'appel DB si déjà ce statut
+    try {
+      await editTrace(localTrace.id, { status: newStatus })
+      setLocalTrace(t => ({
+        ...t,
+        status: newStatus,
+        updatedAt: new Date().toISOString(),
+      }))
+    } catch (err) {
+      console.error('[T6A] changement de statut échoué', err)
+    }
+  }
+
   const tryClose = () => {
     if (editingField) {
       const ok = window.confirm('Vraiment fermer sans enregistrer cette réponse ?')
@@ -190,7 +234,7 @@ export default function TraceDetailModal({
           )}
         </div>
 
-        {/* Statut — pastille colorée informationnelle (pas un contrôle) */}
+        {/* Statut — pastille colorée informationnelle (pas un contrôle ; le sélecteur est dans le footer) */}
         <div style={S.statusRow}>
           <span style={{ ...S.statusDot, background: status.color }} />
           <span style={S.statusLabel}>{status.label}</span>
@@ -279,12 +323,54 @@ export default function TraceDetailModal({
       </div>
 
       {/* Footer actions
-          T7 : bouton "Compléter mes réponses" retiré (remplacé par les crayons par champ).
-          Bouton "Changer ce que j'en fais" retiré : était no-op, sans promesse produit
-          claire (anti-pattern UX). Sera rebranché en T6 quand les destinations
-          vrac/note/scène/lettre auront un comportement réel. STATUS_LABELS et S.actionBtn
-          conservés volontairement pour réutilisation T6. */}
+          T6A : bouton "Cette trace, j'en fais quoi ?" → popover sélecteur de statut.
+                Aucun effet de bord à ce stade (juste tag du champ status).
+                Décisions T6B (vrac auto / injection Léa / etc.) basées sur l'usage testeur. */}
       <div style={S.footer}>
+        <div ref={statusContainerRef} style={{ position: 'relative' }}>
+          <button
+            type="button"
+            style={{
+              ...S.actionBtn,
+              opacity: !canEdit ? 0.5 : 1,
+              cursor: !canEdit ? 'not-allowed' : 'pointer',
+            }}
+            onClick={() => setStatusOpen(o => !o)}
+            disabled={!canEdit}
+            aria-haspopup="menu"
+            aria-expanded={statusOpen}
+            aria-label="Cette trace, j'en fais quoi ?"
+          >
+            <Tag size={14} /> Cette trace, j'en fais quoi ?
+          </button>
+
+          {statusOpen && (
+            <div role="menu" style={S.statusDropdown}>
+              {STATUS_ORDER.map((key) => {
+                const opt = STATUS_LABELS[key]
+                const isCurrent = currentStatusKey === key
+                return (
+                  <button
+                    key={key}
+                    role="menuitemradio"
+                    aria-checked={isCurrent}
+                    type="button"
+                    onClick={() => handleChangeStatus(key)}
+                    style={{
+                      ...S.statusOption,
+                      ...(isCurrent ? S.statusOptionCurrent : {}),
+                    }}
+                  >
+                    <span style={{ ...S.statusDot, background: opt.color }} />
+                    <span style={S.statusOptionLabel}>{opt.label}</span>
+                    {isCurrent && <Check size={12} style={S.statusCheck} />}
+                  </button>
+                )
+              })}
+            </div>
+          )}
+        </div>
+
         <button style={S.deleteBtn} onClick={handleDelete} aria-label="Supprimer cette trace">
           <Trash2 size={14} />
         </button>
@@ -502,6 +588,46 @@ const S = {
     color: '#8B6445',
     cursor: 'pointer',
   },
+  // T6A — Popover statut (positionné au-dessus du bouton, footer en bas de modale)
+  statusDropdown: {
+    position: 'absolute',
+    bottom: 'calc(100% + 6px)',
+    left: 0,
+    background: '#FFFEFB',
+    border: '1px solid #EDE7DE',
+    borderRadius: 12,
+    boxShadow: '0 8px 28px rgba(42,26,14,.14)',
+    padding: '6px',
+    zIndex: 50,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 2,
+    width: 230,
+    animation: 'slideUp .18s ease',
+  },
+  statusOption: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 10,
+    padding: '8px 10px',
+    background: 'transparent',
+    border: '1.5px solid transparent',
+    borderRadius: 8,
+    fontSize: '.78rem',
+    fontWeight: 600,
+    fontFamily: "'Nunito', sans-serif",
+    color: '#2A1A0E',
+    cursor: 'pointer',
+    textAlign: 'left',
+    width: '100%',
+    transition: 'background .12s ease',
+  },
+  statusOptionCurrent: {
+    background: '#F5F0E8',
+    borderColor: '#D8C9B8',
+  },
+  statusOptionLabel: { flex: 1 },
+  statusCheck: { color: '#6B8F71', flexShrink: 0 },
   deleteBtn: {
     display: 'flex',
     alignItems: 'center',
