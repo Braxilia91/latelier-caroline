@@ -8,8 +8,18 @@ import { X, Download, FileText } from 'lucide-react'
 import { buildLocalBackup } from '../../lib/db'
 
 export default function ExportModal({ chapters, name, onClose }) {
+  // T15 — 3 modes : 'full' (tout) | 'written' (contenu non vide) | 'public' (non privé + contenu)
   const [mode, setMode] = useState('full')
   const [exporting, setExporting] = useState(false)
+
+  // T15 — Sélection adaptée au mode courant.
+  // Note : le mode 'public' filtre les private=true ET les chapitres vides
+  // (intention : version partageable propre à donner à un tiers).
+  const selectChapters = () => {
+    if (mode === 'public')  return chapters.filter(c => c.private !== true && c.content?.trim())
+    if (mode === 'written') return chapters.filter(c => c.content?.trim())
+    return chapters
+  }
 
   const exportTXT = () => {
     const lines = []
@@ -18,7 +28,7 @@ export default function ExportModal({ chapters, name, onClose }) {
     lines.push('─'.repeat(50))
     lines.push('')
 
-    const selected = mode === 'full' ? chapters : chapters.filter(c => c.content?.trim())
+    const selected = selectChapters()
 
     selected.forEach((ch, i) => {
       lines.push(`CHAPITRE ${i + 1} — ${ch.title.toUpperCase()}`)
@@ -35,13 +45,16 @@ export default function ExportModal({ chapters, name, onClose }) {
     const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
-    a.href = url; a.download = `mon-histoire-${new Date().toISOString().slice(0,10)}.txt`
+    // Nom de fichier suffixé par le mode pour ne pas écraser une autre version
+    const suffix = mode === 'public' ? '-public' : (mode === 'written' ? '-ecrits' : '')
+    a.href = url; a.download = `mon-histoire${suffix}-${new Date().toISOString().slice(0,10)}.txt`
     a.click(); URL.revokeObjectURL(url)
   }
 
   // T8.4c — Sauvegarde complète : textes + photos en base64.
-  // Coût : encodage FileReader peut prendre 1-3 s par photo de 1-2 Mo,
-  // on bloque le bouton pour éviter les doubles clics.
+  // T15 — NON FILTRÉE par mode private : §9 protection des données, la
+  // sauvegarde locale doit toujours contenir l'intégralité pour permettre
+  // une restauration fidèle. Le filtre privé est limité au partage TXT.
   const exportBackup = async () => {
     if (exporting) return
     setExporting(true)
@@ -62,6 +75,7 @@ export default function ExportModal({ chapters, name, onClose }) {
   }
 
   const totalWords = chapters.reduce((a, c) => a + (c.content?.split(/\s+/).filter(Boolean).length ?? 0), 0)
+  const privateCount = chapters.filter(c => c.private === true).length
 
   return (
     <Modal
@@ -77,18 +91,35 @@ export default function ExportModal({ chapters, name, onClose }) {
         <span><strong>{chapters.length}</strong> chapitres</span>
         <span>·</span>
         <span><strong>{totalWords.toLocaleString('fr')}</strong> mots au total</span>
+        {privateCount > 0 && (
+          <>
+            <span>·</span>
+            <span><strong>{privateCount}</strong> privé{privateCount > 1 ? 's' : ''}</span>
+          </>
+        )}
       </div>
 
+      {/* T15 — 3 modes pour TXT */}
       <div style={styles.opts}>
         <label style={{ ...styles.opt, ...(mode === 'full' ? styles.optAct : {}) }}>
           <input type="radio" name="mode" value="full" checked={mode === 'full'} onChange={() => setMode('full')} hidden />
-          <span>Tous les chapitres</span>
+          <span>Tous</span>
         </label>
         <label style={{ ...styles.opt, ...(mode === 'written' ? styles.optAct : {}) }}>
           <input type="radio" name="mode" value="written" checked={mode === 'written'} onChange={() => setMode('written')} hidden />
-          <span>Chapitres écrits seulement</span>
+          <span>Chapitres écrits</span>
+        </label>
+        <label style={{ ...styles.opt, ...(mode === 'public' ? styles.optAct : {}) }}>
+          <input type="radio" name="mode" value="public" checked={mode === 'public'} onChange={() => setMode('public')} hidden />
+          <span>🔓 Publics</span>
         </label>
       </div>
+
+      {mode === 'public' && (
+        <p style={styles.modeHint}>
+          Les chapitres marqués privés (🔒) seront <strong>exclus</strong> de ce fichier — version à partager avec ta famille.
+        </p>
+      )}
 
       <button style={styles.btn} onClick={exportTXT}>
         <FileText size={16} /> Exporter en .txt <span style={styles.hint2}>(Word, LibreOffice…)</span>
@@ -111,7 +142,7 @@ export default function ExportModal({ chapters, name, onClose }) {
       </button>
 
       <p style={styles.note}>
-        Le fichier .json contient tous tes textes, chapitres, paramètres <strong>et les photos du Tiroir</strong>. Garde-le précieusement — il te permettra de tout restaurer.
+        Le fichier .json contient tous tes textes, chapitres, paramètres <strong>et les photos du Tiroir</strong> — y compris les passages privés. Garde-le précieusement — il te permettra de tout restaurer.
       </p>
     </Modal>
   )
@@ -122,8 +153,9 @@ const styles = {
     display: 'flex', gap: 10, alignItems: 'center',
     background: '#F7EFE3', borderRadius: 10, padding: '10px 14px',
     fontSize: '.85rem', color: '#8B6445', fontWeight: 600, marginBottom: 16,
+    flexWrap: 'wrap',
   },
-  opts: { display: 'flex', gap: 8, marginBottom: 16 },
+  opts: { display: 'flex', gap: 8, marginBottom: 10 },
   opt: {
     flex: 1, padding: '10px 14px', border: '1.5px solid #DDD5C8',
     borderRadius: 10, cursor: 'pointer', textAlign: 'center',
@@ -131,6 +163,14 @@ const styles = {
     transition: 'all .15s',
   },
   optAct: { background: '#F7EFE3', borderColor: '#C4956A', color: '#8B6445' },
+  // T15 — Hint actif quand mode 'public' sélectionné
+  modeHint: {
+    fontSize: '.74rem', color: '#8B6445',
+    background: '#F7EFE3', borderRadius: 8,
+    padding: '8px 12px',
+    margin: '0 0 14px',
+    lineHeight: 1.5,
+  },
   btn: {
     width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
     padding: '11px 16px',
