@@ -82,13 +82,18 @@ a { color: var(--brown); }
 .lora  { font-family: var(--fb); }
 .nunito{ font-family: var(--fu); }
 
+/*
+ * T10 #13 — .btn : padding et font-size scalables via --ui-scale.
+ * Quand Caroline règle l'échelle UI à 1.3, les boutons grandissent
+ * proportionnellement au texte (clamp pour éviter des boutons absurdes).
+ */
 .btn {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 9px 18px;
+  gap: calc(6px * var(--ui-scale, 1));
+  padding: calc(9px * var(--ui-scale, 1)) calc(18px * var(--ui-scale, 1));
   border-radius: var(--radius-s);
-  font-size: .85rem;
+  font-size: clamp(.75rem, calc(.85rem * var(--ui-scale, 1)), 1.15rem);
   font-weight: 700;
   font-family: var(--fu);
   transition: all .18s;
@@ -109,8 +114,13 @@ a { color: var(--brown); }
 }
 .btn-ghost:hover { background: var(--gold-ll); border-color: var(--gold); color: var(--brown); }
 
+/*
+ * T10 #13 — .btn-icon : width/height scalables.
+ * Base 36px × --ui-scale, clampé entre 32px et 52px.
+ */
 .btn-icon {
-  width: 36px; height: 36px;
+  width:  clamp(32px, calc(36px * var(--ui-scale, 1)), 52px);
+  height: clamp(32px, calc(36px * var(--ui-scale, 1)), 52px);
   border-radius: var(--radius-s);
   display: inline-flex;
   align-items: center;
@@ -135,22 +145,29 @@ a { color: var(--brown); }
   padding: 16px;
   animation: fadeIn .18s ease;
 }
+/*
+ * T10 #13 — .modal-box : padding et max-width scalables.
+ * max-width clampé entre 380px et 620px pour éviter des modals
+ * qui débordent l'écran à scale élevé.
+ */
 .modal-box {
   background: var(--paper);
   border-radius: 18px;
-  padding: 24px;
+  padding: clamp(16px, calc(24px * var(--ui-scale, 1)), 36px);
   width: 100%;
-  max-width: 420px;
+  max-width: clamp(380px, calc(420px * var(--ui-scale, 1)), 620px);
   max-height: 90vh;
   overflow-y: auto;
   box-shadow: var(--shadow-l);
   animation: slideUp .22s ease;
   position: relative;
 }
-.modal-box.wide { max-width: 560px; }
+.modal-box.wide {
+  max-width: clamp(460px, calc(560px * var(--ui-scale, 1)), 720px);
+}
 .modal-title {
   font-family: var(--fd);
-  font-size: 1.3rem;
+  font-size: clamp(1.1rem, calc(1.3rem * var(--ui-scale, 1)), 1.7rem);
   font-weight: 600;
   color: var(--brown);
   margin-bottom: 16px;
@@ -181,12 +198,15 @@ a { color: var(--brown); }
   letter-spacing: 1px;
   margin-bottom: 5px;
 }
+/*
+ * T10 #13 — inputs et textareas scalables.
+ */
 .fg input, .fg textarea {
   width: 100%;
-  padding: 10px 13px;
+  padding: clamp(8px, calc(10px * var(--ui-scale, 1)), 14px) clamp(10px, calc(13px * var(--ui-scale, 1)), 18px);
   border: 1.5px solid var(--border);
   border-radius: var(--radius-s);
-  font-size: .9rem;
+  font-size: clamp(.8rem, calc(.9rem * var(--ui-scale, 1)), 1.1rem);
   background: var(--cream);
   color: var(--ink);
   outline: none;
