@@ -1,9 +1,20 @@
 // TiroirModal.jsx — T3 : thumbnail blob câblé via loadTraceBlob
 // T4 : OCR non bloquant
+// T6A.1 : pastille de statut en overlay sur chaque vignette
 
 import { useState, useEffect } from 'react'
 import { Archive, X, Plus } from 'lucide-react'
 import Modal from '../ui/Modal'
+
+// T6A.1 — palette dupliquée volontairement (cohérente avec TraceDetailModal).
+// Extraction dans src/lib/traceStatus.js prévue au prochain lot qui touche ces fichiers.
+const STATUS_LABELS = {
+  private: { label: 'Gardée dans le tiroir', color: '#8A7563' },
+  vrac:    { label: 'Envoyée au vrac',       color: '#E07A1F' },
+  note:    { label: 'Note brute',            color: '#6E3A1E' },
+  scene:   { label: 'Scène avec Léa',        color: '#3FA868' },
+  letter:  { label: 'Lettre',                color: '#3D6FCF' },
+}
 
 export default function TiroirModal({
   onClose,
@@ -116,14 +127,25 @@ function TraceCard({ trace, onClick, loadTraceBlob }) {
       : trace.whyNow
     : null
 
+  // T6A.1 — statut affiché en pastille sur la vignette
+  // Fallback 'private' si status absent ou inconnu (cohérent avec TraceDetailModal)
+  const statusKey = trace.status && STATUS_LABELS[trace.status] ? trace.status : 'private'
+  const statusInfo = STATUS_LABELS[statusKey]
+
   return (
-    <button type="button" style={S.card} onClick={onClick} aria-label={`Trace du ${dateStr}`}>
+    <button type="button" style={S.card} onClick={onClick} aria-label={`Trace du ${dateStr} — ${statusInfo.label}`}>
       <div style={S.cardThumb}>
         {blobUrl ? (
           <img src={blobUrl} alt="" style={S.cardImg} />
         ) : (
           <Archive size={28} color="var(--ink-ll)" strokeWidth={1.2} />
         )}
+        {/* T6A.1 — pastille statut : où est rangée cette trace */}
+        <span
+          style={{ ...S.statusPin, background: statusInfo.color }}
+          title={`Statut : ${statusInfo.label}`}
+          aria-hidden="true"
+        />
       </div>
       <div style={S.cardBody}>
         <div style={S.cardDate}>{dateStr}</div>
@@ -303,6 +325,19 @@ const S = {
     height: '100%',
     objectFit: 'cover',
     display: 'block',
+  },
+  // T6A.1 — pastille de statut en overlay coin haut-droit de la vignette
+  statusPin: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 18,
+    height: 18,
+    borderRadius: '50%',
+    border: '2px solid #FFFFFF',
+    boxShadow: '0 1px 4px rgba(42,26,14,0.35)',
+    pointerEvents: 'none',   // ne vole pas le clic sur la carte
+    zIndex: 2,
   },
   cardBody: {
     padding: '8px 10px 10px',
