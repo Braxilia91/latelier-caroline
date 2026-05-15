@@ -1,6 +1,6 @@
-// ─── IndexedDB wrapper v4 ──────────────────────────────────────
+// ─── IndexedDB wrapper v5 ──────────────────────────────────────
 const DB_NAME    = 'atelier_v3' // nom historique conservé — ne pas renommer, casserait les bases existantes
-const DB_VERSION = 4            // v4 : ajout stores 'traces' et 'traceBlobs' (tiroir)
+const DB_VERSION = 5            // v5 : fix keyPath traceBlobs + deleteTrace cascade atomique
 
 let _db = null
 
@@ -31,6 +31,21 @@ async function openDB() {
           db.createObjectStore('traces', { keyPath: 'id' })
         if (!db.objectStoreNames.contains('traceBlobs'))
           db.createObjectStore('traceBlobs', { keyPath: 'traceId' })
+      }
+      if (old < 5) {
+        // Corrige le keyPath traceBlobs : 'traceId' (v4 nouvelles installs) → 'key' (prod)
+        // En prod le store a déjà keyPath='key' → on ne touche pas, blobs préservés.
+        // Sur nouvelles installs (keyPath='traceId') → recréation propre (aucun blob à perdre).
+        if (db.objectStoreNames.contains('traceBlobs')) {
+          const upgradeStore = e.target.transaction.objectStore('traceBlobs')
+          if (upgradeStore.keyPath !== 'key') {
+            db.deleteObjectStore('traceBlobs')
+            db.createObjectStore('traceBlobs', { keyPath: 'key' })
+          }
+          // si keyPath === 'key' déjà : rien à faire
+        } else {
+          db.createObjectStore('traceBlobs', { keyPath: 'key' })
+        }
       }
     }
 
@@ -274,7 +289,7 @@ export async function deleteFragment(id) {
 // ─── Traces — tiroir mémoire photo ─────────────────────────────
 // Schéma trace    : { id, createdAt, updatedAt, ...metadata }
 // Schéma traceBlob: { key: traceId, blob, mimeType }
-//   keyPath réel en prod = 'key' (migration pré-T1 conservée, idempotente)
+//   keyPath réel en prod = 'key' (migration v5 idempotente)
 
 export async function getTraces() {
   await openDB()
@@ -340,12 +355,20 @@ export async function saveTrace(trace) {
   })
 }
 
+/**
+ * Suppression atomique : traces + traceBlobs en une seule transaction.
+ * oncomplete = les deux deletes ont réussi.
+ * onerror / onabort = rejet avec l'erreur IDB réelle.
+ */
 export async function deleteTrace(id) {
   await openDB()
   return new Promise((resolve, reject) => {
-    const req = tx('traces', 'readwrite').delete(id)
-    req.onsuccess = () => resolve()
-    req.onerror   = (e) => reject(e.target.error)
+    const txn = _db.transaction(['traces', 'traceBlobs'], 'readwrite')
+    txn.oncomplete = () => resolve()
+    txn.onerror    = (e) => reject(e.target.error || txn.error)
+    txn.onabort    = ()  => reject(txn.error || new Error('deleteTrace transaction aborted'))
+    txn.objectStore('traces').delete(id)
+    txn.objectStore('traceBlobs').delete(id)
   })
 }
 
@@ -366,7 +389,7 @@ export async function loadTraceBlob(traceId) {
 
 /**
  * Sauvegarde un blob de trace.
- * keyPath du store en prod = 'key' (migration pré-T1 idempotente).
+ * keyPath du store en prod = 'key' (migration v5 idempotente).
  * On passe { key: traceId, blob, mimeType } pour satisfaire ce keyPath.
  */
 export async function saveTraceBlob(traceId, blob, mimeType) {
