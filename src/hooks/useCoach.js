@@ -73,6 +73,7 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
   const speedRef       = useRef(1.0)
   const voiceOnRef     = useRef(true)
   const ttsChainRef    = useRef(null)
+  // TTS/Amorce — identifiant de tour pour invalider les tours précédents
   const turnIdRef      = useRef(null)
 
   useEffect(() => {
@@ -152,12 +153,14 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
     setTtsState(state => ({ ...state, speed: clamped }))
   }, [])
 
+  // ── Envoyer un message à Léa ──────────────────────────────
   const sendMessage = useCallback(async (
     userText,
     { type = 'chat', extraSystem, uiMessage = userText, hideUserMessage = false } = {}
   ) => {
     if (!apiKey) return null
 
+    // TTS/Phase 0 — Instrumentation latence
     const ttsRunId = 'lat_' + Math.random().toString(36).slice(2, 9)
     const ttsT0 = ttsNow()
     const ttsLog = (event, extras = {}) => {
@@ -168,7 +171,7 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
           elapsedMs: Math.round(ttsNow() - ttsT0),
           ...extras,
         })
-      } catch (_) {}
+      } catch (_) { /* tolérant */ }
     }
     ttsLog('user_send', { type, userTextLen: (userText || '').length })
 
@@ -179,14 +182,22 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
       addMessage({ role: 'user', content: uiMessage })
     }
 
+    // ── TTS/Amorce — setup ───────────────────────────────────────
     const shouldPlayAmorce = type === 'chat' && voiceOn && !!openAiKey
 
+    // turnId : invalide les tours précédents dès l'entrée dans sendMessage
     const turnId = Symbol('turn')
     turnIdRef.current = turnId
 
     let amorceFinishedResolve = () => {}
     const amorceFinished = new Promise(r => { amorceFinishedResolve = r })
     let amorceEndTime = null
+
+    // TTS/Patience — prefetch en parallèle du fetch main dès text_done.
+    // Lance le fetch patience immédiatement si shouldPlayAmorce, sans attendre
+    // de savoir si on en aura besoin. Décision jouée/ignorée différée.
+    let patienceData = null          // { text, patienceIdx }
+    let patienceAudioPromise = null  // Promise<HTMLAudioElement> | null
 
     if (shouldPlayAmorce) {
       stopAllTts()
@@ -201,6 +212,7 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
         amorceTextLen: amorce.text.length,
       })
 
+      // Lance l'amorce en arrière-plan — Claude démarre en parallèle
       ;(async () => {
         try {
           const audio = await speakWithOpenAI({
@@ -230,7 +242,9 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
               resolve()
             }
 
-            const onPause = () => { if (playStarted) done() }
+            const onPause = () => {
+              if (playStarted) done()
+            }
 
             audio.addEventListener('ended', done, { once: true })
             audio.addEventListener('error', done, { once: true })
@@ -257,6 +271,7 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
       amorceFinishedResolve()
     }
 
+    // ── Appel Claude (en parallèle de l'amorce) ──────────────────
     let full = ''
     let firstChunkLogged = false
 
@@ -298,9 +313,30 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
         if (openAiKey) {
           const segments = splitIntoSegments(full)
 
+          // ── Prefetch patience en parallèle dès text_done ──────────
+          // Lancé ici — avant await amorceFinished — pour que le blob
+          // patience soit prêt au moment où on en a besoin.
+          // Ne dépend pas de shouldPlayAmorce car on est dans openAiKey && voiceOn.
+          if (shouldPlayAmorce) {
+            patienceData = pickPatience()
+            ttsLog('tts_request', {
+              isPatience: true,
+              ttsRole: 'patience',
+              patienceIdx: patienceData.patienceIdx,
+              note: 'prefetch_parallel',
+            })
+            patienceAudioPromise = speakWithOpenAI({
+              openAiKey,
+              text: patienceData.text,
+              voice: leaVoice,
+              speed: speedRef.current,
+              autoPlay: false,
+              onLatencyLog: (event, extras) => ttsLog(event, { isPatience: true, ttsRole: 'patience', ...extras }),
+            }).catch(() => null) // silencieux — patience non critique
+          }
+
           if (segments.length <= 1) {
             // ── Path court — single audio ──────────────────────────
-            // mainAudioPromise lancé en fire-and-forget dès text_done
             ttsLog('tts_request', {
               isAmorce: false,
               ttsRole: 'main',
@@ -308,6 +344,7 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
               segmentsTotal: 1,
               segmentLen: (segments[0] || full).length,
             })
+            // Fetch main lancé en fire-and-forget en parallèle de l'amorce
             const mainAudioPromise = speakWithOpenAI({
               openAiKey,
               text: segments[0] || full,
@@ -330,20 +367,13 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
               if (turnIdRef.current !== turnId) return
 
               // 3. Patience si gap réel amorce→blob main > 1.5s
-              // Check ICI — après le blob, pas avant — pour mesurer le vrai silence perçu
-              if (shouldPlayAmorce && amorceEndTime !== null && (ttsNow() - amorceEndTime) > 1500) {
-                const patience = pickPatience()
-                ttsLog('tts_request', { isPatience: true, ttsRole: 'patience', patienceIdx: patience.patienceIdx })
+              // patienceAudioPromise est déjà en cours de fetch depuis text_done
+              // → dans le cas nominal, le blob est déjà prêt ici (zéro latence réseau)
+              if (shouldPlayAmorce && amorceEndTime !== null && (ttsNow() - amorceEndTime) > 1500 && patienceAudioPromise) {
                 try {
-                  const patienceAudio = await speakWithOpenAI({
-                    openAiKey,
-                    text: patience.text,
-                    voice: leaVoice,
-                    speed: speedRef.current,
-                    autoPlay: false,
-                    onLatencyLog: (event, extras) => ttsLog(event, { isPatience: true, ttsRole: 'patience', ...extras }),
-                  })
-                  if (turnIdRef.current === turnId) {
+                  const patienceAudio = await patienceAudioPromise
+                  ttsLog('tts_blob_ready', { isPatience: true, ttsRole: 'patience', note: 'prefetched' })
+                  if (patienceAudio && turnIdRef.current === turnId) {
                     audioRef.current = patienceAudio
                     try { patienceAudio.playbackRate = speedRef.current } catch (_) {}
                     await new Promise(resolve => {
@@ -355,8 +385,6 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
                       }, { once: true })
                       patienceAudio.play().catch(resolve)
                     })
-                  } else {
-                    try { patienceAudio.pause() } catch (_) {}
                   }
                 } catch (_) {
                   ttsLog('tts_blob_ready', { isPatience: true, ttsRole: 'patience', note: 'patience_error' })
@@ -382,7 +410,7 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
               mainAudio.play().catch(() => {})
 
             } catch (ttsErr) {
-              console.warn('[TTS] OpenAI failed, browser fallback', {
+              console.warn('[TTS] OpenAI échec, fallback navigateur', {
                 status: ttsErr?.status ?? null,
                 message: ttsErr?.message || String(ttsErr),
                 body: ttsErr?.body || null,
@@ -392,8 +420,8 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
             }
 
           } else {
-            // ── Path long — segment queue ──────────────────────────
-            // firstSegmentPromise lancé en fire-and-forget dès text_done
+            // ── Path long — queue de segments ─────────────────────
+            // Fetch segment 0 lancé en fire-and-forget en parallèle de l'amorce
             ttsLog('tts_request', {
               isAmorce: false,
               ttsRole: 'main',
@@ -492,7 +520,7 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
                 ttsLog('tts_blob_ready', { isAmorce: false, ttsRole: 'main', segmentIdx: 0 })
               } catch (ttsErr) {
                 if (ttsChainRef.current !== chainId) return
-                console.warn('[TTS] segment 0 OpenAI failed, browser fallback', {
+                console.warn('[TTS] segment 0 OpenAI échec, fallback navigateur', {
                   status: ttsErr?.status ?? null,
                   message: ttsErr?.message || String(ttsErr),
                 })
@@ -504,20 +532,13 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
               if (ttsChainRef.current !== chainId) return
 
               // 3. Patience si gap réel amorce→blob segment 0 > 1.5s
-              // Check ICI — après le blob, pas avant — pour mesurer le vrai silence perçu
-              if (shouldPlayAmorce && amorceEndTime !== null && (ttsNow() - amorceEndTime) > 1500) {
-                const patience = pickPatience()
-                ttsLog('tts_request', { isPatience: true, ttsRole: 'patience', patienceIdx: patience.patienceIdx })
+              // patienceAudioPromise est déjà en cours de fetch depuis text_done
+              // → dans le cas nominal, le blob est déjà prêt ici (zéro latence réseau)
+              if (shouldPlayAmorce && amorceEndTime !== null && (ttsNow() - amorceEndTime) > 1500 && patienceAudioPromise) {
                 try {
-                  const patienceAudio = await speakWithOpenAI({
-                    openAiKey,
-                    text: patience.text,
-                    voice: leaVoice,
-                    speed: speedRef.current,
-                    autoPlay: false,
-                    onLatencyLog: (event, extras) => ttsLog(event, { isPatience: true, ttsRole: 'patience', ...extras }),
-                  })
-                  if (ttsChainRef.current === chainId) {
+                  const patienceAudio = await patienceAudioPromise
+                  ttsLog('tts_blob_ready', { isPatience: true, ttsRole: 'patience', note: 'prefetched' })
+                  if (patienceAudio && ttsChainRef.current === chainId) {
                     audioRef.current = patienceAudio
                     try { patienceAudio.playbackRate = speedRef.current } catch (_) {}
                     await new Promise(resolve => {
@@ -529,8 +550,6 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
                       }, { once: true })
                       patienceAudio.play().catch(resolve)
                     })
-                  } else {
-                    try { patienceAudio.pause() } catch (_) {}
                   }
                 } catch (_) {
                   ttsLog('tts_blob_ready', { isPatience: true, ttsRole: 'patience', note: 'patience_error' })
@@ -660,7 +679,7 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
   }
 }
 
-// Memory extraction background job
+// ─── Extraction de keyPoint en arrière-plan (mémoire Léa) ──
 async function extractKeyPointInBackground({ apiKey, userText, assistantText, updateLeaMemory }) {
   if (!apiKey) return
   try {
@@ -682,7 +701,7 @@ async function extractKeyPointInBackground({ apiKey, userText, assistantText, up
         keyPoints: [...existing, point].slice(-10),
       }
     })
-  } catch (_) {}
+  } catch (_) { /* silencieux — la mémoire n'est pas critique */ }
 }
 
 function parseAkinatorResponse(raw) {
@@ -718,7 +737,7 @@ function parseAkinatorResponse(raw) {
             .slice(0, 6),
         }
       }
-    } catch (_) {}
+    } catch (_) { /* fall through */ }
     return null
   }
 
