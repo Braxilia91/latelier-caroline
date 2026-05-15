@@ -59,6 +59,13 @@ function splitIntoSegments(text) {
   return segments
 }
 
+// TTS/Phase 0 — Horloge monotone si dispo, fallback Date.now().
+function ttsNow() {
+  return (typeof performance !== 'undefined' && performance.now)
+    ? performance.now()
+    : Date.now()
+}
+
 export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, leaVoice, addMessage, chatHistory, carolineProfile, leaMemory, updateLeaMemory }) {
   const [loading,    setLoading]    = useState(false)
   const [streaming,  setStreaming]  = useState('')
@@ -89,7 +96,6 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
     leaMemory,
   }), [name, moodToday, currentChapter, carolineProfile, leaMemory])
 
-  // ── Helpers TTS ────────────────────────────────────────────
   const stopAllTts = useCallback(() => {
     if (audioRef.current) {
       try { audioRef.current.__ttsAbort?.abort() } catch (_) {}
@@ -115,10 +121,10 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
     utt.lang = 'fr-FR'
     utt.rate = speedRef.current
     utt.onstart  = () => setTtsState({ playing: true,  paused: false, speed: speedRef.current, mode: 'browser' })
-    utt.onpause  = () => setTtsState(s => ({ ...s, playing: false, paused: true }))
-    utt.onresume = () => setTtsState(s => ({ ...s, playing: true,  paused: false }))
     utt.onend    = () => setTtsState({ playing: false, paused: false, speed: speedRef.current, mode: null })
     utt.onerror  = () => setTtsState({ playing: false, paused: false, speed: speedRef.current, mode: null })
+    utt.onpause  = () => setTtsState(s => ({ ...s, playing: false, paused: true }))
+    utt.onresume = () => setTtsState(s => ({ ...s, playing: true,  paused: false }))
     browserUttRef.current = utt
     setTtsState({ playing: true, paused: false, speed: speedRef.current, mode: 'browser' })
     try { window.speechSynthesis.speak(utt) } catch (_) {}
@@ -161,28 +167,53 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
     { type = 'chat', extraSystem, uiMessage = userText, hideUserMessage = false } = {}
   ) => {
     if (!apiKey) return null
+
+    // TTS/Phase 0 — Instrumentation latence. runId unique par message pour
+    // corréler la chaîne d'événements dans DevTools (grep [TTS/lat]).
+    // Aucun impact comportemental — purement passif.
+    const ttsRunId = 'lat_' + Math.random().toString(36).slice(2, 9)
+    const ttsT0 = ttsNow()
+    const ttsLog = (event, extras = {}) => {
+      try {
+        console.info('[TTS/lat]', {
+          runId: ttsRunId,
+          event,
+          elapsedMs: Math.round(ttsNow() - ttsT0),
+          ...extras,
+        })
+      } catch (_) { /* tolérant */ }
+    }
+    ttsLog('user_send', { type, userTextLen: (userText || '').length })
+
     setLoading(true); setStreaming('')
 
-    const userMsg = { role: 'user', content: userText }
+    // Construction historique pour Claude
+    const history = hideUserMessage
+      ? [...chatHistory.map(({ role, content }) => ({ role, content })), { role: 'user', content: userText }]
+      : [...chatHistory.map(({ role, content }) => ({ role, content })), { role: 'user', content: userText }]
 
-    if (!hideUserMessage && uiMessage) {
+    if (!hideUserMessage) {
       addMessage({ role: 'user', content: uiMessage })
     }
 
-    const history = [...chatHistory.slice(-20), userMsg].map(m => ({
-      role: m.role,
-      content: m.content,
-    }))
-
     let full = ''
+    let firstChunkLogged = false   // TTS/Phase 0 — flag pour ne logger qu'au 1er delta
+
     try {
       full = await askClaude({
         apiKey,
         systemPrompt: extraSystem || systemPrompt,
         messages: history,
         maxTokens: 600,
-        onChunk: (text) => setStreaming(text),
+        onChunk: (text) => {
+          setStreaming(text)
+          if (!firstChunkLogged) {
+            firstChunkLogged = true
+            ttsLog('text_first_chunk', { partialLen: text.length })
+          }
+        },
       })
+      ttsLog('text_done', { textLen: full.length })
       addMessage({ role: 'assistant', content: full })
       // LOT 3.6 — Reset immédiat pour éviter coexistence bulle finale + bulle streaming
       // pendant que la branche TTS tourne (peut prendre plusieurs secondes).
@@ -211,13 +242,18 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
 
           if (segments.length <= 1) {
             // Path court (anti-régression) : single audio + listeners directs
+            const segmentIdx = 0
             try {
+              ttsLog('tts_request', { segmentIdx, segmentsTotal: 1, segmentLen: (segments[0] || full).length })
               const audio = await speakWithOpenAI({
                 openAiKey,
                 text: segments[0] || full,
                 voice: leaVoice,
                 speed: speedRef.current,
+                // TTS/Phase 0 — log fin du goulot G2 (await res.blob() dans claude.js)
+                onLatencyLog: (event, extras) => ttsLog(event, { segmentIdx, ...extras }),
               })
+              ttsLog('tts_audio_ready', { segmentIdx })
               audioRef.current = audio
               try { audio.playbackRate = speedRef.current } catch (_) {}
 
@@ -225,7 +261,7 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
               const ac = new AbortController()
               audio.__ttsAbort = ac
               const opts = { signal: ac.signal }
-              audio.addEventListener('play',  () => setTtsState({ playing: true,  paused: false, speed: speedRef.current, mode: 'openai' }), opts)
+              audio.addEventListener('play',  () => { ttsLog('audio_play_start', { segmentIdx }); setTtsState({ playing: true,  paused: false, speed: speedRef.current, mode: 'openai' }) }, opts)
               audio.addEventListener('pause', () => setTtsState(s => ({ ...s, playing: false, paused: true })), opts)
               audio.addEventListener('ended', () => setTtsState({ playing: false, paused: false, speed: speedRef.current, mode: null }), opts)
               audio.addEventListener('error', () => setTtsState({ playing: false, paused: false, speed: speedRef.current, mode: null }), opts)
@@ -254,16 +290,21 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
                   : s)
                 return
               }
+              const segmentIdx = i
               const segment = segments[i++]
 
               let audio
               try {
+                ttsLog('tts_request', { segmentIdx, segmentsTotal: segments.length, segmentLen: segment.length })
                 audio = await speakWithOpenAI({
                   openAiKey,
                   text: segment,
                   voice: leaVoice,
                   speed: speedRef.current,
+                  // TTS/Phase 0 — log fin du goulot G2 pour ce segment
+                  onLatencyLog: (event, extras) => ttsLog(event, { segmentIdx, ...extras }),
                 })
+                ttsLog('tts_audio_ready', { segmentIdx })
               } catch (ttsErr) {
                 if (ttsChainRef.current !== chainId) return
                 console.warn('[TTS] segment OpenAI échec, fallback navigateur', {
@@ -293,7 +334,7 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
               const ac = new AbortController()
               audio.__ttsAbort = ac
               const opts = { signal: ac.signal }
-              audio.addEventListener('play',  () => setTtsState({ playing: true,  paused: false, speed: speedRef.current, mode: 'openai' }), opts)
+              audio.addEventListener('play',  () => { ttsLog('audio_play_start', { segmentIdx }); setTtsState({ playing: true,  paused: false, speed: speedRef.current, mode: 'openai' }) }, opts)
               audio.addEventListener('pause', () => setTtsState(s => ({ ...s, playing: false, paused: true })), opts)
               audio.addEventListener('error', () => {
                 ttsChainRef.current = null
