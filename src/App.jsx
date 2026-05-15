@@ -117,7 +117,7 @@ function AppInner() {
       // Sur Safari iOS, NotAllowedError = pas de user gesture récent
       if (e?.name === 'NotAllowedError') {
         toast(
-          'Appuie une fois sur l'écran pour activer l'ambiance sonore.',
+          "Appuie une fois sur l'écran pour activer l'ambiance sonore.",
           'info',
           6000,
         )
@@ -245,7 +245,7 @@ function AppInner() {
             warned = true
             log('app', 'warn', 'Navigation privée détectée — stockage éphémère')
             toast(
-              'Tu sembles être en navigation privée. Tes textes seront perdus à la fermeture de l'onglet — ouvre l'app dans un onglet normal pour les conserver.',
+              "Tu sembles être en navigation privée. Tes textes seront perdus à la fermeture de l'onglet — ouvre l'app dans un onglet normal pour les conserver.",
               'info',
               14000,
             )
