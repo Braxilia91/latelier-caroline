@@ -338,6 +338,33 @@ export async function deleteTraceBlob(traceId) {
   })
 }
 
+// ─── T8.4a — Helpers blob ↔ base64 ─────────────────────────────
+// Locaux à db.js : pas d'import depuis driveSync.js pour préserver la
+// séparation des contextes (local vs cloud). 30 lignes dupliquées
+// acceptables vs un couplage cross-module.
+
+function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onloadend = () => {
+      // reader.result = "data:<mime>;base64,<base64>" → on extrait le base64.
+      const dataUrl = String(reader.result || '')
+      const idx     = dataUrl.indexOf(',')
+      resolve(idx >= 0 ? dataUrl.slice(idx + 1) : dataUrl)
+    }
+    reader.onerror = () => reject(reader.error || new Error('blobToBase64 read failed'))
+    reader.readAsDataURL(blob)
+  })
+}
+
+function base64ToBlob(b64, mimeType) {
+  const bin = atob(b64)
+  const len = bin.length
+  const arr = new Uint8Array(len)
+  for (let i = 0; i < len; i++) arr[i] = bin.charCodeAt(i)
+  return new Blob([arr], { type: mimeType || 'application/octet-stream' })
+}
+
 // ─── Import snapshot (sync inter-appareils) ────────────────────
 const KV_KEYS_SYNC = ['name','leaVoice','streak','sessions','lastSession','moodToday','moodValue','caroline_profile','lea_memory']
 
@@ -349,6 +376,9 @@ export function isValidSnapshot(data) {
   if (data.chat != null && !Array.isArray(data.chat)) return false
   if (typeof data.kv !== 'object' || !data.kv)        return false
   if (data.syncedAt != null && (!data.syncedAt || isNaN(Date.parse(data.syncedAt)))) return false
+  // T8.4a — traces / traceBlobs optionnels (array si présents)
+  if (data.traces     != null && !Array.isArray(data.traces))     return false
+  if (data.traceBlobs != null && !Array.isArray(data.traceBlobs)) return false
   for (const ch of data.chapters) {
     if (typeof ch.id !== 'string' || !ch.id)          return false
   }
@@ -419,6 +449,53 @@ export async function importSnapshot(snapshot) {
     })
   }
 
+  // 5. T8.4a — Traces (v4+) : clear+import atomic si array présent.
+  if (Array.isArray(snapshot.traces)) {
+    await new Promise((resolve, reject) => {
+      const txn   = _db.transaction(['traces'], 'readwrite')
+      const store = txn.objectStore('traces')
+      txn.oncomplete = () => resolve()
+      txn.onerror    = (e) => reject(e.target.error)
+      txn.onabort    = ()  => reject(txn.error || new Error('traces import aborted'))
+      store.clear()
+      for (const tr of snapshot.traces) {
+        if (tr?.id) store.put(tr)
+      }
+    })
+  }
+
+  // 6. T8.4a — TraceBlobs (v5+) : décodage base64 puis import atomic.
+  // Clear+import UNIQUEMENT si l'array est non vide → préserve les blobs
+  // locaux quand le snapshot vient du sync Worker (traces sans blobs).
+  if (Array.isArray(snapshot.traceBlobs) && snapshot.traceBlobs.length > 0) {
+    // Pré-décodage hors transaction IDB (atob synchrone, mais on évite
+    // de bloquer la transaction si plusieurs gros blobs à décoder).
+    const decoded = []
+    for (const entry of snapshot.traceBlobs) {
+      if (!entry?.traceId || !entry?.base64) continue
+      try {
+        const blob = base64ToBlob(entry.base64, entry.mimeType)
+        decoded.push({ key: entry.traceId, blob, mimeType: entry.mimeType || 'image/jpeg' })
+      } catch (e) {
+        console.warn('[Import] base64 decode failed for trace', entry.traceId, e?.message)
+      }
+    }
+
+    if (decoded.length > 0) {
+      await new Promise((resolve, reject) => {
+        const txn   = _db.transaction(['traceBlobs'], 'readwrite')
+        const store = txn.objectStore('traceBlobs')
+        txn.oncomplete = () => resolve()
+        txn.onerror    = (e) => reject(e.target.error)
+        txn.onabort    = ()  => reject(txn.error || new Error('traceBlobs import aborted'))
+        store.clear()
+        for (const item of decoded) {
+          store.put(item)
+        }
+      })
+    }
+  }
+
   await setKV('lastSyncedAt', snapshot.syncedAt || new Date().toISOString())
   return true
 }
@@ -443,7 +520,18 @@ export async function exportAllData() {
   }
 }
 
-export async function buildLocalBackup() {
+/**
+ * T8.4a — Backup local complet v5 : inclut les blobs des traces en base64.
+ *
+ * @param {object} [opts]
+ * @param {boolean} [opts.includeBlobs=true] — si false, retourne v4 metadata only.
+ * @returns {Promise<object>} snapshot prêt à sérialiser en JSON.
+ *
+ * Coût taille : +33 % par image (base64 vs binaire). Pour Caroline (< 100 photos),
+ * reste sous les 100 MB pour un export typique — acceptable car export rare.
+ * Note : pour de très gros volumes futurs, envisager CompressionStream natif.
+ */
+export async function buildLocalBackup({ includeBlobs = true } = {}) {
   const [chapters, name, streak, sessions, profile, vrac, chat, leaMemory, traces] = await Promise.all([
     getChapters(),
     getKV('name',             ''),
@@ -455,11 +543,31 @@ export async function buildLocalBackup() {
     getKV('lea_memory',       null),
     getTraces(),
   ])
+
+  let traceBlobs = []
+  if (includeBlobs && Array.isArray(traces) && traces.length > 0) {
+    for (const tr of traces) {
+      try {
+        const entry = await getTraceBlob(tr.id)
+        if (entry?.blob) {
+          const b64 = await blobToBase64(entry.blob)
+          traceBlobs.push({
+            traceId:  tr.id,
+            base64:   b64,
+            mimeType: entry.mimeType || 'image/jpeg',
+          })
+        }
+      } catch (e) {
+        console.warn('[Backup] blob encoding failed for trace', tr.id, e?.message)
+      }
+    }
+  }
+
   return {
     name, chapters, streak, sessions, profile, vrac,
-    chat, leaMemory, traces,
+    chat, leaMemory, traces, traceBlobs,
     backedUpAt: new Date().toISOString(),
-    version: 4,
+    version: includeBlobs ? 5 : 4,
   }
 }
 
