@@ -1,5 +1,5 @@
 import { useRef, useEffect } from 'react'
-import { Feather, Mic, BookOpen, Download, Settings, Lightbulb, Search, Music, Menu, Leaf, Archive } from 'lucide-react'
+import { Feather, Mic, BookOpen, Download, Settings, Lightbulb, Search, Music, Menu, Leaf, Archive, CalendarDays } from 'lucide-react'
 import useClickAway from '../../hooks/useClickAway'
 
 const MOODS = [
@@ -22,6 +22,7 @@ const SOUNDS = [
 export default function Header({
   name, moodToday, setMood, streak,
   onDictate, onPlan, onExport, onSettings, onInspir, onVocab, onTiroir,
+  onProgress,                                            // T11b — ouvre ProgressModal
   moodOpen, setMoodOpen,
   // ── Ambiance ──
   ambientSound, ambientPlaying, onAmbientChange,
@@ -112,26 +113,23 @@ export default function Header({
         </div>
       )}
 
-      {/* Actions droite
-          Réorganisation mobile (mini-lot dédié) :
-          - Tiroir : visible PARTOUT (avant : desktop uniquement)
-          - Exporter : visible DESKTOP UNIQUEMENT (avant : partout)
-          - Ambiance/Musique : visible DESKTOP UNIQUEMENT (avant : partout)
-          Desktop strictement inchangé. */}
+      {/* Actions droite */}
       <div style={styles.actions}>
-        <BtnH icon={<Lightbulb size={16} />} label="Inspiration" onClick={onInspir}   isMobile={isMobile} />
-        <BtnH icon={<Search   size={16} />} label="Vocabulaire" onClick={onVocab}    isMobile={isMobile} />
-        <BtnH icon={<Mic      size={16} />} label="Dicter"      onClick={onDictate}  isMobile={isMobile} />
-        <BtnH icon={<BookOpen size={16} />} label="Plan"         onClick={onPlan}     isMobile={isMobile} />
-        {/* Le Tiroir — accessible mobile + desktop depuis ce mini-lot */}
-        <BtnH icon={<Archive size={16} />} label="Le tiroir" onClick={onTiroir} isMobile={isMobile} />
-        {/* Exporter — desktop uniquement (masqué sur mobile, callback onExport conservé en props) */}
+        <BtnH icon={<Lightbulb    size={16} />} label="Inspiration"  onClick={onInspir}   isMobile={isMobile} />
+        <BtnH icon={<Search       size={16} />} label="Vocabulaire"  onClick={onVocab}    isMobile={isMobile} />
+        <BtnH icon={<Mic          size={16} />} label="Dicter"       onClick={onDictate}  isMobile={isMobile} />
+        <BtnH icon={<BookOpen     size={16} />} label="Plan"         onClick={onPlan}     isMobile={isMobile} />
+        {/* T11b — Régularité : visible desktop + mobile */}
+        <BtnH icon={<CalendarDays size={16} />} label="Régularité"   onClick={onProgress} isMobile={isMobile} />
+        {/* Le Tiroir — accessible mobile + desktop */}
+        <BtnH icon={<Archive      size={16} />} label="Le tiroir"    onClick={onTiroir}   isMobile={isMobile} />
+        {/* Exporter — desktop uniquement */}
         {!isMobile && (
           <BtnH icon={<Download size={16} />} label="Exporter" onClick={onExport} isMobile={false} />
         )}
         <BtnH icon={<Settings size={16} />} label="Réglages"    onClick={onSettings} isMobile={isMobile} />
 
-        {/* Ambiance sonore — desktop uniquement (callbacks et state conservés en props) */}
+        {/* Ambiance sonore — desktop uniquement */}
         {!isMobile && (
           <div ref={ambientContainerRef} style={{ position: 'relative' }}>
             <button
