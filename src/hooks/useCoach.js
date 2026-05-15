@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { askClaude, speakWithOpenAI, normalizeForNarrationFR } from '../lib/claude'
+import { pickAmorce, pickPatience } from '../lib/amorces'
 import {
   buildSystemPrompt, buildCorrectionPrompt,
   buildVocabPrompt, buildThreadPrompt,
@@ -15,10 +16,6 @@ const AKINATOR_SYSTEM_PROMPT = `Tu joues à un jeu de devinette lexicale en fran
 const MEMORY_SYSTEM_PROMPT = `Tu es chargée d'extraire UN fait notable d'un échange entre Caroline et Léa, pour la mémoire long-terme de Léa. Tu réponds par 1 phrase courte (max 18 mots) qui résume un fait personnel concret, une émotion partagée, un souvenir évoqué, ou une décision narrative — PAS un compliment générique ni une métaphore. Si rien de notable, réponds exactement "RIEN".`
 
 // LOT 2.3 — Segmentation des longs messages pour TTS.
-// Bénéfices : mute plus réactif (max ~MAX_SEGMENT_CHARS), dépassement
-// éventuel de la limite OpenAI 4096 chars, respiration naturelle entre
-// segments. Anti-régression : si message tient dans 1 segment, on
-// garde le path single-audio existant (commit 2.2).
 const MAX_SEGMENT_CHARS = 500
 
 function splitIntoSegments(text) {
@@ -33,7 +30,6 @@ function splitIntoSegments(text) {
 
   for (const part of parts) {
     if (part.length > MAX_SEGMENT_CHARS) {
-      // Phrase démesurément longue : split brutal par mots
       if (current) { segments.push(current); current = '' }
       const words = part.split(/\s+/)
       let chunk = ''
@@ -69,20 +65,17 @@ function ttsNow() {
 export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, leaVoice, addMessage, chatHistory, carolineProfile, leaMemory, updateLeaMemory }) {
   const [loading,    setLoading]    = useState(false)
   const [streaming,  setStreaming]  = useState('')
-  // LOT 2.2 — HP ON par défaut. Mute dynamique inchangé : toggleVoice
-  // appelle stopAllTts() quand on bascule à false (déjà géré).
   const [voiceOn,    setVoiceOn]    = useState(true)
   const [ttsState,   setTtsState]   = useState({ playing: false, paused: false, speed: 1.0, mode: null })
 
   const audioRef       = useRef(null)
   const browserUttRef  = useRef(null)
   const speedRef       = useRef(1.0)
-  // LOT 2.3 — refs pour la queue de segments
-  const voiceOnRef     = useRef(true)   // suivi du voiceOn pour les callbacks
-  const ttsChainRef    = useRef(null)   // id de la chaîne courante (Symbol unique)
+  const voiceOnRef     = useRef(true)
+  const ttsChainRef    = useRef(null)
+  // TTS/Amorce — identifiant de tour pour invalider les tours précédents
+  const turnIdRef      = useRef(null)
 
-  // LOT 2.3 — synchronise voiceOnRef avec voiceOn (utilisé dans listeners 'ended'
-  // pour décider si on enchaîne le segment suivant).
   useEffect(() => {
     voiceOnRef.current = voiceOn
   }, [voiceOn])
@@ -107,7 +100,6 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
       try { window.speechSynthesis.cancel() } catch (_) {}
     }
     browserUttRef.current = null
-    // LOT 2.3 — abort la chaîne de segments en cours
     ttsChainRef.current = null
     setTtsState(s => ({ playing: false, paused: false, speed: s.speed, mode: null }))
   }, [])
@@ -168,7 +160,7 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
   ) => {
     if (!apiKey) return null
 
-    // TTS/Phase 0 — Instrumentation latence (préservée pour mesurer V2 plus tard).
+    // TTS/Phase 0 — Instrumentation latence
     const ttsRunId = 'lat_' + Math.random().toString(36).slice(2, 9)
     const ttsT0 = ttsNow()
     const ttsLog = (event, extras = {}) => {
@@ -186,16 +178,102 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
     setLoading(true); setStreaming('')
 
     // Construction historique pour Claude
-    const history = hideUserMessage
-      ? [...chatHistory.map(({ role, content }) => ({ role, content })), { role: 'user', content: userText }]
-      : [...chatHistory.map(({ role, content }) => ({ role, content })), { role: 'user', content: userText }]
-
+    const history = [...chatHistory.map(({ role, content }) => ({ role, content })), { role: 'user', content: userText }]
     if (!hideUserMessage) {
       addMessage({ role: 'user', content: uiMessage })
     }
 
+    // ── TTS/Amorce — setup ───────────────────────────────────────
+    // shouldPlayAmorce : uniquement pour les échanges chat avec voix + clé OpenAI
+    const shouldPlayAmorce = type === 'chat' && voiceOn && !!openAiKey
+
+    // turnId : invalide les tours précédents dès l'entrée dans sendMessage
+    const turnId = Symbol('turn')
+    turnIdRef.current = turnId
+
+    // Promise résolue quand l'amorce est terminée (ou immédiatement si pas d'amorce)
+    let amorceFinishedResolve = () => {}
+    const amorceFinished = new Promise(r => { amorceFinishedResolve = r })
+    let amorceEndTime = null  // ttsNow() quand l'amorce se termine
+
+    if (shouldPlayAmorce) {
+      // Couper l'audio précédent immédiatement pour libérer la piste
+      stopAllTts()
+
+      const amorce = pickAmorce(userText)
+      ttsLog('tts_request', {
+        isAmorce: true,
+        ttsRole: 'amorce',
+        family: amorce.family,
+        templateKey: amorce.templateKey,
+        oraliteUsed: amorce.oraliteUsed,
+        amorceTextLen: amorce.text.length,
+      })
+
+      // Lance l'amorce en arrière-plan (non bloquant — Claude démarre en parallèle)
+      ;(async () => {
+        try {
+          const audio = await speakWithOpenAI({
+            openAiKey,
+            text: amorce.text,
+            voice: leaVoice,
+            speed: speedRef.current,
+            autoPlay: false,  // on contrôle le démarrage pour attacher les listeners d'abord
+            onLatencyLog: (event, extras) => ttsLog(event, { isAmorce: true, ttsRole: 'amorce', ...extras }),
+          })
+
+          // Vérifier que le tour est toujours valide après l'await réseau (~1s)
+          if (turnIdRef.current !== turnId) {
+            try { audio.pause() } catch (_) {}
+            if (!amorceEndTime) amorceEndTime = ttsNow()
+            amorceFinishedResolve()
+            return
+          }
+
+          audioRef.current = audio
+          try { audio.playbackRate = speedRef.current } catch (_) {}
+
+          // Re-vérifier : stopAllTts() aurait pu être appelé entre l'await et ici
+          if (turnIdRef.current !== turnId || audio.paused) {
+            if (!amorceEndTime) amorceEndTime = ttsNow()
+            amorceFinishedResolve()
+            return
+          }
+
+          // Attendre la fin de l'amorce (ended / error / pause = stopAllTts)
+          await new Promise(resolve => {
+            const cleanup = () => {
+              if (!amorceEndTime) amorceEndTime = ttsNow()
+              resolve()
+            }
+            audio.addEventListener('ended', cleanup, { once: true })
+            audio.addEventListener('error', cleanup, { once: true })
+            // pause = stopAllTts() a été appelé → résoudre aussi
+            audio.addEventListener('pause', cleanup, { once: true })
+            audio.addEventListener('play', () => {
+              ttsLog('audio_play_start', { isAmorce: true, ttsRole: 'amorce', family: amorce.family })
+              setTtsState({ playing: true, paused: false, speed: speedRef.current, mode: 'openai' })
+            }, { once: true })
+            audio.play().catch(cleanup)
+          })
+
+          ttsLog('tts_blob_ready', { isAmorce: true, ttsRole: 'amorce', note: 'amorce_ended' })
+        } catch (e) {
+          if (!amorceEndTime) amorceEndTime = ttsNow()
+          ttsLog('tts_blob_ready', { isAmorce: true, ttsRole: 'amorce', note: 'amorce_error', error: e?.message })
+        }
+        amorceFinishedResolve()
+      })()
+
+    } else {
+      // Pas d'amorce → résoudre immédiatement pour ne pas bloquer le main TTS
+      amorceEndTime = ttsNow()
+      amorceFinishedResolve()
+    }
+
+    // ── Appel Claude (en parallèle de l'amorce) ──────────────────
     let full = ''
-    let firstChunkLogged = false   // TTS/Phase 0 — flag pour ne logger qu'au 1er delta
+    let firstChunkLogged = false
 
     try {
       full = await askClaude({
@@ -213,9 +291,6 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
       })
       ttsLog('text_done', { textLen: full.length })
       addMessage({ role: 'assistant', content: full })
-      // LOT 3.6 — Reset immédiat pour éviter coexistence bulle finale + bulle streaming
-      // pendant que la branche TTS tourne (peut prendre plusieurs secondes).
-      // Le finally reste comme safety net.
       setStreaming('')
       setLoading(false)
 
@@ -233,57 +308,112 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
       }
 
       if (voiceOn && full) {
-        stopAllTts()
+        // Pour les types sans amorce, on coupe l'éventuel audio précédent ici
+        // (comportement d'origine préservé pour correction/vocab/etc.)
+        if (!shouldPlayAmorce) stopAllTts()
+
         if (openAiKey) {
-          // LOT 2.3 — segmentation (architecture baseline restaurée après rollback V1.1)
-          // Une seule synthèse OpenAI par segment, préserve la prosodie et la langue.
-          // Le path multi-segments n'apparaît que pour les très longs messages (>500 chars).
           const segments = splitIntoSegments(full)
 
           if (segments.length <= 1) {
-            // Path court (anti-régression) : single audio + listeners directs
-            const segmentIdx = 0
+            // ── Path court — single audio ──────────────────────────
             try {
-              ttsLog('tts_request', { segmentIdx, segmentsTotal: 1, segmentLen: (segments[0] || full).length })
-              const audio = await speakWithOpenAI({
+              ttsLog('tts_request', {
+                isAmorce: false,
+                ttsRole: 'main',
+                segmentIdx: 0,
+                segmentsTotal: 1,
+                segmentLen: (segments[0] || full).length,
+              })
+              // Fetch main audio SANS autoPlay pour contrôler la séquence
+              const mainAudio = await speakWithOpenAI({
                 openAiKey,
                 text: segments[0] || full,
                 voice: leaVoice,
                 speed: speedRef.current,
-                onLatencyLog: (event, extras) => ttsLog(event, { segmentIdx, ...extras }),
+                autoPlay: false,
+                onLatencyLog: (event, extras) => ttsLog(event, { isAmorce: false, ttsRole: 'main', segmentIdx: 0, ...extras }),
               })
-              ttsLog('tts_audio_ready', { segmentIdx })
-              audioRef.current = audio
-              try { audio.playbackRate = speedRef.current } catch (_) {}
+              ttsLog('audio_play_start', { isAmorce: false, ttsRole: 'main', segmentIdx: 0, note: 'main_audio_ready' })
 
-              try { audio.__ttsAbort?.abort() } catch (_) {}
+              // Attendre la fin de l'amorce avant de jouer le main
+              await amorceFinished
+
+              // Patience si le gap réel depuis la fin de l'amorce dépasse 1.5s
+              if (shouldPlayAmorce && amorceEndTime !== null && (ttsNow() - amorceEndTime) > 1500) {
+                const patience = pickPatience()
+                ttsLog('tts_request', {
+                  isPatience: true,
+                  ttsRole: 'patience',
+                  patienceIdx: patience.patienceIdx,
+                })
+                try {
+                  const patienceAudio = await speakWithOpenAI({
+                    openAiKey,
+                    text: patience.text,
+                    voice: leaVoice,
+                    speed: speedRef.current,
+                    autoPlay: false,
+                    onLatencyLog: (event, extras) => ttsLog(event, { isPatience: true, ttsRole: 'patience', ...extras }),
+                  })
+                  if (turnIdRef.current === turnId) {
+                    audioRef.current = patienceAudio
+                    try { patienceAudio.playbackRate = speedRef.current } catch (_) {}
+                    await new Promise(resolve => {
+                      patienceAudio.addEventListener('ended', resolve, { once: true })
+                      patienceAudio.addEventListener('error', resolve, { once: true })
+                      patienceAudio.addEventListener('pause', resolve, { once: true })
+                      patienceAudio.addEventListener('play', () => {
+                        ttsLog('audio_play_start', { isPatience: true, ttsRole: 'patience' })
+                        setTtsState({ playing: true, paused: false, speed: speedRef.current, mode: 'openai' })
+                      }, { once: true })
+                      patienceAudio.play().catch(resolve)
+                    })
+                  } else {
+                    try { patienceAudio.pause() } catch (_) {}
+                  }
+                } catch (_) {
+                  ttsLog('tts_blob_ready', { isPatience: true, ttsRole: 'patience', note: 'patience_error' })
+                }
+              }
+
+              // Vérifier que le tour est toujours valide avant de jouer main
+              if (turnIdRef.current !== turnId) return
+
+              audioRef.current = mainAudio
+              try { mainAudio.playbackRate = speedRef.current } catch (_) {}
+
+              try { mainAudio.__ttsAbort?.abort() } catch (_) {}
               const ac = new AbortController()
-              audio.__ttsAbort = ac
+              mainAudio.__ttsAbort = ac
               const opts = { signal: ac.signal }
-              audio.addEventListener('play',  () => { ttsLog('audio_play_start', { segmentIdx }); setTtsState({ playing: true,  paused: false, speed: speedRef.current, mode: 'openai' }) }, opts)
-              audio.addEventListener('pause', () => setTtsState(s => ({ ...s, playing: false, paused: true })), opts)
-              audio.addEventListener('ended', () => setTtsState({ playing: false, paused: false, speed: speedRef.current, mode: null }), opts)
-              audio.addEventListener('error', () => setTtsState({ playing: false, paused: false, speed: speedRef.current, mode: null }), opts)
+              mainAudio.addEventListener('play',  () => { ttsLog('audio_play_start', { isAmorce: false, ttsRole: 'main', segmentIdx: 0 }); setTtsState({ playing: true,  paused: false, speed: speedRef.current, mode: 'openai' }) }, opts)
+              mainAudio.addEventListener('pause', () => setTtsState(s => ({ ...s, playing: false, paused: true })), opts)
+              mainAudio.addEventListener('ended', () => setTtsState({ playing: false, paused: false, speed: speedRef.current, mode: null }), opts)
+              mainAudio.addEventListener('error', () => setTtsState({ playing: false, paused: false, speed: speedRef.current, mode: null }), opts)
 
               setTtsState({ playing: true, paused: false, speed: speedRef.current, mode: 'openai' })
+              mainAudio.play().catch(() => {})
+
             } catch (ttsErr) {
               console.warn('[TTS] OpenAI échec, fallback navigateur', {
                 status: ttsErr?.status ?? null,
                 message: ttsErr?.message || String(ttsErr),
                 body: ttsErr?.body || null,
               })
-              speakBrowserManaged(full)
+              // Attendre l'amorce avant le fallback navigateur
+              await amorceFinished
+              if (turnIdRef.current === turnId) speakBrowserManaged(full)
             }
+
           } else {
-            // Path long : queue de segments. Une nouvelle chaîne invalide
-            // toute chaîne précédente (chainId via Symbol).
+            // ── Path long — queue de segments ─────────────────────
             const chainId = Symbol('tts-chain')
             ttsChainRef.current = chainId
             let i = 0
 
             const playNext = async () => {
               if (ttsChainRef.current !== chainId || !voiceOnRef.current || i >= segments.length) {
-                // Fin de chaîne (terminée ou abortée)
                 setTtsState(s => s.mode === 'openai'
                   ? { playing: false, paused: false, speed: s.speed, mode: null }
                   : s)
@@ -294,15 +424,16 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
 
               let audio
               try {
-                ttsLog('tts_request', { segmentIdx, segmentsTotal: segments.length, segmentLen: segment.length })
+                ttsLog('tts_request', { isAmorce: false, ttsRole: 'main', segmentIdx, segmentsTotal: segments.length, segmentLen: segment.length })
                 audio = await speakWithOpenAI({
                   openAiKey,
                   text: segment,
                   voice: leaVoice,
                   speed: speedRef.current,
-                  onLatencyLog: (event, extras) => ttsLog(event, { segmentIdx, ...extras }),
+                  autoPlay: false,
+                  onLatencyLog: (event, extras) => ttsLog(event, { isAmorce: false, ttsRole: 'main', segmentIdx, ...extras }),
                 })
-                ttsLog('tts_audio_ready', { segmentIdx })
+                ttsLog('tts_blob_ready', { isAmorce: false, ttsRole: 'main', segmentIdx })
               } catch (ttsErr) {
                 if (ttsChainRef.current !== chainId) return
                 console.warn('[TTS] segment OpenAI échec, fallback navigateur', {
@@ -312,14 +443,11 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
                   segmentIndex: i - 1,
                   segmentsTotal: segments.length,
                 })
-                // Fallback navigateur sur le segment courant ; on stoppe la chaîne
-                // (le navigateur ne supporte pas un chaînage propre ici).
                 speakBrowserManaged(segment)
                 ttsChainRef.current = null
                 return
               }
 
-              // Si chaîne abortée pendant l'await, ne pas démarrer cet audio
               if (ttsChainRef.current !== chainId) {
                 try { audio.pause() } catch (_) {}
                 return
@@ -332,7 +460,7 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
               const ac = new AbortController()
               audio.__ttsAbort = ac
               const opts = { signal: ac.signal }
-              audio.addEventListener('play',  () => { ttsLog('audio_play_start', { segmentIdx }); setTtsState({ playing: true,  paused: false, speed: speedRef.current, mode: 'openai' }) }, opts)
+              audio.addEventListener('play',  () => { ttsLog('audio_play_start', { isAmorce: false, ttsRole: 'main', segmentIdx }); setTtsState({ playing: true,  paused: false, speed: speedRef.current, mode: 'openai' }) }, opts)
               audio.addEventListener('pause', () => setTtsState(s => ({ ...s, playing: false, paused: true })), opts)
               audio.addEventListener('error', () => {
                 ttsChainRef.current = null
@@ -347,14 +475,57 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
               }, opts)
 
               setTtsState({ playing: true, paused: false, speed: speedRef.current, mode: 'openai' })
+              audio.play().catch(() => {})
             }
 
-            playNext()
+            // Démarrer la chaîne après amorce + éventuelle patience
+            ;(async () => {
+              await amorceFinished
+
+              if (shouldPlayAmorce && amorceEndTime !== null && (ttsNow() - amorceEndTime) > 1500) {
+                const patience = pickPatience()
+                ttsLog('tts_request', { isPatience: true, ttsRole: 'patience', patienceIdx: patience.patienceIdx })
+                try {
+                  const patienceAudio = await speakWithOpenAI({
+                    openAiKey,
+                    text: patience.text,
+                    voice: leaVoice,
+                    speed: speedRef.current,
+                    autoPlay: false,
+                    onLatencyLog: (event, extras) => ttsLog(event, { isPatience: true, ttsRole: 'patience', ...extras }),
+                  })
+                  if (ttsChainRef.current === chainId) {
+                    audioRef.current = patienceAudio
+                    try { patienceAudio.playbackRate = speedRef.current } catch (_) {}
+                    await new Promise(resolve => {
+                      patienceAudio.addEventListener('ended', resolve, { once: true })
+                      patienceAudio.addEventListener('error', resolve, { once: true })
+                      patienceAudio.addEventListener('pause', resolve, { once: true })
+                      patienceAudio.addEventListener('play', () => {
+                        ttsLog('audio_play_start', { isPatience: true, ttsRole: 'patience' })
+                        setTtsState({ playing: true, paused: false, speed: speedRef.current, mode: 'openai' })
+                      }, { once: true })
+                      patienceAudio.play().catch(resolve)
+                    })
+                  } else {
+                    try { patienceAudio.pause() } catch (_) {}
+                  }
+                } catch (_) {
+                  ttsLog('tts_blob_ready', { isPatience: true, ttsRole: 'patience', note: 'patience_error' })
+                }
+              }
+
+              if (ttsChainRef.current === chainId) playNext()
+            })()
           }
+
         } else {
-          speakBrowserManaged(full)
+          // Pas de clé OpenAI — fallback navigateur après amorce
+          await amorceFinished
+          if (turnIdRef.current === turnId) speakBrowserManaged(full)
         }
       }
+
     } catch (err) {
       addMessage({ role: 'assistant', content: mapCoachError(err) })
     } finally {
@@ -382,8 +553,8 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
   const injectVrac = useCallback(async (idea) => {
     const safeText = (idea?.text || '').trim()
     const shortLabel = safeText
-      ? `J’aimerais partir de cette idée : « ${safeText} ».`
-      : "J’aimerais partir d’une idée de ma boîte à idées."
+      ? `J'aimerais partir de cette idée : « ${safeText} ».`
+      : "J'aimerais partir d'une idée de ma boîte à idées."
 
     return sendMessage(
       buildVracInjectPrompt({ idea, chapterTitle: currentChapter?.title }),
