@@ -26,13 +26,7 @@ jobs:
       - name: Build
         run: npm run build
         env:
-          # URLs publiques des Workers Cloudflare — injectées au build Vite
-          # pour que `import.meta.env.VITE_*` soit inliné dans le bundle.
-          # Hardcoded ici car publiques (visibles dans le bundle JS final
-          # de toute façon) : pas de valeur ajoutée à les passer en secret.
           VITE_SYNC_WORKER_URL: https://atelier-sync.atome-tdah-cloud.workers.dev
-          # LOT 4F.2.1 — Client ID OAuth Web (Google Identity Services).
-          # Public par design : présent dans le bundle JS final.
           VITE_GOOGLE_CLIENT_ID: 1020255079677-cpq2rkjauvj1678d9tpkdgvmgdot4jnp.apps.googleusercontent.com
 
       - name: Deploy to Cloudflare Pages
@@ -43,3 +37,4 @@ jobs:
           projectName: latelier-caroline
           directory: dist
           gitHubToken: ${{ secrets.GITHUB_TOKEN }}
+          wranglerVersion: '3'
