@@ -4,7 +4,7 @@
 // Rotation : 5 derniers gabarits bannis (global), dernière passerelle bannie (par famille)
 // emotion : uniquement si marqueurs nets présents — sinon fallback clarification/miroir
 
-// ── Bibliothèque validée ─────────────────────────────────────────
+// ── Bibliothèque validée ─────────────────────────────────
 
 export const FAMILIES = {
   miroir: {
@@ -89,7 +89,7 @@ export const FAMILIES = {
       "Je vais te dire comment je l'éclaircirais.",
       "Je vais essayer de te le remettre au clair.",
       "Je vais voir avec toi où ça se joue.",
-      "Je vais te dire comment je démêlerais ça.",
+      "Je vais te dire comment je démîlerais ça.",
       "On va préciser ça ensemble.",
     ],
     oralites: [
@@ -161,15 +161,53 @@ export const FAMILIES = {
   },
 }
 
+// ── Phrases de patience — fillers prosodiques naturels ────────────────
+// Conçues pour OpenAI TTS : les allôngements, points de suspension,
+// faux départs et reprises sont restitués comme des hésitations humaines.
+// Objectif : couvrir le silence réseau entre l'amorce et la réponse principale
+// avec quelque chose qui ressemble à de la réflexion, pas à un vide.
+
 export const PATIENCE = [
-  "Je prends un instant pour formuler ça bien.",
-  "Laisse-moi le tourner correctement.",
-  "Une seconde, je précise ma pensée.",
-  "Je cherche la façon la plus juste de te le dire.",
-  "Attends, je te le pose proprement.",
+  // — Faux départs et reprises
+  "Alors... non, plutôt... je vais te l'expliquer autrement.",
+  "Je vois ce que tu veux dire... bon, voilà comment je le formulerais.",
+  "Mmmh... oui... je vais te dire comment j'aborde ça.",
+  "Attends, je... voilà, j'ai ce qu'il te faut.",
+  "Donc, euh... je cherche le bon angle... je l'ai.",
+  "C'est intéressant ce que tu souleves là... vraiment.",
+
+  // — Réflexion à voix haute
+  "Je réfléchis... parce que ta question mérite qu'on prenne le temps.",
+  "Il y a plusieurs façons de voir ça... je choisis la meilleure pour toi.",
+  "Je laisse ça décanter une seconde... voilà, c'est plus clair.",
+  "Hmm... je veux pas te répondre trop vite sur ce point-là.",
+  "Je tourne ça dans tous les sens... et je pense que...",
+  "Laisse-moi juste... oui, voilà, j'ai ce que je voulais te dire.",
+  "Je prends une seconde... parce que ta question est plus fine qu'elle en a l'air.",
+  "Il y a quelque chose de précis à dire là-dessus... je le trouve.",
+
+  // — Reformulations suspendues
+  "Alors comment dire... je vais essayer de te le mettre bien.",
+  "C'est-à-dire que... hmm... je vais formuler ça différemment.",
+  "Je vois ce que tu cherches... et je veux te répondre exactement dessus.",
+  "Bon... je cherche pas les mots au hasard, là.",
+  "C'est une bonne question, ça... vraiment, je pense à ce que tu m'as dit.",
+  "Je veux pas te balancer un truc générique... donc je prends un instant.",
+
+  // — Allôngements avec suspension
+  "Je formule ça bien... parce que c'est important de le dire juste.",
+  "Voilà, je... j'organise ma réponse, une petite seconde.",
+  "Je rassemble ce que j'ai à te dire... ça arrive.",
+  "Je construis ça pour toi... je veux que ce soit utile vraiment.",
+  "Alors... il y a plusieurs choses à dire, et je veux les mettre dans le bon ordre.",
+  "Je cherche l'entrée la plus juste... parce que ça change tout, l'angle.",
+  "Hmm... oui. Je sais ce que je veux te dire, je le pose bien.",
+  "Je veux pas aller trop vite là-dessus... donc voilà, je prends deux secondes.",
+  "Une seconde... il y a une nuance importante que je veux pas écraser.",
+  "Je réfléchis à comment te le dire avec précision... c'est prêt.",
 ]
 
-// ── Triggers de détection ────────────────────────────────────────
+// ── Triggers de détection ─────────────────────────────────
 
 const EMOTION_TRIGGERS = [
   'peur', 'dur ', 'dure', 'pèse', 'bloquée', 'bloqué', 'bloque',
@@ -191,7 +229,7 @@ const PRATIQUE_TRIGGERS = [
   'montre-moi', 'comment je', 'comment on',
 ]
 
-// ── État interne (module-level, persistant entre appels) ─────────
+// ── État interne (module-level, persistant entre appels) ───────
 
 const _state = {
   recentKeys:       [],   // derniers 5 '{famille}:{templateIdx}' (global)
@@ -199,7 +237,7 @@ const _state = {
   lastPatienceIdx:  -1,
 }
 
-// ── Utilitaires ──────────────────────────────────────────────────
+// ── Utilitaires ─────────────────────────────────────────
 
 function pickFrom(arr, bannedIdxSet = new Set()) {
   let candidates = arr.map((t, i) => ({ t, i })).filter(({ i }) => !bannedIdxSet.has(i))
@@ -217,7 +255,7 @@ function pickFrom(arr, bannedIdxSet = new Set()) {
  */
 function buildExcerpt(userText) {
   let s = (userText || '').trim()
-    .replace(/^[«"'""\s]+/, '')
+    .replace(/^[«"'“”\s]+/, '')
     .replace(/\s+/g, ' ')
 
   // Conversion sujet → forme "tu" (conservatrice)
@@ -241,7 +279,7 @@ function buildExcerpt(userText) {
   return s
 }
 
-// ── Détection de famille ─────────────────────────────────────────
+// ── Détection de famille ───────────────────────────────────
 // Priorité : emotion (si marqueurs nets) > clarification > pratique > synthese > miroir
 
 function detectFamily(userText) {
@@ -257,7 +295,7 @@ function detectFamily(userText) {
   return 'miroir'
 }
 
-// ── API publique ──────────────────────────────────────────────────
+// ── API publique ──────────────────────────────────────────
 
 /**
  * Sélectionne et construit une amorce vocale pour userText.
