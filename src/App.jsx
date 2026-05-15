@@ -29,6 +29,8 @@ const LeaMemoryModal  = lazy(() => import('./components/modals/LeaMemoryModal'))
 const TiroirModal     = lazy(() => import('./components/modals/TiroirModal'))
 const AddTraceFlow    = lazy(() => import('./components/modals/AddTraceFlow'))
 const TraceDetailModal= lazy(() => import('./components/modals/TraceDetailModal'))
+// T11b — Heatmap régularité
+const ProgressModal   = lazy(() => import('./components/modals/ProgressModal'))
 
 // ── Durée idle avant auto-sync (ms) ─────────────────────────────
 const IDLE_SYNC_DELAY = 30_000
@@ -147,7 +149,6 @@ function AppInner() {
     const goOnline = () => {
       setIsOnline(true)
       toast('Connexion rétablie — Léa est de nouveau disponible 🌿', 'success')
-      // T9 — retry sync immédiat à la reconnexion
       if (syncReadyRef.current) db.syncNow()
     }
     const goOffline = () => {
@@ -187,6 +188,16 @@ function AppInner() {
     toast(db.pendingBlobsMessage, 'info', 10000)
     db.dismissPendingBlobsMessage()
   }, [db.pendingBlobsMessage, db.dismissPendingBlobsMessage, toast])
+
+  // ── T11b.c — Toast aux franchissements de seuils de streak ───
+  // db.streakMilestone est posé par recordSession quand on atteint
+  // exactement 7/14/30/60/100/365 jours. Toast valorisant 10 s, puis
+  // dismiss pour ne pas le ré-afficher.
+  useEffect(() => {
+    if (!db.streakMilestone) return
+    toast(db.streakMilestone.message, 'success', 10000)
+    db.dismissStreakMilestone()
+  }, [db.streakMilestone, db.dismissStreakMilestone, toast])
 
   // ── Thème ────────────────────────────────────────────────────
   useEffect(() => {
@@ -312,7 +323,7 @@ function AppInner() {
     if (uiScale      !== undefined) await db.setUiScale(uiScale)
     if (layoutScale  !== undefined) await db.setLayoutScale(layoutScale)
     if (sidebarWidth !== undefined) await db.setSidebarWidth(sidebarWidth)
-    if (coachWidth   !== undefined) await db.setCoachWidth(coachWidth)   // T10 #10
+    if (coachWidth   !== undefined) await db.setCoachWidth(coachWidth)
     toast('Réglages sauvegardés ✓', 'success')
   }
 
@@ -323,7 +334,6 @@ function AppInner() {
     toast('Texte inséré ✓', 'success')
   }, [db])
 
-  // T10 #12 — toast destructif allongé à 9 s pour laisser le temps de lire
   const handleRemoveChapter = useCallback((id) => {
     const chapter = db.chapters.find(c => c.id === id)
     if (!chapter) { db.removeChapter(id); return }
@@ -349,6 +359,7 @@ function AppInner() {
         onExport={() => setModal('export')} onSettings={() => setModal('settings')}
         onInspir={() => setModal('inspir')} onVocab={() => setModal('vocab')}
         onTiroir={() => setModal('tiroir')}
+        onProgress={() => setModal('progress')}   /* T11b */
         ambientSound={db.ambientSound}
         ambientPlaying={ambientPlaying}
         onAmbientChange={handleAmbientChange}
@@ -484,6 +495,16 @@ function AppInner() {
             }}
             isMobile={isMobile}
             loadTraceBlob={db.loadTraceBlob}
+          />
+        )}
+        {/* T11b — ProgressModal (heatmap régularité) */}
+        {modal === 'progress' && (
+          <ProgressModal
+            sessionDates={db.sessionDates}
+            streak={db.streak}
+            sessions={db.sessions}
+            name={db.name}
+            onClose={() => setModal(null)}
           />
         )}
         {showPack && (
