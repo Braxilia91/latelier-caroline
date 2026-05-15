@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import Modal from '../ui/Modal'
-import { X, Edit3, Check, RefreshCw, Trash2, Archive } from 'lucide-react'
+import { X, Edit3, Check, Trash2, Archive } from 'lucide-react'
 
 const STATUS_LABELS = {
   private: { label: 'Gardée dans le tiroir', color: '#B0A090' },
@@ -157,9 +157,6 @@ export default function TraceDetailModal({
   }
 
   const handleDelete = () => { if (typeof onDelete === 'function') onDelete(localTrace) }
-  // "Changer ce que j'en fais" : bouton présent visuellement, handler no-op en 2A/T7.
-  // Câblage prévu en T6 (sortie privé/vrac/note/scène/lettre).
-  const handleChangeStatusNoop = () => {}
 
   return (
     <Modal
@@ -193,7 +190,7 @@ export default function TraceDetailModal({
           )}
         </div>
 
-        {/* Statut */}
+        {/* Statut — pastille colorée informationnelle (pas un contrôle) */}
         <div style={S.statusRow}>
           <span style={{ ...S.statusDot, background: status.color }} />
           <span style={S.statusLabel}>{status.label}</span>
@@ -283,11 +280,11 @@ export default function TraceDetailModal({
 
       {/* Footer actions
           T7 : bouton "Compléter mes réponses" retiré (remplacé par les crayons par champ).
-          "Changer ce que j'en fais" reste no-op — câblage en T6. */}
+          Bouton "Changer ce que j'en fais" retiré : était no-op, sans promesse produit
+          claire (anti-pattern UX). Sera rebranché en T6 quand les destinations
+          vrac/note/scène/lettre auront un comportement réel. STATUS_LABELS et S.actionBtn
+          conservés volontairement pour réutilisation T6. */}
       <div style={S.footer}>
-        <button style={S.actionBtn} onClick={handleChangeStatusNoop}>
-          <RefreshCw size={14} /> Changer ce que j'en fais
-        </button>
         <button style={S.deleteBtn} onClick={handleDelete} aria-label="Supprimer cette trace">
           <Trash2 size={14} />
         </button>
