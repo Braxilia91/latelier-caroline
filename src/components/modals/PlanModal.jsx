@@ -111,7 +111,7 @@ export default function PlanModal({ chapters, onClose, updateChapter, reorderCha
             const cardStyle = {
               ...S.card,
               opacity: isDrag ? 0.5 : (isPriv ? 0.75 : 1),
-              borderTop: isOver ? '3px solid #C4956A' : undefined,
+              borderTop: isOver ? '3px solid #C4956A' : S.card.borderTop || S.card.border,
               cursor: 'grab',
             }
 
@@ -142,7 +142,7 @@ export default function PlanModal({ chapters, onClose, updateChapter, reorderCha
                   <button
                     style={{ ...S.expandBtn, ...(isPriv ? S.lockActive : {}) }}
                     onClick={() => togglePrivate(ch)}
-                    title={isPriv ? "Rendre public (visible à l'export partagé)" : "Marquer comme privé (exclu de l'export partagé)"}
+                    title={isPriv ? 'Rendre public (visible à l\'export partagé)' : 'Marquer comme privé (exclu de l\'export partagé)'}
                     aria-label={isPriv ? 'Rendre public' : 'Marquer privé'}
                     aria-pressed={isPriv}
                   >
@@ -295,7 +295,7 @@ const S = {
     borderColor: '#C4956A',
     color: '#8B6445',
   },
-  intentionRow: { paddingLeft: 50 },
+  intentionRow: { paddingLeft: 50 },  // ajusté pour l'ajout du gripWrap
   editRow: { display: 'flex', gap: 6, alignItems: 'center' },
   intentionInput: {
     flex: 1,
