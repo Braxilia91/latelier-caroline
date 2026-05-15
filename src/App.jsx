@@ -23,13 +23,13 @@ const VracModal       = lazy(() => import('./components/modals/VracModal'))
 const DicoCaroModal   = lazy(() => import('./components/modals/DicoCaroModal'))
 const PlanModal       = lazy(() => import('./components/modals/PlanModal'))
 const PackOpeningModal= lazy(() => import('./components/modals/PackOpeningModal'))
-// LOT 4C.3 — Mémoire de Léa : modale dédiée pour visibilité + contrôle utilisateur
 const LeaMemoryModal  = lazy(() => import('./components/modals/LeaMemoryModal'))
-// T1 — Le Tiroir : socle inert (grille vide), AddTraceFlow ajouté en T3
 const TiroirModal     = lazy(() => import('./components/modals/TiroirModal'))
-// T2 — Composants tiroir (fichiers déjà présents dans le repo)
 const AddTraceFlow    = lazy(() => import('./components/modals/AddTraceFlow'))
 const TraceDetailModal= lazy(() => import('./components/modals/TraceDetailModal'))
+
+// ── Durée idle avant auto-sync (ms) ─────────────────────────────
+const IDLE_SYNC_DELAY = 30_000
 
 function AppSkeleton() {
   const pulse = {
@@ -84,13 +84,16 @@ function AppInner() {
   const [isOnline, setIsOnline] = useState(navigator.onLine)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [coachOpen, setCoachOpen] = useState(false)
-  // T2 — trace sélectionnée pour TraceDetailModal
   const [selectedTrace, setSelectedTrace] = useState(null)
 
   const isMobile = useMediaQuery('(max-width: 767px)')
 
+  // T9 — ref pour le timer idle auto-sync
+  const idleSyncTimerRef = useRef(null)
+  const syncReadyRef     = useRef(false)
+
   const openSidebar = () => { setSidebarOpen(true); setCoachOpen(false) }
-  const openCoach = () => { setCoachOpen(true); setSidebarOpen(false) }
+  const openCoach   = () => { setCoachOpen(true);   setSidebarOpen(false) }
 
   const audioRef = useRef(null)
   const [ambientPlaying, setAmbientPlaying] = useState(false)
@@ -113,10 +116,7 @@ function AppInner() {
     db.setAmbientSound(sound)
     if (sound === null) {
       audioRef.current?.pause()
-      if (audioRef.current) {
-        audioRef.current.src = ''
-        audioRef.current = null
-      }
+      if (audioRef.current) { audioRef.current.src = ''; audioRef.current = null }
       setAmbientPlaying(false)
     } else {
       startAmbient(sound, db.ambientVolume)
@@ -126,92 +126,86 @@ function AppInner() {
 
   const handleVolumeChange = useCallback((v) => {
     db.setAmbientVolume(v)
-    if (audioRef.current) {
-      audioRef.current.volume = Math.max(0, Math.min(1, v))
-    }
+    if (audioRef.current) audioRef.current.volume = Math.max(0, Math.min(1, v))
   }, [db.setAmbientVolume])
 
   useEffect(() => {
     return () => {
       audioRef.current?.pause()
-      if (audioRef.current) {
-        audioRef.current.src = ''
-      }
+      if (audioRef.current) audioRef.current.src = ''
     }
   }, [])
 
   useEffect(() => {
-    if (db.ready && db.isSetup && db.firstLaunch) {
-      setShowPack(true)
-    }
+    if (db.ready && db.isSetup && db.firstLaunch) setShowPack(true)
   }, [db.ready, db.isSetup, db.firstLaunch])
 
+  // ── Online / offline ─────────────────────────────────────────
   useEffect(() => {
     const goOnline = () => {
       setIsOnline(true)
       toast('Connexion rétablie — Léa est de nouveau disponible 🌿', 'success')
+      // T9 — retry sync immédiat à la reconnexion
+      if (syncReadyRef.current) db.syncNow()
     }
     const goOffline = () => {
       setIsOnline(false)
       toast('Connexion perdue — tu peux continuer à écrire, Léa revient dès que possible.', 'info')
     }
-    window.addEventListener('online', goOnline)
+    window.addEventListener('online',  goOnline)
     window.addEventListener('offline', goOffline)
     return () => {
-      window.removeEventListener('online', goOnline)
+      window.removeEventListener('online',  goOnline)
       window.removeEventListener('offline', goOffline)
     }
-  }, [])
+  }, [db.syncNow]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── Thème ────────────────────────────────────────────────────
   useEffect(() => {
-    if (db.editorTheme) {
-      document.documentElement.setAttribute('data-theme', db.editorTheme)
-    }
+    if (db.editorTheme) document.documentElement.setAttribute('data-theme', db.editorTheme)
   }, [db.editorTheme])
 
-  // LOT 3.5 — Applique l'échelle du chat Léa sur la racine HTML
+  // ── CSS vars ─────────────────────────────────────────────────
   useEffect(() => {
     const v = (typeof db.chatScale === 'number' && db.chatScale > 0) ? db.chatScale : 1
     document.documentElement.style.setProperty('--chat-scale', String(v))
   }, [db.chatScale])
 
-  // LOT 4E.1 — Applique l'échelle UI globale sur la racine HTML
   useEffect(() => {
     const v = (typeof db.uiScale === 'number' && db.uiScale > 0) ? db.uiScale : 1
     document.documentElement.style.setProperty('--ui-scale', String(v))
   }, [db.uiScale])
 
-  // LOT 4E.2 — Échelle mise en page desktop (sidebar + header actions)
   useEffect(() => {
     const v = (typeof db.layoutScale === 'number' && db.layoutScale > 0) ? db.layoutScale : 1
     document.documentElement.style.setProperty('--layout-scale', String(v))
   }, [db.layoutScale])
 
-  // LOT 4E.2 — Largeur de la colonne chapitres (desktop uniquement)
   useEffect(() => {
     const v = (typeof db.sidebarWidth === 'number' && db.sidebarWidth >= 160) ? db.sidebarWidth : 220
     document.documentElement.style.setProperty('--sidebar-w', v + 'px')
   }, [db.sidebarWidth])
 
+  // T10 #10 — coachWidth appliqué en CSS var (était manquant)
   useEffect(() => {
-    if (!isMobile) {
-      setSidebarOpen(false)
-      setCoachOpen(false)
-    }
+    const v = (typeof db.coachWidth === 'number' && db.coachWidth >= 220) ? db.coachWidth : 270
+    document.documentElement.style.setProperty('--coach-w', v + 'px')
+  }, [db.coachWidth])
+
+  useEffect(() => {
+    if (!isMobile) { setSidebarOpen(false); setCoachOpen(false) }
   }, [isMobile])
 
   useEffect(() => {
     if (!sidebarOpen && !coachOpen) return
     const handler = (e) => {
-      if (e.key === 'Escape') {
-        setSidebarOpen(false)
-        setCoachOpen(false)
-      }
+      if (e.key === 'Escape') { setSidebarOpen(false); setCoachOpen(false) }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
   }, [sidebarOpen, coachOpen])
 
+  // ── Coach ────────────────────────────────────────────────────
   const coach = useCoach({
     apiKey: db.apiKey,
     openAiKey: db.openAiKey,
@@ -226,23 +220,60 @@ function AppInner() {
     updateLeaMemory: db.updateLeaMemory,
   })
 
-  // ── Auto-ouvre le drawer CoachPanel sur mobile quand Léa répond ──
   useEffect(() => {
-    if (isMobile && coach.loading && !coachOpen) {
-      setCoachOpen(true)
-      setSidebarOpen(false)
-    }
+    if (isMobile && coach.loading && !coachOpen) { setCoachOpen(true); setSidebarOpen(false) }
   }, [coach.loading, isMobile, coachOpen])
 
+  // ── Sync au boot ─────────────────────────────────────────────
+  useEffect(() => {
+    if (db.ready && db.syncToken && import.meta.env.VITE_SYNC_WORKER_URL) {
+      db.syncNow()
+      syncReadyRef.current = true
+    }
+  }, [db.ready]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── T9 — Auto-sync idle (30s sans frappe) ────────────────────
+  // Réinitialise le timer à chaque frappe clavier ou clic dans l'app.
+  // Sur pagehide (onglet fermé / navigateur tué sur mobile), sync forcé.
+  useEffect(() => {
+    if (!db.ready) return
+    const canSync = () => syncReadyRef.current && db.syncToken && import.meta.env.VITE_SYNC_WORKER_URL && navigator.onLine
+
+    const resetTimer = () => {
+      clearTimeout(idleSyncTimerRef.current)
+      if (!canSync()) return
+      idleSyncTimerRef.current = setTimeout(() => {
+        db.syncNow()
+      }, IDLE_SYNC_DELAY)
+    }
+
+    const onPageHide = () => {
+      clearTimeout(idleSyncTimerRef.current)
+      if (canSync()) db.syncNow()
+    }
+
+    window.addEventListener('keydown',   resetTimer, { passive: true })
+    window.addEventListener('pointerup', resetTimer, { passive: true })
+    window.addEventListener('pagehide',  onPageHide)
+
+    return () => {
+      clearTimeout(idleSyncTimerRef.current)
+      window.removeEventListener('keydown',   resetTimer)
+      window.removeEventListener('pointerup', resetTimer)
+      window.removeEventListener('pagehide',  onPageHide)
+    }
+  }, [db.ready, db.syncToken, db.syncNow])
+
+  // ── Handlers ─────────────────────────────────────────────────
   const handleSetupComplete = async ({ name, apiKey, profile }) => {
     await db.setName(name)
-    if (apiKey) await db.setApiKey(apiKey)
+    if (apiKey)  await db.setApiKey(apiKey)
     if (profile) await db.setCarolineProfile(profile)
     await db.createChapter()
     toast(`Bienvenue ${name} ! Ton atelier est prêt 🌿`, 'success')
   }
 
-  const handleSaveSettings = async ({ name, apiKey, openAiKey, leaVoice, syncToken, editorFont, editorTheme, editorWidth, chatScale, uiScale, layoutScale, sidebarWidth }) => {
+  const handleSaveSettings = async ({ name, apiKey, openAiKey, leaVoice, syncToken, editorFont, editorTheme, editorWidth, chatScale, uiScale, layoutScale, sidebarWidth, coachWidth }) => {
     await db.setName(name)
     await db.setApiKey(apiKey)
     await db.setOaiKey(openAiKey)
@@ -251,10 +282,11 @@ function AppInner() {
     if (editorFont   !== undefined) await db.setEditorFont(editorFont)
     if (editorTheme  !== undefined) await db.setEditorTheme(editorTheme)
     if (editorWidth  !== undefined) await db.setEditorWidth(editorWidth)
-    if (chatScale    !== undefined) await db.setChatScale(chatScale)    // LOT 3.5
-    if (uiScale      !== undefined) await db.setUiScale(uiScale)        // LOT 4E.1
-    if (layoutScale  !== undefined) await db.setLayoutScale(layoutScale)  // LOT 4E.2
-    if (sidebarWidth !== undefined) await db.setSidebarWidth(sidebarWidth) // LOT 4E.2
+    if (chatScale    !== undefined) await db.setChatScale(chatScale)
+    if (uiScale      !== undefined) await db.setUiScale(uiScale)
+    if (layoutScale  !== undefined) await db.setLayoutScale(layoutScale)
+    if (sidebarWidth !== undefined) await db.setSidebarWidth(sidebarWidth)
+    if (coachWidth   !== undefined) await db.setCoachWidth(coachWidth)   // T10 #10
     toast('Réglages sauvegardés ✓', 'success')
   }
 
@@ -265,14 +297,12 @@ function AppInner() {
     toast('Texte inséré ✓', 'success')
   }, [db])
 
+  // T10 #12 — toast destructif allongé à 9 s pour laisser le temps de lire
   const handleRemoveChapter = useCallback((id) => {
     const chapter = db.chapters.find(c => c.id === id)
-    if (!chapter) {
-      db.removeChapter(id)
-      return
-    }
+    if (!chapter) { db.removeChapter(id); return }
     db.removeChapter(id)
-    toast(`Chapitre "${chapter.title || 'sans titre'}" supprimé`, 'info', 4000, {
+    toast(`Chapitre "${chapter.title || 'sans titre'}" supprimé`, 'info', 9000, {
       label: 'Annuler',
       fn: () => {
         db.restoreChapter(chapter)
@@ -280,12 +310,6 @@ function AppInner() {
       },
     })
   }, [db, toast])
-
-  useEffect(() => {
-    if (db.ready && db.syncToken && import.meta.env.VITE_SYNC_WORKER_URL) {
-      db.syncNow()
-    }
-  }, [db.ready]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!db.ready) return <AppSkeleton />
   if (!db.isSetup) return <Onboarding onComplete={handleSetupComplete} />
@@ -310,6 +334,27 @@ function AppInner() {
         onMenuClick={openSidebar}
         onCoachClick={openCoach}
       />
+
+      {/* T10 #9 — Alerte stockage > 85 % */}
+      {db.storageWarning && (
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '6px 16px', gap: 8, flexShrink: 0,
+          background: 'rgba(180,83,9,.1)', borderBottom: '1px solid #C4956A',
+          fontSize: '.75rem', fontWeight: 600, color: '#92400E',
+        }}>
+          <span>
+            ⚠️ Stockage presque plein ({db.storageWarning.usageMB} MB sur {db.storageWarning.quotaMB} MB utilisés).
+            {' '}Exporte une sauvegarde pour ne rien perdre.
+          </span>
+          <button
+            onClick={db.dismissStorageWarning}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '.85rem', color: '#92400E', padding: '2px 6px' }}
+            aria-label="Fermer l'alerte stockage"
+          >✕</button>
+        </div>
+      )}
+
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
         <Sidebar
           chapters={db.chapters} currentId={db.currentId} setCurrentId={db.setCurrentId}
@@ -358,7 +403,7 @@ function AppInner() {
             lastSyncedAt: db.lastSyncedAt, syncNow: db.syncNow,
             editorFont: db.editorFont, editorTheme: db.editorTheme, editorWidth: db.editorWidth,
             chatScale: db.chatScale, uiScale: db.uiScale,
-            layoutScale: db.layoutScale, sidebarWidth: db.sidebarWidth,
+            layoutScale: db.layoutScale, sidebarWidth: db.sidebarWidth, coachWidth: db.coachWidth,
           }}
           chapters={db.chapters} vracIdeas={db.vracIdeas} name={db.name}
           onClose={() => setModal(null)} onSave={handleSaveSettings} onReset={db.resetAllData}
@@ -424,24 +469,27 @@ function AppInner() {
         )}
       </Suspense>
 
-      {!isMobile && (
-        <div style={{
-          position: 'fixed', bottom: 16, right: 'calc(var(--coach-w) + 16px)',
-          display: 'flex', alignItems: 'center', gap: 6, padding: '5px 12px',
-          background: isOnline ? 'rgba(61,107,69,.12)' : 'rgba(180,83,9,.12)',
-          border: `1px solid ${isOnline ? '#6B8F71' : '#C4956A'}`,
-          borderRadius: 20,
-          fontSize: '.68rem', fontWeight: 600, fontFamily: "'Nunito', sans-serif",
-          color: isOnline ? '#3D6B45' : '#92400E',
-          zIndex: 500, pointerEvents: 'none', transition: 'all .4s ease',
-        }}>
-          <span style={{
-            width: 6, height: 6, borderRadius: '50%',
-            background: isOnline ? '#6B8F71' : '#C4956A', flexShrink: 0,
-          }} />
-          {isOnline ? 'En ligne' : 'Hors ligne — sauvegardé localement'}
-        </div>
-      )}
+      {/* T10 #8 — Indicateur online/offline : affiché sur TOUS les écrans (mobile inclus) */}
+      <div style={{
+        position: 'fixed',
+        bottom: 16,
+        right: isMobile ? 12 : 'calc(var(--coach-w, 270px) + 16px)',
+        display: 'flex', alignItems: 'center', gap: 6, padding: '5px 12px',
+        background: isOnline ? 'rgba(61,107,69,.12)' : 'rgba(180,83,9,.12)',
+        border: `1px solid ${isOnline ? '#6B8F71' : '#C4956A'}`,
+        borderRadius: 20,
+        fontSize: '.68rem', fontWeight: 600, fontFamily: "'Nunito', sans-serif",
+        color: isOnline ? '#3D6B45' : '#92400E',
+        zIndex: 500, pointerEvents: 'none', transition: 'all .4s ease',
+        // Sur mobile : masqué si en ligne (discret), visible si hors ligne
+        opacity: isMobile && isOnline ? 0 : 1,
+      }}>
+        <span style={{
+          width: 6, height: 6, borderRadius: '50%',
+          background: isOnline ? '#6B8F71' : '#C4956A', flexShrink: 0,
+        }} />
+        {isOnline ? 'En ligne' : 'Hors ligne — sauvegardé localement'}
+      </div>
     </div>
   )
 }
