@@ -238,14 +238,11 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
 
             const done = () => {
               if (!amorceEndTime) amorceEndTime = ttsNow()
-              // Nettoyer le listener pause (non-once)
               try { audio.removeEventListener('pause', onPause) } catch (_) {}
               resolve()
             }
 
             const onPause = () => {
-              // Résoudre sur pause uniquement si play() a bien démarré.
-              // Sinon : audio.paused=true est l'état initial, pas un signal d'arrêt.
               if (playStarted) done()
             }
 
@@ -258,7 +255,6 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
               setTtsState({ playing: true, paused: false, speed: speedRef.current, mode: 'openai' })
             }, { once: true })
 
-            // Lancer la lecture
             audio.play().catch(done)
           })
 
@@ -319,40 +315,43 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
 
           if (segments.length <= 1) {
             // ── Path court — single audio ──────────────────────────
-            try {
-              ttsLog('tts_request', {
-                isAmorce: false,
-                ttsRole: 'main',
-                segmentIdx: 0,
-                segmentsTotal: 1,
-                segmentLen: (segments[0] || full).length,
-              })
-              const mainAudio = await speakWithOpenAI({
-                openAiKey,
-                text: segments[0] || full,
-                voice: leaVoice,
-                speed: speedRef.current,
-                autoPlay: false,
-                onLatencyLog: (event, extras) => ttsLog(event, { isAmorce: false, ttsRole: 'main', segmentIdx: 0, ...extras }),
-              })
-              ttsLog('tts_blob_ready', { isAmorce: false, ttsRole: 'main', segmentIdx: 0, note: 'main_audio_ready' })
+            // Fetch main démarre immédiatement (fire-and-forget) — en parallèle de l'amorce
+            // qui tourne encore éventuellement.
+            ttsLog('tts_request', {
+              isAmorce: false,
+              ttsRole: 'main',
+              segmentIdx: 0,
+              segmentsTotal: 1,
+              segmentLen: (segments[0] || full).length,
+            })
+            const mainAudioPromise = speakWithOpenAI({
+              openAiKey,
+              text: segments[0] || full,
+              voice: leaVoice,
+              speed: speedRef.current,
+              autoPlay: false,
+              onLatencyLog: (event, extras) => ttsLog(event, { isAmorce: false, ttsRole: 'main', segmentIdx: 0, ...extras }),
+            })
 
-              // Attendre la fin de l'amorce avant de jouer le main
+            try {
+              // Attendre la fin de l'amorce avant de jouer quoi que ce soit
               await amorceFinished
 
-              // Patience si le gap réel depuis la fin de l'amorce dépasse 1.5s
+              // Patience si le gap réel depuis la fin de l'amorce dépasse 1.5s.
+              // Fetch patience lancé EN PARALLÈLE du fetch main (déjà en cours).
               if (shouldPlayAmorce && amorceEndTime !== null && (ttsNow() - amorceEndTime) > 1500) {
                 const patience = pickPatience()
                 ttsLog('tts_request', { isPatience: true, ttsRole: 'patience', patienceIdx: patience.patienceIdx })
+                const patienceAudioPromise = speakWithOpenAI({
+                  openAiKey,
+                  text: patience.text,
+                  voice: leaVoice,
+                  speed: speedRef.current,
+                  autoPlay: false,
+                  onLatencyLog: (event, extras) => ttsLog(event, { isPatience: true, ttsRole: 'patience', ...extras }),
+                })
                 try {
-                  const patienceAudio = await speakWithOpenAI({
-                    openAiKey,
-                    text: patience.text,
-                    voice: leaVoice,
-                    speed: speedRef.current,
-                    autoPlay: false,
-                    onLatencyLog: (event, extras) => ttsLog(event, { isPatience: true, ttsRole: 'patience', ...extras }),
-                  })
+                  const patienceAudio = await patienceAudioPromise
                   if (turnIdRef.current === turnId) {
                     audioRef.current = patienceAudio
                     try { patienceAudio.playbackRate = speedRef.current } catch (_) {}
@@ -372,6 +371,12 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
                   ttsLog('tts_blob_ready', { isPatience: true, ttsRole: 'patience', note: 'patience_error' })
                 }
               }
+
+              if (turnIdRef.current !== turnId) return
+
+              // Récupérer main — blob probablement déjà prêt pendant la patience
+              const mainAudio = await mainAudioPromise
+              ttsLog('tts_blob_ready', { isAmorce: false, ttsRole: 'main', segmentIdx: 0, note: 'main_audio_ready' })
 
               if (turnIdRef.current !== turnId) return
 
@@ -402,31 +407,40 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
 
           } else {
             // ── Path long — queue de segments ─────────────────────
+            // Fetch du premier segment démarre immédiatement (fire-and-forget).
+            ttsLog('tts_request', {
+              isAmorce: false,
+              ttsRole: 'main',
+              segmentIdx: 0,
+              segmentsTotal: segments.length,
+              segmentLen: segments[0].length,
+            })
+            const firstSegmentPromise = speakWithOpenAI({
+              openAiKey,
+              text: segments[0],
+              voice: leaVoice,
+              speed: speedRef.current,
+              autoPlay: false,
+              onLatencyLog: (event, extras) => ttsLog(event, { isAmorce: false, ttsRole: 'main', segmentIdx: 0, ...extras }),
+            })
+
             const chainId = Symbol('tts-chain')
             ttsChainRef.current = chainId
-            let i = 0
+            let i = 1  // premier segment déjà fetchné
 
-            const playNext = async () => {
-              if (ttsChainRef.current !== chainId || !voiceOnRef.current || i >= segments.length) {
+            const playNext = async (audioPromise) => {
+              if (ttsChainRef.current !== chainId || !voiceOnRef.current) {
                 setTtsState(s => s.mode === 'openai'
                   ? { playing: false, paused: false, speed: s.speed, mode: null }
                   : s)
                 return
               }
-              const segmentIdx = i
-              const segment = segments[i++]
+
+              const segmentIdx = i - 1
 
               let audio
               try {
-                ttsLog('tts_request', { isAmorce: false, ttsRole: 'main', segmentIdx, segmentsTotal: segments.length, segmentLen: segment.length })
-                audio = await speakWithOpenAI({
-                  openAiKey,
-                  text: segment,
-                  voice: leaVoice,
-                  speed: speedRef.current,
-                  autoPlay: false,
-                  onLatencyLog: (event, extras) => ttsLog(event, { isAmorce: false, ttsRole: 'main', segmentIdx, ...extras }),
-                })
+                audio = await audioPromise
                 ttsLog('tts_blob_ready', { isAmorce: false, ttsRole: 'main', segmentIdx })
               } catch (ttsErr) {
                 if (ttsChainRef.current !== chainId) return
@@ -434,10 +448,10 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
                   status: ttsErr?.status ?? null,
                   message: ttsErr?.message || String(ttsErr),
                   body: ttsErr?.body || null,
-                  segmentIndex: i - 1,
+                  segmentIndex: segmentIdx,
                   segmentsTotal: segments.length,
                 })
-                speakBrowserManaged(segment)
+                speakBrowserManaged(segments[segmentIdx])
                 ttsChainRef.current = null
                 return
               }
@@ -445,6 +459,27 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
               if (ttsChainRef.current !== chainId) {
                 try { audio.pause() } catch (_) {}
                 return
+              }
+
+              // Pré-fetcher le segment suivant en parallèle de la lecture courante
+              let nextPromise = null
+              if (i < segments.length) {
+                ttsLog('tts_request', {
+                  isAmorce: false,
+                  ttsRole: 'main',
+                  segmentIdx: i,
+                  segmentsTotal: segments.length,
+                  segmentLen: segments[i].length,
+                })
+                nextPromise = speakWithOpenAI({
+                  openAiKey,
+                  text: segments[i],
+                  voice: leaVoice,
+                  speed: speedRef.current,
+                  autoPlay: false,
+                  onLatencyLog: (event, extras) => ttsLog(event, { isAmorce: false, ttsRole: 'main', segmentIdx: i, ...extras }),
+                })
+                i++
               }
 
               audioRef.current = audio
@@ -461,8 +496,8 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
                 setTtsState({ playing: false, paused: false, speed: speedRef.current, mode: null })
               }, opts)
               audio.addEventListener('ended', () => {
-                if (ttsChainRef.current === chainId && voiceOnRef.current) {
-                  playNext()
+                if (ttsChainRef.current === chainId && voiceOnRef.current && nextPromise) {
+                  playNext(nextPromise)
                 } else {
                   setTtsState({ playing: false, paused: false, speed: speedRef.current, mode: null })
                 }
@@ -476,18 +511,20 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
             ;(async () => {
               await amorceFinished
 
+              // Patience si gap > 1.5s — fetch en parallèle de firstSegmentPromise déjà en cours
               if (shouldPlayAmorce && amorceEndTime !== null && (ttsNow() - amorceEndTime) > 1500) {
                 const patience = pickPatience()
                 ttsLog('tts_request', { isPatience: true, ttsRole: 'patience', patienceIdx: patience.patienceIdx })
+                const patienceAudioPromise = speakWithOpenAI({
+                  openAiKey,
+                  text: patience.text,
+                  voice: leaVoice,
+                  speed: speedRef.current,
+                  autoPlay: false,
+                  onLatencyLog: (event, extras) => ttsLog(event, { isPatience: true, ttsRole: 'patience', ...extras }),
+                })
                 try {
-                  const patienceAudio = await speakWithOpenAI({
-                    openAiKey,
-                    text: patience.text,
-                    voice: leaVoice,
-                    speed: speedRef.current,
-                    autoPlay: false,
-                    onLatencyLog: (event, extras) => ttsLog(event, { isPatience: true, ttsRole: 'patience', ...extras }),
-                  })
+                  const patienceAudio = await patienceAudioPromise
                   if (ttsChainRef.current === chainId) {
                     audioRef.current = patienceAudio
                     try { patienceAudio.playbackRate = speedRef.current } catch (_) {}
@@ -508,7 +545,7 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
                 }
               }
 
-              if (ttsChainRef.current === chainId) playNext()
+              if (ttsChainRef.current === chainId) playNext(firstSegmentPromise)
             })()
           }
 
