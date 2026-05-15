@@ -280,7 +280,8 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
         apiKey,
         systemPrompt: extraSystem || systemPrompt,
         messages: history,
-        maxTokens: 600,
+        // fix(quality): 900 tokens pour le chat empathique, 600 pour les autres types
+        maxTokens: type === 'chat' ? 900 : 600,
         onChunk: (text) => {
           setStreaming(text)
           if (!firstChunkLogged) {

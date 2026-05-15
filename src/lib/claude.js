@@ -36,6 +36,12 @@ export function cleanForTTS(text) {
     // Bullet markers en début de ligne
     .replace(/^[-•*]\s+/gm, '')
     .replace(/^\d+\.\s+/gm, '')
+    // fix(TTS/quality): guillemets typographiques → supprimés (le contexte suffit à l'oral)
+    .replace(/[«»\u201C\u201D\u201E]/g, '')
+    // fix(TTS/quality): apostrophes typographiques → apostrophe droite
+    .replace(/[\u2018\u2019]/g, "'")
+    // fix(TTS/quality): parenthèses → virgule (évite les pauses bizarres à la lecture)
+    .replace(/\(([^)]+)\)/g, ', $1,')
     // Multiple newlines → pause naturelle
     .replace(/\n{2,}/g, '. ')
     .replace(/\n/g, ' ')
