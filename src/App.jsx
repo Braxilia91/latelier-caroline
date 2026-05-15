@@ -190,9 +190,6 @@ function AppInner() {
   }, [db.pendingBlobsMessage, db.dismissPendingBlobsMessage, toast])
 
   // ── T11b.c — Toast aux franchissements de seuils de streak ───
-  // db.streakMilestone est posé par recordSession quand on atteint
-  // exactement 7/14/30/60/100/365 jours. Toast valorisant 10 s, puis
-  // dismiss pour ne pas le ré-afficher.
   useEffect(() => {
     if (!db.streakMilestone) return
     toast(db.streakMilestone.message, 'success', 10000)
@@ -225,7 +222,7 @@ function AppInner() {
     document.documentElement.style.setProperty('--sidebar-w', v + 'px')
   }, [db.sidebarWidth])
 
-  // T10 #10 — coachWidth appliqué en CSS var (était manquant)
+  // T10 #10 — coachWidth appliqué en CSS var
   useEffect(() => {
     const v = (typeof db.coachWidth === 'number' && db.coachWidth >= 220) ? db.coachWidth : 270
     document.documentElement.style.setProperty('--coach-w', v + 'px')
@@ -455,7 +452,16 @@ function AppInner() {
           onClose={() => setModal(null)}
         />}
         {modal === 'inspir' && <InspirationModal onClose={() => setModal(null)} onSendToCoach={coach.sendMessage} hasKey={!!db.apiKey} />}
-        {modal === 'export' && <ExportModal chapters={db.chapters} name={db.name} onClose={() => setModal(null)} />}
+        {/* T12 — traces + loadTraceBlob pour la section Souvenirs du PDF */}
+        {modal === 'export' && (
+          <ExportModal
+            chapters={db.chapters}
+            name={db.name}
+            traces={db.traces}
+            loadTraceBlob={db.loadTraceBlob}
+            onClose={() => setModal(null)}
+          />
+        )}
         {modal === 'vocab' && <DicoCaroModal onClose={() => setModal(null)} coach={coach} hasKey={!!db.apiKey} currentChapter={db.currentChapter} />}
         {modal === 'vrac' && (
           <VracModal
@@ -517,7 +523,7 @@ function AppInner() {
         )}
       </Suspense>
 
-      {/* T10 #8 — Indicateur online/offline : affiché sur TOUS les écrans (mobile inclus) */}
+      {/* T10 #8 — Indicateur online/offline */}
       <div style={{
         position: 'fixed',
         bottom: 16,
