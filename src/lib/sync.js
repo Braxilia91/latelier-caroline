@@ -47,17 +47,25 @@ export async function pullSnapshot({ token }) {
 }
 
 /**
- * Construit le snapshot local à partir des données useDB.
+ * T8.3 — buildSnapshot inclut les traces (métadonnées uniquement, jamais les blobs).
+ * Les blobs binaires sont gérés séparément par driveSync.js (uploadAllBlobs).
  * Exclut apiKey et openAiKey.
  */
-export function buildSnapshot({ chapters, vrac, kvData }) {
+export function buildSnapshot({ chapters, vrac, kvData, traces = [] }) {
   const safeKv = { ...kvData }
   KEYS_NO_SYNC.forEach(k => delete safeKv[k])
+
+  // Sanitize traces : on ne garde que les métadonnées (pas de blob inline)
+  const safeTraces = traces.map(({ id, title, date, createdAt, updatedAt, whyNow, status, mimeType }) => ({
+    id, title, date, createdAt, updatedAt, whyNow, status, mimeType,
+  }))
+
   return {
-    version:  2,
+    version:  3,                         // bump : traces incluses
     syncedAt: new Date().toISOString(),
     chapters,
     vrac,
+    traces:   safeTraces,
     kv:       safeKv,
   }
 }
@@ -93,7 +101,7 @@ function httpErrorMessage(status, serverMsg) {
   switch (status) {
     case 401: return 'Mot secret incorrect ou expiré. Vérifie tes réglages de synchronisation — le même mot secret doit être utilisé sur tous tes appareils.'
     case 409: return 'Conflit de synchronisation détecté. Ouvre l\'app sur l\'autre appareil et synchronise d\'abord depuis celui-ci.'
-    case 413: return 'Tes données sont trop volumineuses pour la sync (> 10 MB). Contacte le support.'
+    case 413: return 'Tes données sont trop volumineuses pour la synchronisation (limite 10 MB). Essaie d\'exporter une sauvegarde locale depuis le menu Exporter.'
     case 429: return 'Trop de tentatives de synchronisation. Attends quelques minutes avant de réessayer.'
     case 503:
     case 504: return 'Le serveur de sync est temporairement indisponible. Réessaie dans quelques minutes.'
