@@ -8,6 +8,7 @@ import {
   exportAllData, resetAllData, importSnapshot, buildLocalBackup, getStorageEstimate,
 } from '../lib/db'
 import { pushSnapshot, pullSnapshot, buildSnapshot, whoWins } from '../lib/sync'
+import { uploadAllBlobs, downloadAllBlobs } from '../lib/driveSync'
 
 export function useAppState() {
   const [ready,          setReady]          = useState(false)
@@ -240,12 +241,12 @@ export function useAppState() {
         lea_memory:        await getKV('lea_memory',       null),
         lastSyncedAt:      await getKV('lastSyncedAt',     null),
       }
-      const [chapters, vrac, chat] = await Promise.all([
+      const [chapters, vrac, chat, currentTraces] = await Promise.all([
         getChapters(),
         getVrac(),
-        getChatHistoryRecent(500),  // ← Inclut désormais l'historique de conversation
+        getChatHistoryRecent(500),
+        getTraces(),
       ])
-      // Annoter le snapshot avec chat (extension v3 du schema)
       const local = { ...buildSnapshot({ chapters, vrac, kvData }), chat }
 
       // 2. Tirer le snapshot distant
@@ -262,6 +263,10 @@ export function useAppState() {
           setSyncMessage('Snapshot distant corrompu — import annulé, données locales préservées')
           return
         }
+        // T8.2 — Restaurer les blobs manquants depuis Drive (best-effort, non bloquant)
+        downloadAllBlobs(currentTraces).catch(err =>
+          console.warn('[Sync] downloadAllBlobs partiel:', err?.message)
+        )
         // Rafraîchir l'état React depuis IndexedDB
         const [chs, v, ch] = await Promise.all([getChapters(), getVrac(), getChatHistoryRecent(200)])
         setChapters(chs)
@@ -275,6 +280,10 @@ export function useAppState() {
         await pushSnapshot({ token, snapshot: local })
         await setKV('lastSyncedAt', local.syncedAt)
         setLastSyncedAt(local.syncedAt)
+        // T8.2 — Upload des blobs vers Drive (best-effort, non bloquant)
+        uploadAllBlobs(currentTraces).catch(err =>
+          console.warn('[Sync] uploadAllBlobs partiel:', err?.message)
+        )
         setSyncStatus('ok'); setSyncMessage(`Sauvegardé dans le cloud ✓`)
       } else {
         setSyncStatus('ok'); setSyncMessage(`Déjà synchronisé ✓`)
@@ -292,9 +301,6 @@ export function useAppState() {
   }, [])
 
   // ─── Mémoire Léa ─────────────────────────────────────────────
-  // Accepte soit un objet de patch ({ key: value, ... }),
-  // soit une fonction updater (prev) => patchObject — utile pour des updates
-  // dépendants de l'état précédent (ex. push dans keyPoints sans race).
   const updateLeaMemory = useCallback(async (fieldsOrFn) => {
     setLeaMemoryState(prev => {
       const patch = typeof fieldsOrFn === 'function' ? fieldsOrFn(prev) : fieldsOrFn
@@ -305,17 +311,12 @@ export function useAppState() {
     })
   }, [])
 
-  // LOT 4C.3 — Reset complet de la mémoire de Léa.
-  // updateLeaMemory ignore les valeurs null (garde-fou anti corruption),
-  // donc on a besoin d'une fonction dédiée pour le reset utilisateur.
   const resetLeaMemory = useCallback(async () => {
     setLeaMemoryState(null)
     await setKV('lea_memory', null)
   }, [])
 
   // ─── Streak / sessions ───────────────────────────────────────
-  // Lock anti-race : si recordSession est appelé plusieurs fois en parallèle
-  // (par ex. via useAutoSave → updateChapter → recordSession), un seul exécute.
   const recordSession = useCallback(async () => {
     if (recordSessionLockRef.current) return
     const today = new Date().toDateString()
@@ -338,8 +339,6 @@ export function useAppState() {
   }, [streak, sessions])
 
   // ─── Chapitres ────────────────────────────────────────────────
-  // Callbacks stables — lisent chaptersRef/currentIdRef pour éviter
-  // de se recréer à chaque update de chapters/currentId.
   const createChapter = useCallback(async () => {
     const id  = `ch_${Date.now()}`
     const ch  = {
@@ -367,16 +366,11 @@ export function useAppState() {
     })
   }, [])
 
-  /**
-   * Restaure un chapitre supprimé — utilisé par le toast undo dans App.jsx.
-   * Réinsère le chapitre dans IndexedDB + state React + le sélectionne comme courant.
-   */
   const restoreChapter = useCallback(async (chapter) => {
     if (!chapter?.id) return false
     const ok = await dbRestoreChapter(chapter)
     if (!ok) return false
     setChapters(prev => {
-      // Ne pas dupliquer si déjà présent (race avec un autre flow)
       if (prev.some(c => c.id === chapter.id)) return prev
       return [...prev, chapter].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
     })
@@ -391,12 +385,8 @@ export function useAppState() {
   }, [])
 
   // ─── Chat ─────────────────────────────────────────────────────
-  // Borne le state React à 200 derniers messages (la DB IndexedDB conserve tout).
-  // Évite la croissance unbounded de la RAM sur sessions longues.
   const CHAT_RAM_CAP = 200
   const addMessage = useCallback(async (msg) => {
-    // LOT 4C.2 — capture l'id auto-incrémenté retourné par IndexedDB
-    // pour permettre la suppression unitaire des messages ajoutés en session.
     const id = await addChatMessage(msg)
     setChatHistory(prev => {
       const next = [...prev, { ...msg, id }]
@@ -410,7 +400,6 @@ export function useAppState() {
     setChatHistory([])
   }, [])
 
-  // LOT 4C.2 — Suppression unitaire d'un message du chat (DB + state miroir)
   const removeMessage = useCallback(async (id) => {
     if (id == null) return
     await deleteChatMessage(id)
@@ -435,9 +424,6 @@ export function useAppState() {
   }, [])
 
   // ─── Traces — Le tiroir (LOT 1B) ─────────────────────────────
-  // Source : table IDB `traces` (métadonnées). Les Blobs photo vivent dans `traceBlobs`
-  // et ne transitent JAMAIS par le state React — lus à la demande via loadTraceBlob().
-  // Borne le state à 200 traces (la DB conserve tout).
   const createTrace = useCallback(async (traceData = {}) => {
     const item = await addTrace(traceData)
     setTraces(prev => {
@@ -452,22 +438,17 @@ export function useAppState() {
     setTraces(prev => prev.map(t => t.id === id ? { ...t, ...fields } : t))
   }, [])
 
+  // T8.2 — removeTrace : cascade IDB (deleteTrace) + Drive (via db.js deleteTrace)
   const removeTrace = useCallback(async (id) => {
-    // Cascade trace + blob côté lib/db (deleteTrace gère les 2 stores).
-    await deleteTrace(id)
+    await deleteTrace(id)  // cascade IDB + Drive best-effort dans db.js
     setTraces(prev => prev.filter(t => t.id !== id))
   }, [])
 
-  /**
-   * Lecture lazy d'un blob de trace — retourne le Blob ou null.
-   * Le Blob n'est JAMAIS stocké dans le state React : on ne charge pas toutes
-   * les photos en mémoire au boot. L'UI fait l'URL.createObjectURL côté composant
-   * et appelle URL.revokeObjectURL au unmount.
-   */
   const loadTraceBlob = useCallback(async (blobKey) => {
     if (!blobKey) return null
     return getTraceBlob(blobKey)
   }, [])
+
 // ─── Dérivés ──────────────────────────────────────────────────
 const currentChapter = chapters.find(c => c.id === currentId) ?? null
 const isSetup        = name.trim().length > 0

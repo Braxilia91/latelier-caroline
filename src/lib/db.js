@@ -304,13 +304,14 @@ export async function saveTrace(trace) {
 }
 
 /**
- * Suppression atomique : traces + traceBlobs en une seule transaction.
- * oncomplete = les deux deletes ont réussi.
+ * T8.2 — Suppression atomique : traces + traceBlobs en une seule transaction IDB.
+ * Après commit IDB, on tente la suppression du blob Drive (best-effort, non bloquant).
+ * oncomplete = les deux deletes IDB ont réussi.
  * onerror / onabort = rejet avec l'erreur IDB réelle.
  */
 export async function deleteTrace(id) {
   await openDB()
-  return new Promise((resolve, reject) => {
+  await new Promise((resolve, reject) => {
     const txn = _db.transaction(['traces', 'traceBlobs'], 'readwrite')
     txn.oncomplete = () => resolve()
     txn.onerror    = (e) => reject(e.target.error || txn.error)
@@ -318,6 +319,15 @@ export async function deleteTrace(id) {
     txn.objectStore('traces').delete(id)
     txn.objectStore('traceBlobs').delete(id)
   })
+  // T8.2 — Nettoyage Drive best-effort : import dynamique pour éviter
+  // une dépendance circulaire et ne pas bloquer l'appelant si non connecté.
+  try {
+    const { deleteBlobFromDrive } = await import('./driveSync')
+    await deleteBlobFromDrive(id)
+  } catch {
+    // Non connecté à Drive ou Drive non disponible — silencieux.
+    // Le blob orphelin sur Drive sera écrasé au prochain uploadAllBlobs.
+  }
 }
 
 /** Lecture blob — keyPath réel en prod = 'key', .get(traceId) cherche key === traceId. */
