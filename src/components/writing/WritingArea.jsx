@@ -2,7 +2,7 @@ import { useRef, useCallback } from 'react'
 import { useAutoSave } from '../../hooks/useAutoSave'
 import { Save } from 'lucide-react'
 
-// ── Thèmes visuels ───────────────────────────────────────────────
+// ── Thèmes visuels ───────────────────────────────────────────────────────────────
 const THEMES = {
   jour:   { bg: '#FAF7F2', areaBg: '#FAF7F2', text: '#2A1A0E', caret: '#8B6445' },
   soir:   { bg: '#F5EDD8', areaBg: '#EFE4C8', text: '#2A1A0E', caret: '#A0793D' },
@@ -14,7 +14,7 @@ const WIDTHS     = { confort: '680px', full: '100%' }
 const TITLE_MAX = 100
 const TITLE_WARN = 80
 
-export default function WritingArea({ chapter, updateChapter, recordSession, onDictateInline,
+export default function WritingArea({ chapter, updateChapter, recordSession,
                                        editorFont = 'm', editorTheme = 'jour', editorWidth = 'confort' }) {
 
   const savedRef = useRef(null)
