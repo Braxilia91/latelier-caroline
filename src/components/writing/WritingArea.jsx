@@ -14,8 +14,10 @@ const WIDTHS     = { confort: '680px', full: '100%' }
 const TITLE_MAX = 100
 const TITLE_WARN = 80
 
-export default function WritingArea({ chapter, updateChapter, recordSession,
-                                       editorFont = 'm', editorTheme = 'jour', editorWidth = 'confort' }) {
+export default function WritingArea({
+  chapter, updateChapter, recordSession,
+  editorFont = 'm', editorTheme = 'jour', editorWidth = 'confort',
+}) {
 
   const savedRef = useRef(null)
 
