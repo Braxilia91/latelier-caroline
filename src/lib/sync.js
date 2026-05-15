@@ -1,9 +1,11 @@
 /**
- * sync.js — Sync inter-appareils · last-write-wins
+ * sync.js — Sync inter-appareils
  *
  * URL Worker : variable d'env Vite VITE_SYNC_WORKER_URL
  * Définie dans Cloudflare Pages → Settings → Environment variables
  */
+
+import { log } from './logger'
 
 const WORKER_URL = import.meta.env.VITE_SYNC_WORKER_URL || ''
 
@@ -20,12 +22,16 @@ export async function pushSnapshot({ token, snapshot }) {
       headers: { 'Content-Type': 'application/json', 'x-sync-token': token },
       body:    JSON.stringify(snapshot),
     })
-  } catch {
+  } catch (err) {
+    log('sync', 'error', 'pushSnapshot réseau échoué', err)
     if (!navigator.onLine) throw new SyncError('Pas de connexion internet. La sync reprendra automatiquement.', 0)
     throw new SyncError('Le service de synchronisation est temporairement indisponible. Réessaie dans quelques minutes.', 0)
   }
   const data = await res.json().catch(() => ({}))
-  if (!res.ok) throw new SyncError(httpErrorMessage(res.status, data.error), res.status)
+  if (!res.ok) {
+    log('sync', 'error', `pushSnapshot HTTP ${res.status}`, new Error(data.error))
+    throw new SyncError(httpErrorMessage(res.status, data.error), res.status)
+  }
   return data
 }
 
@@ -37,50 +43,80 @@ export async function pullSnapshot({ token }) {
     res = await fetch(WORKER_URL, {
       headers: { 'x-sync-token': token },
     })
-  } catch {
+  } catch (err) {
+    log('sync', 'error', 'pullSnapshot réseau échoué', err)
     if (!navigator.onLine) throw new SyncError('Pas de connexion internet. La sync reprendra automatiquement.', 0)
     throw new SyncError('Le service de synchronisation est temporairement indisponible. Réessaie dans quelques minutes.', 0)
   }
   const data = await res.json().catch(() => ({}))
-  if (!res.ok) throw new SyncError(httpErrorMessage(res.status, data.error), res.status)
-  return data   // { empty: true } si premier sync, sinon snapshot complet
+  if (!res.ok) {
+    log('sync', 'error', `pullSnapshot HTTP ${res.status}`, new Error(data.error))
+    throw new SyncError(httpErrorMessage(res.status, data.error), res.status)
+  }
+  return data
 }
 
 /**
- * T8.3 — buildSnapshot inclut les traces (métadonnées uniquement, jamais les blobs).
- * Les blobs binaires sont gérés séparément par driveSync.js (uploadAllBlobs).
+ * buildSnapshot inclut les traces (métadonnées uniquement, jamais les blobs).
  * Exclut apiKey et openAiKey.
+ * #21 — retourne aussi chatTruncated=true si le chat dépasse 500 messages.
  */
-export function buildSnapshot({ chapters, vrac, kvData, traces = [] }) {
+export function buildSnapshot({ chapters, vrac, kvData, traces = [], chat = [] }) {
   const safeKv = { ...kvData }
   KEYS_NO_SYNC.forEach(k => delete safeKv[k])
 
-  // Sanitize traces : on ne garde que les métadonnées (pas de blob inline)
   const safeTraces = traces.map(({ id, title, date, createdAt, updatedAt, whyNow, status, mimeType }) => ({
     id, title, date, createdAt, updatedAt, whyNow, status, mimeType,
   }))
 
+  const CAP = 500
+  const chatTruncated = chat.length > CAP
+  if (chatTruncated) {
+    log('sync', 'warn', `Chat tronqué à ${CAP} messages (${chat.length} total) — les anciens ne seront pas synchronisés.`)
+  }
+
   return {
-    version:  3,                         // bump : traces incluses
-    syncedAt: new Date().toISOString(),
+    version:      3,
+    syncedAt:     new Date().toISOString(),
     chapters,
     vrac,
-    traces:   safeTraces,
-    kv:       safeKv,
+    traces:       safeTraces,
+    kv:           safeKv,
+    chatTruncated,
   }
 }
 
 /**
- * Stratégie last-write-wins :
- * retourne 'local' | 'remote' | 'equal'
+ * #20 — whoWins amélioré : last-write-wins sur timestamp, mais en cas d'égalité
+ * ou d'écart < 5s (horloges légèrement désynchronisées), on préfère le snapshot
+ * avec le plus de contenu (totalChars = somme des longueurs de chapitres).
+ *
+ * Retourne 'local' | 'remote' | 'equal'
  */
-export function whoWins(localSyncedAt, remoteSyncedAt) {
+export function whoWins(localSyncedAt, remoteSyncedAt, localChapters = [], remoteChapters = []) {
   if (!remoteSyncedAt) return 'local'
   if (!localSyncedAt)  return 'remote'
+
   const l = new Date(localSyncedAt).getTime()
   const r = new Date(remoteSyncedAt).getTime()
-  if (l > r)  return 'local'
-  if (r > l)  return 'remote'
+  const CLOCK_SKEW_MS = 5_000  // 5s de tolérance horloge
+
+  // Écart significatif → timestamp gagne
+  if (l - r >  CLOCK_SKEW_MS) return 'local'
+  if (r - l >  CLOCK_SKEW_MS) return 'remote'
+
+  // Timestamps quasi-identiques → le plus riche en contenu gagne
+  const localChars  = localChapters.reduce((sum, ch)  => sum + (ch.content?.length  || 0), 0)
+  const remoteChars = remoteChapters.reduce((sum, ch) => sum + (ch.content?.length || 0), 0)
+
+  if (localChars  > remoteChars) {
+    log('sync', 'info', `whoWins tie-break chars : local ${localChars} > remote ${remoteChars} → local gagne`)
+    return 'local'
+  }
+  if (remoteChars > localChars) {
+    log('sync', 'info', `whoWins tie-break chars : remote ${remoteChars} > local ${localChars} → remote gagne`)
+    return 'remote'
+  }
   return 'equal'
 }
 
@@ -93,10 +129,6 @@ function assertWorkerUrl() {
   )
 }
 
-/**
- * Messages d'erreur HTTP explicites pour Caroline (pas de codes techniques).
- * Couvre les cas critiques : 401 (secret changé), 409 (conflit), 413 (trop lourd).
- */
 function httpErrorMessage(status, serverMsg) {
   switch (status) {
     case 401: return 'Mot secret incorrect ou expiré. Vérifie tes réglages de synchronisation — le même mot secret doit être utilisé sur tous tes appareils.'

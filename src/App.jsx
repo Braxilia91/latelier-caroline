@@ -6,6 +6,7 @@ import { useMediaQuery } from './hooks/useMediaQuery'
 import { ToastProvider, useToast } from './components/ui/Toast'
 import { buildWelcomeMessage } from './lib/prompts'
 import { putTraceBlob } from './lib/db'
+import { log } from './lib/logger'
 // T11/#4 — Surveillance expiration token Drive
 import { onTokenExpiring, onTokenExpired } from './lib/googleDrive'
 
@@ -100,6 +101,7 @@ function AppInner() {
   const audioRef = useRef(null)
   const [ambientPlaying, setAmbientPlaying] = useState(false)
 
+  // #24 — Fallback toast Safari iOS : audio.play() peut être bloqué sans user gesture
   const startAmbient = useCallback((sound, volume) => {
     if (audioRef.current) {
       audioRef.current.pause()
@@ -110,9 +112,19 @@ function AppInner() {
     const audio = new Audio(`/sounds/${sound}.mp3`)
     audio.loop = true
     audio.volume = Math.max(0, Math.min(1, volume ?? 0.28))
-    audio.play().catch(e => console.warn('[Ambiance] lecture bloquée:', e))
+    audio.play().catch(e => {
+      log('audio', 'warn', `Lecture ambiance bloquée (${sound})`, e)
+      // Sur Safari iOS, NotAllowedError = pas de user gesture récent
+      if (e?.name === 'NotAllowedError') {
+        toast(
+          'Appuie une fois sur l'écran pour activer l'ambiance sonore.',
+          'info',
+          6000,
+        )
+      }
+    })
     audioRef.current = audio
-  }, [])
+  }, [toast])
 
   const handleAmbientChange = useCallback((sound) => {
     db.setAmbientSound(sound)
@@ -147,7 +159,6 @@ function AppInner() {
     const goOnline = () => {
       setIsOnline(true)
       toast('Connexion rétablie — Léa est de nouveau disponible 🌿', 'success')
-      // T9 — retry sync immédiat à la reconnexion
       if (syncReadyRef.current) db.syncNow()
     }
     const goOffline = () => {
@@ -181,6 +192,70 @@ function AppInner() {
     return () => { unsubExpiring(); unsubExpired() }
   }, [toast])
 
+  // ── #16 — BroadcastChannel : sync état entre onglets ─────────────────
+  useEffect(() => {
+    if (!db.ready || typeof BroadcastChannel === 'undefined') return
+    const bc = new BroadcastChannel('atelier_sync')
+
+    // Quand un autre onglet a terminé une sync, on recharge depuis IDB
+    bc.onmessage = async (e) => {
+      if (e.data?.type !== 'SYNC_DONE') return
+      log('app', 'info', 'BroadcastChannel : sync distante reçue — rechargement état')
+      // Rechargement léger : on force un syncNow si on a un token
+      if (db.syncToken && import.meta.env.VITE_SYNC_WORKER_URL && navigator.onLine) {
+        db.syncNow()
+      }
+    }
+
+    // On notifie les autres onglets quand notre sync est OK
+    const origSyncNow = db.syncNow
+    // On utilise un listener sur syncStatus via effect séparé
+    return () => bc.close()
+  }, [db.ready]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Notifie les autres onglets quand notre sync passe en 'ok'
+  const prevSyncStatusRef = useRef(db.syncStatus)
+  useEffect(() => {
+    if (prevSyncStatusRef.current !== 'ok' && db.syncStatus === 'ok') {
+      if (typeof BroadcastChannel !== 'undefined') {
+        try {
+          const bc = new BroadcastChannel('atelier_sync')
+          bc.postMessage({ type: 'SYNC_DONE' })
+          bc.close()
+        } catch { /* silencieux */ }
+      }
+    }
+    prevSyncStatusRef.current = db.syncStatus
+  }, [db.syncStatus])
+
+  // ── #17 — Détection navigation privée ───────────────────────────────
+  useEffect(() => {
+    let warned = false
+    const checkPrivate = async () => {
+      if (warned) return
+      try {
+        // navigator.storage.persist() retourne false en nav privée sur la plupart des navigateurs
+        if (!navigator.storage?.persist) return
+        const persisted = await navigator.storage.persist()
+        if (!persisted) {
+          // Deuxième vérification : essai d'écriture IDB (plus fiable sur Firefox)
+          const estimate = await navigator.storage?.estimate?.()
+          // En nav privée Firefox, quota ≈ 0 ou très faible (< 10 MB)
+          if (estimate && estimate.quota > 0 && estimate.quota < 10 * 1024 * 1024) {
+            warned = true
+            log('app', 'warn', 'Navigation privée détectée — stockage éphémère')
+            toast(
+              'Tu sembles être en navigation privée. Tes textes seront perdus à la fermeture de l'onglet — ouvre l'app dans un onglet normal pour les conserver.',
+              'info',
+              14000,
+            )
+          }
+        }
+      } catch { /* silencieux */ }
+    }
+    if (db.ready) checkPrivate()
+  }, [db.ready, toast])
+
   // ── Thème ─────────────────────────────────────────────────────────
   useEffect(() => {
     if (db.editorTheme) document.documentElement.setAttribute('data-theme', db.editorTheme)
@@ -207,7 +282,7 @@ function AppInner() {
     document.documentElement.style.setProperty('--sidebar-w', v + 'px')
   }, [db.sidebarWidth])
 
-  // T10 #10 — coachWidth appliqué en CSS var (était manquant)
+  // T10 #10 — coachWidth appliqué en CSS var
   useEffect(() => {
     const v = (typeof db.coachWidth === 'number' && db.coachWidth >= 220) ? db.coachWidth : 270
     document.documentElement.style.setProperty('--coach-w', v + 'px')
@@ -284,10 +359,12 @@ function AppInner() {
   }, [db.ready, db.syncToken, db.syncNow])
 
   // ── Handlers ──────────────────────────────────────────────────────
-  const handleSetupComplete = async ({ name, apiKey, profile }) => {
+  // #19 — openAiKey stocké dès l'onboarding
+  const handleSetupComplete = async ({ name, apiKey, openAiKey, profile }) => {
     await db.setName(name)
-    if (apiKey)  await db.setApiKey(apiKey)
-    if (profile) await db.setCarolineProfile(profile)
+    if (apiKey)     await db.setApiKey(apiKey)
+    if (openAiKey)  await db.setOaiKey(openAiKey)
+    if (profile)    await db.setCarolineProfile(profile)
     await db.createChapter()
     toast(`Bienvenue ${name} ! Ton atelier est prêt 🌿`, 'success')
   }
@@ -305,7 +382,7 @@ function AppInner() {
     if (uiScale      !== undefined) await db.setUiScale(uiScale)
     if (layoutScale  !== undefined) await db.setLayoutScale(layoutScale)
     if (sidebarWidth !== undefined) await db.setSidebarWidth(sidebarWidth)
-    if (coachWidth   !== undefined) await db.setCoachWidth(coachWidth)   // T10 #10
+    if (coachWidth   !== undefined) await db.setCoachWidth(coachWidth)
     toast('Réglages sauvegardés ✓', 'success')
   }
 
@@ -316,7 +393,6 @@ function AppInner() {
     toast('Texte inséré ✓', 'success')
   }, [db])
 
-  // T10 #12 — toast destructif allongé à 9 s pour laisser le temps de lire
   const handleRemoveChapter = useCallback((id) => {
     const chapter = db.chapters.find(c => c.id === id)
     if (!chapter) { db.removeChapter(id); return }

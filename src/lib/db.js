@@ -23,8 +23,6 @@ async function openDB() {
           db.createObjectStore('vrac', { keyPath: 'id' })
       }
       if (old < 3) {
-        // Store fragments conservé en DB pour compatibilité des bases existantes
-        // mais les fonctions JS sont supprimées (feature abandonnée).
         if (!db.objectStoreNames.contains('fragments'))
           db.createObjectStore('fragments', { keyPath: 'id' })
       }
@@ -35,16 +33,12 @@ async function openDB() {
           db.createObjectStore('traceBlobs', { keyPath: 'traceId' })
       }
       if (old < 5) {
-        // Corrige le keyPath traceBlobs : 'traceId' (v4 nouvelles installs) → 'key' (prod)
-        // En prod le store a déjà keyPath='key' → on ne touche pas, blobs préservés.
-        // Sur nouvelles installs (keyPath='traceId') → recréation propre (aucun blob à perdre).
         if (db.objectStoreNames.contains('traceBlobs')) {
           const upgradeStore = e.target.transaction.objectStore('traceBlobs')
           if (upgradeStore.keyPath !== 'key') {
             db.deleteObjectStore('traceBlobs')
             db.createObjectStore('traceBlobs', { keyPath: 'key' })
           }
-          // si keyPath === 'key' déjà : rien à faire
         } else {
           db.createObjectStore('traceBlobs', { keyPath: 'key' })
         }
@@ -205,7 +199,6 @@ export async function addVrac(idea) {
   })
 }
 
-// fix(audit) #1 — transaction atomique : get + put dans la même IDBTransaction
 export async function updateVrac(id, fields) {
   await openDB()
   return new Promise((resolve, reject) => {
@@ -234,10 +227,6 @@ export async function deleteVrac(id) {
 }
 
 // ─── Traces — tiroir mémoire photo ─────────────────────────────
-// Schéma trace    : { id, createdAt, updatedAt, ...metadata }
-// Schéma traceBlob: { key: traceId, blob, mimeType }
-//   keyPath réel en prod = 'key' (migration v5 idempotente)
-
 export async function getTraces() {
   await openDB()
   return new Promise((resolve) => {
@@ -249,20 +238,15 @@ export async function getTraces() {
   })
 }
 
-/**
- * Crée une nouvelle trace — id toujours auto-généré (jamais hérité de l'appelant).
- * Spreade l'intégralité du payload metadata (whyNow, status, mimeType, etc.)
- * avant de fixer les champs système (id, createdAt, updatedAt).
- */
 export async function addTrace(trace) {
   await openDB()
   const item = {
     title:     trace?.title || '',
     date:      trace?.date  || new Date().toISOString().split('T')[0],
-    ...trace,                                 // préserve tous les champs metadata
-    id:        `tr_${Date.now()}`,            // toujours auto-généré — écrase tout id entrant
-    createdAt: new Date().toISOString(),      // toujours serveur
-    updatedAt: new Date().toISOString(),      // toujours serveur
+    ...trace,
+    id:        `tr_${Date.now()}`,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   }
   return new Promise((resolve, reject) => {
     const req = tx('traces', 'readwrite').add(item)
@@ -271,7 +255,6 @@ export async function addTrace(trace) {
   })
 }
 
-// fix(audit) #1 — transaction atomique : get + put dans la même IDBTransaction
 export async function updateTrace(id, fields) {
   await openDB()
   return new Promise((resolve, reject) => {
@@ -290,7 +273,6 @@ export async function updateTrace(id, fields) {
   })
 }
 
-/** Upsert direct d'une trace (restore/import). */
 export async function saveTrace(trace) {
   await openDB()
   return new Promise((resolve, reject) => {
@@ -303,12 +285,6 @@ export async function saveTrace(trace) {
   })
 }
 
-/**
- * T8.2 — Suppression atomique : traces + traceBlobs en une seule transaction IDB.
- * Après commit IDB, on tente la suppression du blob Drive (best-effort, non bloquant).
- * oncomplete = les deux deletes IDB ont réussi.
- * onerror / onabort = rejet avec l'erreur IDB réelle.
- */
 export async function deleteTrace(id) {
   await openDB()
   await new Promise((resolve, reject) => {
@@ -319,18 +295,14 @@ export async function deleteTrace(id) {
     txn.objectStore('traces').delete(id)
     txn.objectStore('traceBlobs').delete(id)
   })
-  // T8.2 — Nettoyage Drive best-effort : import dynamique pour éviter
-  // une dépendance circulaire et ne pas bloquer l'appelant si non connecté.
   try {
     const { deleteBlobFromDrive } = await import('./driveSync')
     await deleteBlobFromDrive(id)
   } catch {
-    // Non connecté à Drive ou Drive non disponible — silencieux.
-    // Le blob orphelin sur Drive sera écrasé au prochain uploadAllBlobs.
+    // Non connecté à Drive — silencieux
   }
 }
 
-/** Lecture blob — keyPath réel en prod = 'key', .get(traceId) cherche key === traceId. */
 export async function getTraceBlob(traceId) {
   await openDB()
   return new Promise((resolve) => {
@@ -340,16 +312,10 @@ export async function getTraceBlob(traceId) {
   })
 }
 
-/** Alias de getTraceBlob (compatibilité interne). */
 export async function loadTraceBlob(traceId) {
   return getTraceBlob(traceId)
 }
 
-/**
- * Sauvegarde un blob de trace.
- * keyPath du store en prod = 'key' (migration v5 idempotente).
- * On passe { key: traceId, blob, mimeType } pour satisfaire ce keyPath.
- */
 export async function saveTraceBlob(traceId, blob, mimeType) {
   await openDB()
   return new Promise((resolve, reject) => {
@@ -359,7 +325,6 @@ export async function saveTraceBlob(traceId, blob, mimeType) {
   })
 }
 
-/** Alias de saveTraceBlob — nom attendu par App.jsx. */
 export async function putTraceBlob(traceId, blob, mimeType) {
   return saveTraceBlob(traceId, blob, mimeType)
 }
@@ -390,8 +355,6 @@ export function isValidSnapshot(data) {
   return true
 }
 
-// fix(audit) #2 — transactions groupées : tous les put lancés sans await intermédiaire,
-// résolution via txn.oncomplete. Réduit ~500 aller-retours IDB séquentiels à 1 passe/store.
 export async function importSnapshot(snapshot) {
   if (!isValidSnapshot(snapshot)) {
     console.error('[Sync] Snapshot invalide — import annulé', snapshot)
@@ -399,7 +362,7 @@ export async function importSnapshot(snapshot) {
   }
   await openDB()
 
-  // 1. Clear + import chapitres en une transaction groupée
+  // 1. Chapitres
   await new Promise((resolve, reject) => {
     const txn   = _db.transaction(['chapters'], 'readwrite')
     const store = txn.objectStore('chapters')
@@ -413,7 +376,7 @@ export async function importSnapshot(snapshot) {
     }
   })
 
-  // 2. Clear + import vrac en une transaction groupée
+  // 2. Vrac
   await new Promise((resolve, reject) => {
     const txn   = _db.transaction(['vrac'], 'readwrite')
     const store = txn.objectStore('vrac')
@@ -426,7 +389,7 @@ export async function importSnapshot(snapshot) {
     }
   })
 
-  // 3. KV keys — séquentiel acceptable (≤10 clés fixes)
+  // 3. KV
   const kv = snapshot.kv || {}
   for (const [key, value] of Object.entries(kv)) {
     if (KV_KEYS_SYNC.includes(key) && value !== undefined) {
@@ -434,7 +397,9 @@ export async function importSnapshot(snapshot) {
     }
   }
 
-  // 4. Chat — clear + import en une transaction groupée (potentiellement 500 messages)
+  // 4. Chat — #26 : on préserve l'id original du message (put au lieu de add).
+  // Le store chat a autoIncrement=true ET keyPath='id', donc put({ id, ...rest })
+  // réutilise l'id existant ; si l'id est absent (vieux snapshot), add() génère un nouvel id.
   if (Array.isArray(snapshot.chat)) {
     await new Promise((resolve, reject) => {
       const txn   = _db.transaction(['chat'], 'readwrite')
@@ -444,8 +409,12 @@ export async function importSnapshot(snapshot) {
       txn.onabort    = ()  => reject(txn.error || new Error('chat import aborted'))
       store.clear()
       for (const msg of snapshot.chat.slice(-500)) {
-        const { id, ...rest } = msg
-        store.add(rest)
+        if (msg.id != null) {
+          store.put(msg)           // #26 : préserve l'id → pas de références cassées
+        } else {
+          const { id: _dropped, ...rest } = msg
+          store.add(rest)          // vieux snapshot sans id → auto-increment
+        }
       }
     })
   }
@@ -474,7 +443,6 @@ export async function exportAllData() {
   }
 }
 
-// ─── Backup local complet v4 (inclut traces) ───────────────────
 export async function buildLocalBackup() {
   const [chapters, name, streak, sessions, profile, vrac, chat, leaMemory, traces] = await Promise.all([
     getChapters(),
@@ -495,7 +463,6 @@ export async function buildLocalBackup() {
   }
 }
 
-// ─── Estimation du stockage ─────────────────────────────────────
 export async function getStorageEstimate() {
   if (!navigator.storage?.estimate) return null
   try {
@@ -510,7 +477,6 @@ export async function getStorageEstimate() {
   }
 }
 
-// ─── Reset total ────────────────────────────────────────────────
 export async function resetAllData() {
   if (_db) { _db.close(); _db = null }
   await new Promise((resolve, reject) => {
