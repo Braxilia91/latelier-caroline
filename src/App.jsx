@@ -10,7 +10,6 @@ import { putTraceBlob } from './lib/db'
 import { onTokenExpiring, onTokenExpired } from './lib/googleDrive'
 
 // ── Imports critiques (chemin de rendu initial) ──────────────────────────────
-const Onboarding = Onboarding || await import('./components/onboarding/Onboarding').then(m => m.default)
 import Onboarding from './components/onboarding/Onboarding'
 import Header from './components/layout/Header'
 import Sidebar from './components/layout/Sidebar'
@@ -164,9 +163,6 @@ function AppInner() {
   }, [db.syncNow]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── T11/#4 — Surveillance expiration token Drive ─────────────────────
-  // Au signIn, googleDrive.js programme 2 setTimeout (5 min avant + à
-  // l'expiration). Les callbacks ici affichent un toast pour que Caroline
-  // sache qu'elle doit se reconnecter avant la coupure silencieuse de Drive.
   useEffect(() => {
     const unsubExpiring = onTokenExpiring(() => {
       toast(
@@ -258,8 +254,6 @@ function AppInner() {
   }, [db.ready]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── T9 — Auto-sync idle (30s sans frappe) ──────────────────────────
-  // Réinitialise le timer à chaque frappe clavier ou clic dans l'app.
-  // Sur pagehide (onglet fermé / navigateur tué sur mobile), sync forcé.
   useEffect(() => {
     if (!db.ready) return
     const canSync = () => syncReadyRef.current && db.syncToken && import.meta.env.VITE_SYNC_WORKER_URL && navigator.onLine
@@ -506,7 +500,6 @@ function AppInner() {
         fontSize: '.68rem', fontWeight: 600, fontFamily: "'Nunito', sans-serif",
         color: isOnline ? '#3D6B45' : '#92400E',
         zIndex: 500, pointerEvents: 'none', transition: 'all .4s ease',
-        // Sur mobile : masqué si en ligne (discret), visible si hors ligne
         opacity: isMobile && isOnline ? 0 : 1,
       }}>
         <span style={{
