@@ -2,7 +2,7 @@ import { useState } from 'react'
 
 import Modal from '../ui/Modal'
 import { X, Download, FileText } from 'lucide-react'
-import { exportAllData } from '../../lib/db'
+import { buildLocalBackup } from '../../lib/db'
 
 export default function ExportModal({ chapters, name, onClose }) {
 const [mode, setMode] = useState('full')
@@ -36,11 +36,11 @@ a.click(); URL.revokeObjectURL(url)
 }
 
 const exportJSON = async () => {
-const data = await exportAllData()
+const data = await buildLocalBackup()
 const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
 const url = URL.createObjectURL(blob)
 const a = document.createElement('a')
-a.href = url; a.download = `atelier-sauvegarde-${new Date().toISOString().slice(0,10)}.json`
+a.href = url; a.download = `atelier-backup-v5-${new Date().toISOString().slice(0,10)}.json`
 a.click(); URL.revokeObjectURL(url)
 }
 
@@ -88,7 +88,7 @@ Sauvegarde complète
 </button>
 
 <p style={styles.note}>
-Le fichier .json contient tous tes textes, chapitres et paramètres. Garde-le précieusement — il te permettra de tout restaurer.
+Le fichier .json contient tous tes textes, chapitres, photos du Tiroir et paramètres. Garde-le précieusement — il te permettra de tout restaurer.
 </p>
 </Modal>
 )
