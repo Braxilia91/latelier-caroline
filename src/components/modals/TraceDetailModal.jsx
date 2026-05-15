@@ -3,12 +3,13 @@ import Modal from '../ui/Modal'
 import { X, Edit3, Check, Trash2, Archive, Tag } from 'lucide-react'
 import useClickAway from '../../hooks/useClickAway'
 
+// T6A.1 — palette saturée (ADN atelier + distinctivité accrue pour les pastilles vignettes)
 const STATUS_LABELS = {
-  private: { label: 'Gardée dans le tiroir', color: '#B0A090' },
-  vrac:    { label: 'Envoyée au vrac',       color: '#C4956A' },
-  note:    { label: 'Note brute',            color: '#8B6445' },
-  scene:   { label: 'Scène avec Léa',        color: '#6B8F71' },
-  letter:  { label: 'Lettre',                color: '#8FA8D8' },
+  private: { label: 'Gardée dans le tiroir', color: '#8A7563' },
+  vrac:    { label: 'Envoyée au vrac',       color: '#E07A1F' },
+  note:    { label: 'Note brute',            color: '#6E3A1E' },
+  scene:   { label: 'Scène avec Léa',        color: '#3FA868' },
+  letter:  { label: 'Lettre',                color: '#3D6FCF' },
 }
 
 // T6A — ordre d'affichage des options dans le popover statut
@@ -173,9 +174,6 @@ export default function TraceDetailModal({
   }
 
   // ── T6A — Changement de statut (aucun effet de bord) ─────────
-  // Touche uniquement le champ status de la trace via editTrace. Aucune création
-  // automatique côté vrac/scene/note/letter à ce stade — décisions T6B basées
-  // sur l'usage testeur. updatedAt bumpé par db.updateTrace.
   const handleChangeStatus = async (newStatus) => {
     setStatusOpen(false)
     if (!canEdit) return
@@ -234,7 +232,7 @@ export default function TraceDetailModal({
           )}
         </div>
 
-        {/* Statut — pastille colorée informationnelle (pas un contrôle ; le sélecteur est dans le footer) */}
+        {/* Statut — pastille colorée informationnelle */}
         <div style={S.statusRow}>
           <span style={{ ...S.statusDot, background: status.color }} />
           <span style={S.statusLabel}>{status.label}</span>
@@ -247,7 +245,6 @@ export default function TraceDetailModal({
             const isEditing = editingField === f.key
             const isFilled  = String(value).trim().length > 0
             const otherEdit = editingField !== null && !isEditing
-            // Crayon désactivé si : un autre champ est en édition, OU editTrace n'est pas branchée
             const pencilDisabled = otherEdit || !canEdit
 
             return (
