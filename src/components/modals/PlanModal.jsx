@@ -1,14 +1,17 @@
 import { useState } from 'react'
 
 import Modal from '../ui/Modal'
-import { X, BookOpen, ChevronDown, ChevronUp, Check } from 'lucide-react'
+import { X, BookOpen, ChevronDown, ChevronUp, Check, Lock, Unlock, GripVertical } from 'lucide-react'
 
-export default function PlanModal({ chapters, onClose, updateChapter }) {
+export default function PlanModal({ chapters, onClose, updateChapter, reorderChapters }) {
   const [editingId,  setEditingId]  = useState(null)
   const [editVal,    setEditVal]    = useState('')
   const [expanded,   setExpanded]   = useState({})
+  // T13b — État du drag & drop natif HTML5
+  const [dragIdx,    setDragIdx]    = useState(null)
+  const [overIdx,    setOverIdx]    = useState(null)
 
-  const sorted = [...chapters].sort((a, b) => a.order - b.order)
+  const sorted = [...chapters].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
 
   const totalWords = chapters.reduce(
     (acc, c) => acc + (c.content?.split(/\s+/).filter(Boolean).length ?? 0), 0
@@ -25,6 +28,46 @@ export default function PlanModal({ chapters, onClose, updateChapter }) {
   }
 
   const toggleExpand = (id) => setExpanded(prev => ({ ...prev, [id]: !prev[id] }))
+
+  // T15 — Toggle du flag private sur un chapitre.
+  // Aucune migration IDB : le champ est ajouté à la volée par updateChapter.
+  const togglePrivate = async (ch) => {
+    await updateChapter(ch.id, { private: !ch.private })
+  }
+
+  // T13b — Drag & drop natif HTML5 (desktop). Mobile : fallback à prévoir.
+  const onDragStart = (idx) => (e) => {
+    setDragIdx(idx)
+    setOverIdx(null)
+    e.dataTransfer.effectAllowed = 'move'
+    // Compatibilité Firefox : exige setData pour démarrer le drag.
+    try { e.dataTransfer.setData('text/plain', String(idx)) } catch (_) { /* tolérant */ }
+  }
+
+  const onDragOver = (idx) => (e) => {
+    if (dragIdx == null) return
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    if (overIdx !== idx) setOverIdx(idx)
+  }
+
+  const onDrop = (toIdx) => (e) => {
+    e.preventDefault()
+    const fromIdx = dragIdx
+    setDragIdx(null)
+    setOverIdx(null)
+    if (fromIdx == null || fromIdx === toIdx) return
+    if (typeof reorderChapters !== 'function') return  // garde-fou si prop absente
+    const next = [...sorted]
+    const [moved] = next.splice(fromIdx, 1)
+    next.splice(toIdx, 0, moved)
+    reorderChapters(next)
+  }
+
+  const onDragEnd = () => {
+    setDragIdx(null)
+    setOverIdx(null)
+  }
 
   return (
     <Modal
@@ -59,16 +102,52 @@ export default function PlanModal({ chapters, onClose, updateChapter }) {
             const preview = ch.content?.trim().slice(0, 120)
             const isOpen  = expanded[ch.id]
             const isEdit  = editingId === ch.id
+            const isPriv  = ch.private === true
+            const isDrag  = dragIdx === idx
+            const isOver  = overIdx === idx && dragIdx !== idx
+
+            // T13b — Visual feedback : opacity .5 sur la source, border-top doré
+            // sur la cible. Style privé : opacité légère pour signaler le statut.
+            const cardStyle = {
+              ...S.card,
+              opacity: isDrag ? 0.5 : (isPriv ? 0.75 : 1),
+              borderTop: isOver ? '3px solid #C4956A' : undefined,
+              cursor: 'grab',
+            }
 
             return (
-              <div key={ch.id} style={S.card}>
-                {/* Numéro + titre + mots */}
+              <div
+                key={ch.id}
+                style={cardStyle}
+                draggable
+                onDragStart={onDragStart(idx)}
+                onDragOver={onDragOver(idx)}
+                onDrop={onDrop(idx)}
+                onDragEnd={onDragEnd}
+              >
+                {/* Numéro + titre + mots + cadenas */}
                 <div style={S.cardTop}>
+                  <span style={S.gripWrap} title="Glisser pour réordonner">
+                    <GripVertical size={14} color="#C4B5A0" />
+                  </span>
                   <span style={S.num}>{idx + 1}</span>
                   <div style={S.cardMeta}>
                     <span style={S.chTitle}>{ch.title || 'Sans titre'}</span>
-                    <span style={S.wordCount}>{words} mot{words > 1 ? 's' : ''}</span>
+                    <span style={S.wordCount}>
+                      {words} mot{words > 1 ? 's' : ''}
+                      {isPriv && <span style={S.privLabel}> · privé</span>}
+                    </span>
                   </div>
+                  {/* T15 — Cadenas toggle private */}
+                  <button
+                    style={{ ...S.expandBtn, ...(isPriv ? S.lockActive : {}) }}
+                    onClick={() => togglePrivate(ch)}
+                    title={isPriv ? "Rendre public (visible à l'export partagé)" : "Marquer comme privé (exclu de l'export partagé)"}
+                    aria-label={isPriv ? 'Rendre public' : 'Marquer privé'}
+                    aria-pressed={isPriv}
+                  >
+                    {isPriv ? <Lock size={13} /> : <Unlock size={13} />}
+                  </button>
                   <button
                     style={S.expandBtn}
                     onClick={() => toggleExpand(ch.id)}
@@ -124,7 +203,7 @@ export default function PlanModal({ chapters, onClose, updateChapter }) {
         {/* Footer */}
         <div style={S.footer}>
           <span style={S.footerNote}>
-            Clique sur une intention pour la modifier · Entrée pour valider · Échap pour annuler
+            Glisse pour réordonner · Cadenas pour passages privés · Entrée pour valider une intention
           </span>
           <button style={S.closeFooterBtn} onClick={onClose}>Fermer</button>
         </div>
@@ -179,8 +258,14 @@ const S = {
     borderRadius: 12,
     padding: '12px 14px',
     display: 'flex', flexDirection: 'column', gap: 8,
+    transition: 'opacity .15s, border-color .15s',
   },
   cardTop: { display: 'flex', alignItems: 'center', gap: 10 },
+  gripWrap: {
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    width: 16, height: 24, flexShrink: 0,
+    cursor: 'grab',
+  },
   num: {
     width: 24, height: 24, flexShrink: 0,
     background: '#EDE7DE', borderRadius: 20,
@@ -197,13 +282,20 @@ const S = {
     fontSize: '.67rem', color: '#B0A090',
     fontFamily: "'Nunito', sans-serif",
   },
+  privLabel: { color: '#8B6445', fontWeight: 700 },
   expandBtn: {
     width: 28, height: 28, borderRadius: 8, flexShrink: 0,
     background: 'transparent', border: '1.5px solid #EDE7DE',
     color: '#9C8878', cursor: 'pointer',
     display: 'flex', alignItems: 'center', justifyContent: 'center',
   },
-  intentionRow: { paddingLeft: 34 },
+  // T15 — style actif du cadenas privé (fond gold-ll, border gold)
+  lockActive: {
+    background: '#F7EFE3',
+    borderColor: '#C4956A',
+    color: '#8B6445',
+  },
+  intentionRow: { paddingLeft: 50 },
   editRow: { display: 'flex', gap: 6, alignItems: 'center' },
   intentionInput: {
     flex: 1,
@@ -235,14 +327,14 @@ const S = {
     opacity: .7,
   },
   preview: {
-    paddingLeft: 34,
+    paddingLeft: 50,
     fontFamily: "'Lora', serif", fontStyle: 'italic',
     fontSize: '.78rem', color: '#9C8878', lineHeight: 1.6,
     margin: 0,
     borderTop: '1px dashed #EDE7DE', paddingTop: 8,
   },
   previewEmpty: {
-    paddingLeft: 34,
+    paddingLeft: 50,
     fontFamily: "'Lora', serif", fontStyle: 'italic',
     fontSize: '.78rem', color: '#C4956A', opacity: .6,
     margin: 0,
