@@ -46,6 +46,9 @@ export default function AddTraceFlow({ onClose, onCreateTrace }) {
 
   const fileInputRef = useRef(null)
   const textareaRef = useRef(null)
+  // Fichier original conservé pour OCR — pas de dégradation JPEG lossy.
+  // Preview et stockage restent sur compressed.blob.
+  const originalFileRef = useRef(null)
 
   // Libère l'ObjectURL au démontage ou remplacement du blob.
   useEffect(() => {
@@ -66,11 +69,22 @@ export default function AddTraceFlow({ onClose, onCreateTrace }) {
 
   // Lance l'OCR en parallèle dès l'arrivée sur étape 2.
   // Non bloquant : si OCR en cours au Save, on sauve sans attendre.
+  // OCR sur originalFileRef.current (fichier source non dégradé).
+  // Dépendances explicites [step, compressed] — pas de stale closure.
+  // Guard cancelled dans le cleanup : retours tardifs ignorés.
   useEffect(() => {
-    if (step !== 'firstListen' || !compressed) return
+    if (step !== 'firstListen' || !compressed || !originalFileRef.current) return
+
+    let cancelled = false
+    const sourceFile = originalFileRef.current
+
     setOcrStatus('running')
-    runOCR(compressed.blob)
+    setOcrResult(null)
+    setOcrExpanded(false)
+
+    runOCR(sourceFile)
       .then(({ text, confidence }) => {
+        if (cancelled) return
         if (confidence >= OCR_CONFIDENCE_THRESHOLD && text.trim().length > 0) {
           setOcrResult({ text, confidence })
           setOcrTextEdited(text)
@@ -79,8 +93,14 @@ export default function AddTraceFlow({ onClose, onCreateTrace }) {
           setOcrStatus('skipped')
         }
       })
-      .catch(() => setOcrStatus('error'))
-  }, [step]) // compressed est stable une fois positionné
+      .catch(() => {
+        if (!cancelled) setOcrStatus('error')
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [step, compressed])
 
   const handlePickFile = () => {
     setError(null)
@@ -91,6 +111,8 @@ export default function AddTraceFlow({ onClose, onCreateTrace }) {
     const file = e.target.files?.[0]
     e.target.value = ''
     if (!file) return
+    // Stocke l'original avant compression — utilisé par l'OCR.
+    originalFileRef.current = file
     setSubmitting(true)
     setError(null)
     try {
