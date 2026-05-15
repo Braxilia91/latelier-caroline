@@ -5,9 +5,9 @@ const WHISPER_PROXY = '/api/openai-whisper'
 
 const MODEL = 'claude-sonnet-4-20250514'
 
-// ─── Nettoyage du texte avant TTS ────────────────────────────────
-// Strip markdown (asterisques, headers, code, links), emojis, bullets
-// pour que la voix ne lise pas "astérisque astérisque etc"
+// ─── Nettoyage du texte avant TTS ────────────────────────────
+// Strip markdown (astérisques, headers, code, links), emojis, bullets
+// pour que la voix ne lise pas "étoile astérisque etc"
 export function cleanForTTS(text) {
   if (!text) return ''
   return text
@@ -36,7 +36,7 @@ export function cleanForTTS(text) {
     // Bullet markers en début de ligne
     .replace(/^[-•*]\s+/gm, '')
     .replace(/^\d+\.\s+/gm, '')
-    // Multiple newlines → pause
+    // Multiple newlines → pause naturelle
     .replace(/\n{2,}/g, '. ')
     .replace(/\n/g, ' ')
     // Multiple spaces
@@ -44,12 +44,14 @@ export function cleanForTTS(text) {
     .trim()
 }
 
-// ─── Lexique de prononciation FR ────────────────────────────────
+// ─── Lexique de prononciation FR ──────────────────────────────
 // LOT 2.1 — Ciblé sur sigles, abréviations et symboles qui sonnent
 // mal en TTS française (tts-1-hd nova). Pas de remplacement
 // d'anglicismes courants (parking, weekend…) : la voix FR les rend
 // déjà acceptablement avec un accent francisé.
 // Format : { regex_string: replacement }. Tous appliqués avec flag 'g'.
+// NOTE : '\u2026' (…) est intentionnellement absent : OpenAI TTS le restitue
+// nativement comme une pause/hésitation naturelle. Ne pas le remplacer.
 const FR_LEXICON = {
   // Sigles techniques (lettres séparées pour épellation forcée)
   '\\bIA\\b': 'I A',
@@ -76,13 +78,13 @@ const FR_LEXICON = {
   // Symboles
   '&': ' et ',
   '%': ' pour cent',
-  '€': ' euros',
+  '\u20ac': ' euros',
   '\\$': ' dollars',
-  '£': ' livres',
-  // Caractères qui cassent la fluidité de narration
+  '\u00a3': ' livres',
+  // Tirets cadratins/demi-cadratins → virgule (fluidité de narration)
+  // '\u2026' (…) retiré : TTS le rend nativement comme hésitation naturelle
   '\\s—\\s': ', ',
   '\\s–\\s': ', ',
-  '…': ', ',
   '\\s;\\s': ', ',
 }
 
@@ -92,14 +94,9 @@ function applyFrLexicon(text) {
   for (const [pattern, replacement] of Object.entries(FR_LEXICON)) {
     out = out.replace(new RegExp(pattern, 'g'), replacement)
   }
-  // Cleanup espaces multiples créés par les remplacements
   return out.replace(/\s+/g, ' ').trim()
 }
 
-// LOT 2.1 — Composition par-dessus cleanForTTS, jamais en remplacement.
-// cleanForTTS reste la baseline (markdown/emoji/bullets) ; le lexique
-// FR vient ensuite. Si le lexique casse un cas, on peut le retirer
-// sans toucher à cleanForTTS.
 export function normalizeForNarrationFR(text) {
   return applyFrLexicon(cleanForTTS(text))
 }
@@ -155,16 +152,20 @@ export async function askClaude({ apiKey, systemPrompt, messages, maxTokens = 60
   return data.content?.[0]?.text || ''
 }
 
-// ─── TTS (voix de Léa via OpenAI proxy) ─────────────────────────
-// Nettoyage du texte + speed param (0.5 - 2.0 selon préférence)
-// Modèle tts-1-hd pour qualité supérieure (× 2 coût mais accents français mieux)
-// LOT 2.1 — passe désormais par normalizeForNarrationFR (cleanForTTS + lexique FR)
-// TTS/Phase 0 — paramètre `onLatencyLog(event, extras)` optionnel : 3 events internes
-//   pour isoler le goulot G2 (await res.blob()) vs proxy/headers/Audio init.
-// TTS/V1.1 — paramètre `autoPlay = true` : par défaut on appelle audio.play() après
-//   création (rétrocompat). Le caller V1 passe `autoPlay: false` pour attacher
-//   les listeners (play, ended, error) AVANT de jouer, évitant la race condition
-//   où l'event 'play' partirait avant que l'écouteur soit branché.
+// ─── TTS streaming via MediaSource (voix de Léa via OpenAI proxy) ───
+// Principe : dès les premiers octets du body HTTP, on alimente un
+// SourceBuffer MPEG audio — l'audio commence sans attendre res.blob().
+// Fallback transparent vers blob() si MediaSource non supporté (ex. Safari < 17).
+//
+// TTS/Phase 0 — onLatencyLog(event, extras) : inchangé
+// autoPlay=false : inchangé, le caller attache ses listeners puis appelle play()
+
+const SUPPORTS_MEDIA_SOURCE = (
+  typeof MediaSource !== 'undefined' &&
+  typeof MediaSource.isTypeSupported === 'function' &&
+  MediaSource.isTypeSupported('audio/mpeg')
+)
+
 export async function speakWithOpenAI({ openAiKey, text, voice = 'nova', speed = 1.0, hd = true, autoPlay = true, onLatencyLog }) {
   if (!openAiKey) throw new Error('Mot de passe Léa manquant')
   const cleanText = normalizeForNarrationFR(text).slice(0, 4096)
@@ -196,17 +197,99 @@ export async function speakWithOpenAI({ openAiKey, text, voice = 'nova', speed =
     err.body = detail
     throw err
   }
+
+  // ─ Streaming via MediaSource ─────────────────────────────────────
+  if (SUPPORTS_MEDIA_SOURCE && res.body) {
+    return new Promise((resolve, reject) => {
+      const ms = new MediaSource()
+      const audio = new Audio()
+      audio.src = URL.createObjectURL(ms)
+
+      ms.addEventListener('sourceopen', async () => {
+        let sb
+        try {
+          sb = ms.addSourceBuffer('audio/mpeg')
+        } catch (e) {
+          // MIME non supporté sur ce navigateur malgré isTypeSupported
+          // Fallback blob
+          ms.endOfStream()
+          URL.revokeObjectURL(audio.src)
+          try {
+            const blob = await res.blob()
+            const url2 = URL.createObjectURL(blob)
+            const a2 = new Audio(url2)
+            try { onLatencyLog?.('tts_blob_ready', { blobSizeKB: Math.round((blob?.size ?? 0) / 1024), note: 'mediasource_fallback' }) } catch (_) {}
+            if (autoPlay) a2.play()
+            resolve(a2)
+          } catch (e2) { reject(e2) }
+          return
+        }
+
+        sb.mode = 'sequence'
+        const reader = res.body.getReader()
+        let firstChunkAppended = false
+        let done = false
+
+        const pump = async () => {
+          while (true) {
+            const { done: d, value } = await reader.read()
+            if (d) { done = true; break }
+            if (!value?.length) continue
+
+            // Attendre que le SourceBuffer soit prêt à recevoir
+            if (sb.updating) {
+              await new Promise(r => sb.addEventListener('updateend', r, { once: true }))
+            }
+            try {
+              sb.appendBuffer(value)
+            } catch (_) {
+              // QuotaExceededError ou InvalidStateError — on stoppe proprement
+              done = true
+              break
+            }
+
+            if (!firstChunkAppended) {
+              firstChunkAppended = true
+              try { onLatencyLog?.('tts_blob_ready', { note: 'mediasource_first_chunk' }) } catch (_) {}
+              // L'audio peut déjà commencer à jouer
+              resolve(audio)
+              if (autoPlay) audio.play().catch(() => {})
+            }
+          }
+
+          // Fin du stream : signaler la fin au MediaSource
+          if (sb.updating) {
+            await new Promise(r => sb.addEventListener('updateend', r, { once: true }))
+          }
+          try {
+            if (ms.readyState === 'open') ms.endOfStream()
+          } catch (_) {}
+        }
+
+        pump().catch(err => {
+          // Erreur réseau en cours de stream
+          try { if (ms.readyState === 'open') ms.endOfStream('network') } catch (_) {}
+          if (!firstChunkAppended) reject(err)
+          // Si déjà résolu, l'erreur mid-stream est absorbée (audio jouera jusqu'où il a reçu)
+        })
+      }, { once: true })
+
+      ms.addEventListener('error', () => {
+        reject(new Error('MediaSource error'))
+      }, { once: true })
+    })
+  }
+
+  // ─ Fallback : blob() classique (Safari < 17, ou MediaSource non dispo) ──
   const blob = await res.blob()
-
-  try { onLatencyLog?.('tts_blob_ready', { blobSizeKB: Math.round((blob?.size ?? 0) / 1024) }) } catch (_) {}
-
+  try { onLatencyLog?.('tts_blob_ready', { blobSizeKB: Math.round((blob?.size ?? 0) / 1024), note: 'blob_fallback' }) } catch (_) {}
   const url = URL.createObjectURL(blob)
   const audio = new Audio(url)
   if (autoPlay) audio.play()
   return audio
 }
 
-// ─── Transcription Whisper (proxy) ──────────────────────────────
+// ─── Transcription Whisper (proxy) ─────────────────────────────
 export async function transcribeAudio({ openAiKey, audioBlob }) {
   if (!openAiKey) throw new Error('Mot de passe Léa manquant')
   const form = new FormData()
