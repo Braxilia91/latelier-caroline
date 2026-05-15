@@ -184,20 +184,17 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
     }
 
     // ── TTS/Amorce — setup ───────────────────────────────────────
-    // shouldPlayAmorce : uniquement pour les échanges chat avec voix + clé OpenAI
     const shouldPlayAmorce = type === 'chat' && voiceOn && !!openAiKey
 
     // turnId : invalide les tours précédents dès l'entrée dans sendMessage
     const turnId = Symbol('turn')
     turnIdRef.current = turnId
 
-    // Promise résolue quand l'amorce est terminée (ou immédiatement si pas d'amorce)
     let amorceFinishedResolve = () => {}
     const amorceFinished = new Promise(r => { amorceFinishedResolve = r })
-    let amorceEndTime = null  // ttsNow() quand l'amorce se termine
+    let amorceEndTime = null
 
     if (shouldPlayAmorce) {
-      // Couper l'audio précédent immédiatement pour libérer la piste
       stopAllTts()
 
       const amorce = pickAmorce(userText)
@@ -210,7 +207,7 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
         amorceTextLen: amorce.text.length,
       })
 
-      // Lance l'amorce en arrière-plan (non bloquant — Claude démarre en parallèle)
+      // Lance l'amorce en arrière-plan — Claude démarre en parallèle
       ;(async () => {
         try {
           const audio = await speakWithOpenAI({
@@ -218,13 +215,13 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
             text: amorce.text,
             voice: leaVoice,
             speed: speedRef.current,
-            autoPlay: false,  // on contrôle le démarrage pour attacher les listeners d'abord
+            autoPlay: false,
             onLatencyLog: (event, extras) => ttsLog(event, { isAmorce: true, ttsRole: 'amorce', ...extras }),
           })
 
-          // Vérifier que le tour est toujours valide après l'await réseau (~1s)
+          // Seule vérification d'annulation valide : changement de tour (nouveau sendMessage).
+          // NE PAS tester audio.paused — toujours true avant le premier play() avec autoPlay:false.
           if (turnIdRef.current !== turnId) {
-            try { audio.pause() } catch (_) {}
             if (!amorceEndTime) amorceEndTime = ttsNow()
             amorceFinishedResolve()
             return
@@ -233,28 +230,36 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
           audioRef.current = audio
           try { audio.playbackRate = speedRef.current } catch (_) {}
 
-          // Re-vérifier : stopAllTts() aurait pu être appelé entre l'await et ici
-          if (turnIdRef.current !== turnId || audio.paused) {
-            if (!amorceEndTime) amorceEndTime = ttsNow()
-            amorceFinishedResolve()
-            return
-          }
-
-          // Attendre la fin de l'amorce (ended / error / pause = stopAllTts)
+          // Attendre la fin effective de l'amorce.
+          // playStarted : évite de confondre "audio prêt mais pas encore joué" (pause normal)
+          // et "audio interrompu par stopAllTts" (pause après play).
           await new Promise(resolve => {
-            const cleanup = () => {
+            let playStarted = false
+
+            const done = () => {
               if (!amorceEndTime) amorceEndTime = ttsNow()
+              // Nettoyer le listener pause (non-once)
+              try { audio.removeEventListener('pause', onPause) } catch (_) {}
               resolve()
             }
-            audio.addEventListener('ended', cleanup, { once: true })
-            audio.addEventListener('error', cleanup, { once: true })
-            // pause = stopAllTts() a été appelé → résoudre aussi
-            audio.addEventListener('pause', cleanup, { once: true })
+
+            const onPause = () => {
+              // Résoudre sur pause uniquement si play() a bien démarré.
+              // Sinon : audio.paused=true est l'état initial, pas un signal d'arrêt.
+              if (playStarted) done()
+            }
+
+            audio.addEventListener('ended', done, { once: true })
+            audio.addEventListener('error', done, { once: true })
+            audio.addEventListener('pause', onPause)
             audio.addEventListener('play', () => {
+              playStarted = true
               ttsLog('audio_play_start', { isAmorce: true, ttsRole: 'amorce', family: amorce.family })
               setTtsState({ playing: true, paused: false, speed: speedRef.current, mode: 'openai' })
             }, { once: true })
-            audio.play().catch(cleanup)
+
+            // Lancer la lecture
+            audio.play().catch(done)
           })
 
           ttsLog('tts_blob_ready', { isAmorce: true, ttsRole: 'amorce', note: 'amorce_ended' })
@@ -266,7 +271,6 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
       })()
 
     } else {
-      // Pas d'amorce → résoudre immédiatement pour ne pas bloquer le main TTS
       amorceEndTime = ttsNow()
       amorceFinishedResolve()
     }
@@ -308,8 +312,6 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
       }
 
       if (voiceOn && full) {
-        // Pour les types sans amorce, on coupe l'éventuel audio précédent ici
-        // (comportement d'origine préservé pour correction/vocab/etc.)
         if (!shouldPlayAmorce) stopAllTts()
 
         if (openAiKey) {
@@ -325,7 +327,6 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
                 segmentsTotal: 1,
                 segmentLen: (segments[0] || full).length,
               })
-              // Fetch main audio SANS autoPlay pour contrôler la séquence
               const mainAudio = await speakWithOpenAI({
                 openAiKey,
                 text: segments[0] || full,
@@ -334,7 +335,7 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
                 autoPlay: false,
                 onLatencyLog: (event, extras) => ttsLog(event, { isAmorce: false, ttsRole: 'main', segmentIdx: 0, ...extras }),
               })
-              ttsLog('audio_play_start', { isAmorce: false, ttsRole: 'main', segmentIdx: 0, note: 'main_audio_ready' })
+              ttsLog('tts_blob_ready', { isAmorce: false, ttsRole: 'main', segmentIdx: 0, note: 'main_audio_ready' })
 
               // Attendre la fin de l'amorce avant de jouer le main
               await amorceFinished
@@ -342,11 +343,7 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
               // Patience si le gap réel depuis la fin de l'amorce dépasse 1.5s
               if (shouldPlayAmorce && amorceEndTime !== null && (ttsNow() - amorceEndTime) > 1500) {
                 const patience = pickPatience()
-                ttsLog('tts_request', {
-                  isPatience: true,
-                  ttsRole: 'patience',
-                  patienceIdx: patience.patienceIdx,
-                })
+                ttsLog('tts_request', { isPatience: true, ttsRole: 'patience', patienceIdx: patience.patienceIdx })
                 try {
                   const patienceAudio = await speakWithOpenAI({
                     openAiKey,
@@ -362,7 +359,6 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
                     await new Promise(resolve => {
                       patienceAudio.addEventListener('ended', resolve, { once: true })
                       patienceAudio.addEventListener('error', resolve, { once: true })
-                      patienceAudio.addEventListener('pause', resolve, { once: true })
                       patienceAudio.addEventListener('play', () => {
                         ttsLog('audio_play_start', { isPatience: true, ttsRole: 'patience' })
                         setTtsState({ playing: true, paused: false, speed: speedRef.current, mode: 'openai' })
@@ -377,7 +373,6 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
                 }
               }
 
-              // Vérifier que le tour est toujours valide avant de jouer main
               if (turnIdRef.current !== turnId) return
 
               audioRef.current = mainAudio
@@ -401,7 +396,6 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
                 message: ttsErr?.message || String(ttsErr),
                 body: ttsErr?.body || null,
               })
-              // Attendre l'amorce avant le fallback navigateur
               await amorceFinished
               if (turnIdRef.current === turnId) speakBrowserManaged(full)
             }
@@ -500,7 +494,6 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
                     await new Promise(resolve => {
                       patienceAudio.addEventListener('ended', resolve, { once: true })
                       patienceAudio.addEventListener('error', resolve, { once: true })
-                      patienceAudio.addEventListener('pause', resolve, { once: true })
                       patienceAudio.addEventListener('play', () => {
                         ttsLog('audio_play_start', { isPatience: true, ttsRole: 'patience' })
                         setTtsState({ playing: true, paused: false, speed: speedRef.current, mode: 'openai' })
@@ -520,7 +513,6 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
           }
 
         } else {
-          // Pas de clé OpenAI — fallback navigateur après amorce
           await amorceFinished
           if (turnIdRef.current === turnId) speakBrowserManaged(full)
         }
