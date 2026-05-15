@@ -23,6 +23,8 @@ async function openDB() {
           db.createObjectStore('vrac', { keyPath: 'id' })
       }
       if (old < 3) {
+        // Store fragments conservé en DB pour compatibilité des bases existantes
+        // mais les fonctions JS sont supprimées (feature abandonnée).
         if (!db.objectStoreNames.contains('fragments'))
           db.createObjectStore('fragments', { keyPath: 'id' })
       }
@@ -125,15 +127,6 @@ export async function restoreChapter(chapter) {
 }
 
 // ─── Chat history ──────────────────────────────────────────────
-export async function getChatHistory() {
-  await openDB()
-  return new Promise((resolve) => {
-    const req = tx('chat').getAll()
-    req.onsuccess = () => resolve(req.result || [])
-    req.onerror   = () => resolve([])
-  })
-}
-
 export async function getChatHistoryRecent(limit = 50) {
   await openDB()
   return new Promise((resolve) => {
@@ -212,18 +205,22 @@ export async function addVrac(idea) {
   })
 }
 
+// fix(audit) #1 — transaction atomique : get + put dans la même IDBTransaction
 export async function updateVrac(id, fields) {
   await openDB()
   return new Promise((resolve, reject) => {
-    const getReq = tx('vrac').get(id)
+    const txn   = _db.transaction(['vrac'], 'readwrite')
+    const store = txn.objectStore('vrac')
+    const getReq = store.get(id)
     getReq.onsuccess = () => {
       const item = getReq.result
-      if (!item) return reject(new Error('Vrac item not found'))
-      const putReq = tx('vrac', 'readwrite').put({ ...item, ...fields })
-      putReq.onsuccess = () => resolve()
-      putReq.onerror   = (e) => reject(e.target.error)
+      if (!item) { txn.abort(); return reject(new Error('Vrac item not found')) }
+      store.put({ ...item, ...fields })
     }
-    getReq.onerror = (e) => reject(e.target.error)
+    getReq.onerror   = (e) => reject(e.target.error)
+    txn.oncomplete   = () => resolve()
+    txn.onerror      = (e) => reject(e.target.error)
+    txn.onabort      = ()  => reject(txn.error || new Error('updateVrac aborted'))
   })
 }
 
@@ -231,56 +228,6 @@ export async function deleteVrac(id) {
   await openDB()
   return new Promise((resolve, reject) => {
     const req = tx('vrac', 'readwrite').delete(id)
-    req.onsuccess = () => resolve()
-    req.onerror   = (e) => reject(e.target.error)
-  })
-}
-
-// ─── Fragments ─────────────────────────────────────────────────
-export async function getFragments() {
-  await openDB()
-  return new Promise((resolve) => {
-    const req = tx('fragments').getAll()
-    req.onsuccess = () => resolve(
-      (req.result || []).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-    )
-    req.onerror = () => resolve([])
-  })
-}
-
-export async function saveFragment(fragment) {
-  await openDB()
-  return new Promise((resolve, reject) => {
-    const req = tx('fragments', 'readwrite').put({
-      ...fragment,
-      updatedAt: new Date().toISOString(),
-    })
-    req.onsuccess = () => resolve()
-    req.onerror   = (e) => reject(e.target.error)
-  })
-}
-
-export async function updateFragment(id, fields) {
-  await openDB()
-  return new Promise((resolve, reject) => {
-    const getReq = tx('fragments').get(id)
-    getReq.onsuccess = () => {
-      const item = getReq.result
-      if (!item) return reject(new Error('Fragment not found'))
-      const putReq = tx('fragments', 'readwrite').put({
-        ...item, ...fields, updatedAt: new Date().toISOString(),
-      })
-      putReq.onsuccess = () => resolve()
-      putReq.onerror   = (e) => reject(e.target.error)
-    }
-    getReq.onerror = (e) => reject(e.target.error)
-  })
-}
-
-export async function deleteFragment(id) {
-  await openDB()
-  return new Promise((resolve, reject) => {
-    const req = tx('fragments', 'readwrite').delete(id)
     req.onsuccess = () => resolve()
     req.onerror   = (e) => reject(e.target.error)
   })
@@ -324,21 +271,22 @@ export async function addTrace(trace) {
   })
 }
 
-/** Met à jour une trace existante par merge de champs. */
+// fix(audit) #1 — transaction atomique : get + put dans la même IDBTransaction
 export async function updateTrace(id, fields) {
   await openDB()
   return new Promise((resolve, reject) => {
-    const getReq = tx('traces').get(id)
+    const txn   = _db.transaction(['traces'], 'readwrite')
+    const store = txn.objectStore('traces')
+    const getReq = store.get(id)
     getReq.onsuccess = () => {
       const item = getReq.result
-      if (!item) return reject(new Error('Trace not found'))
-      const putReq = tx('traces', 'readwrite').put({
-        ...item, ...fields, updatedAt: new Date().toISOString(),
-      })
-      putReq.onsuccess = () => resolve()
-      putReq.onerror   = (e) => reject(e.target.error)
+      if (!item) { txn.abort(); return reject(new Error('Trace not found')) }
+      store.put({ ...item, ...fields, updatedAt: new Date().toISOString() })
     }
-    getReq.onerror = (e) => reject(e.target.error)
+    getReq.onerror   = (e) => reject(e.target.error)
+    txn.oncomplete   = () => resolve()
+    txn.onerror      = (e) => reject(e.target.error)
+    txn.onabort      = ()  => reject(txn.error || new Error('updateTrace aborted'))
   })
 }
 
@@ -432,6 +380,8 @@ export function isValidSnapshot(data) {
   return true
 }
 
+// fix(audit) #2 — transactions groupées : tous les put lancés sans await intermédiaire,
+// résolution via txn.oncomplete. Réduit ~500 aller-retours IDB séquentiels à 1 passe/store.
 export async function importSnapshot(snapshot) {
   if (!isValidSnapshot(snapshot)) {
     console.error('[Sync] Snapshot invalide — import annulé', snapshot)
@@ -439,20 +389,34 @@ export async function importSnapshot(snapshot) {
   }
   await openDB()
 
+  // 1. Clear + import chapitres en une transaction groupée
   await new Promise((resolve, reject) => {
-    const req = tx('chapters', 'readwrite').clear()
-    req.onsuccess = () => resolve()
-    req.onerror   = (e) => reject(e.target.error)
+    const txn   = _db.transaction(['chapters'], 'readwrite')
+    const store = txn.objectStore('chapters')
+    txn.oncomplete = () => resolve()
+    txn.onerror    = (e) => reject(e.target.error)
+    txn.onabort    = ()  => reject(txn.error || new Error('chapters import aborted'))
+    store.clear()
+    const now = new Date().toISOString()
+    for (const ch of (snapshot.chapters || [])) {
+      store.put({ ...ch, updatedAt: now })
+    }
   })
-  for (const ch of (snapshot.chapters || [])) {
-    await saveChapter(ch)
-  }
 
+  // 2. Clear + import vrac en une transaction groupée
   await new Promise((resolve, reject) => {
-    const req = tx('vrac', 'readwrite').clear()
-    req.onsuccess = () => resolve()
-    req.onerror   = (e) => reject(e.target.error)
+    const txn   = _db.transaction(['vrac'], 'readwrite')
+    const store = txn.objectStore('vrac')
+    txn.oncomplete = () => resolve()
+    txn.onerror    = (e) => reject(e.target.error)
+    txn.onabort    = ()  => reject(txn.error || new Error('vrac import aborted'))
+    store.clear()
+    for (const idea of (snapshot.vrac || [])) {
+      store.put(idea)
+    }
   })
+
+  // 3. KV keys — séquentiel acceptable (≤10 clés fixes)
   const kv = snapshot.kv || {}
   for (const [key, value] of Object.entries(kv)) {
     if (KV_KEYS_SYNC.includes(key) && value !== undefined) {
@@ -460,28 +424,20 @@ export async function importSnapshot(snapshot) {
     }
   }
 
-  for (const idea of (snapshot.vrac || [])) {
-    await new Promise((resolve, reject) => {
-      const req = tx('vrac', 'readwrite').put(idea)
-      req.onsuccess = () => resolve()
-      req.onerror   = (e) => reject(e.target.error)
-    })
-  }
-
+  // 4. Chat — clear + import en une transaction groupée (potentiellement 500 messages)
   if (Array.isArray(snapshot.chat)) {
     await new Promise((resolve, reject) => {
-      const req = tx('chat', 'readwrite').clear()
-      req.onsuccess = () => resolve()
-      req.onerror   = (e) => reject(e.target.error)
-    })
-    for (const msg of snapshot.chat.slice(-500)) {
-      await new Promise((resolve, reject) => {
+      const txn   = _db.transaction(['chat'], 'readwrite')
+      const store = txn.objectStore('chat')
+      txn.oncomplete = () => resolve()
+      txn.onerror    = (e) => reject(e.target.error)
+      txn.onabort    = ()  => reject(txn.error || new Error('chat import aborted'))
+      store.clear()
+      for (const msg of snapshot.chat.slice(-500)) {
         const { id, ...rest } = msg
-        const req = tx('chat', 'readwrite').add(rest)
-        req.onsuccess = () => resolve()
-        req.onerror   = (e) => reject(e.target.error)
-      })
-    }
+        store.add(rest)
+      }
+    })
   }
 
   await setKV('lastSyncedAt', snapshot.syncedAt || new Date().toISOString())
