@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import Modal from '../ui/Modal'
-import { X, Edit3, Check, Trash2, Archive, Tag } from 'lucide-react'
+import { X, Edit3, Check, Trash2, Archive, Tag, BookOpen } from 'lucide-react'
 import useClickAway from '../../hooks/useClickAway'
 
 // T6A.1 — palette saturée (ADN atelier + distinctivité accrue pour les pastilles vignettes)
@@ -13,11 +13,9 @@ const STATUS_LABELS = {
 }
 
 // T6A — ordre d'affichage des options dans le popover statut
-// (correspond à la progression naturelle : privé → exploré → matière d'écriture)
 const STATUS_ORDER = ['private', 'vrac', 'note', 'scene', 'letter']
 
 // Champs de réponses Caroline — scope LOT 2A (cf docs/le-tiroir-v1.md §5)
-// Strict : 4 champs uniquement (pas whatItStirs ni autre, qui viendront en LOT 5)
 const RESPONSE_FIELDS = [
   { key: 'whyNow',    label: 'Pourquoi cette photo, maintenant ?' },
   { key: 'detail',    label: 'Quel détail te frappe en premier ?' },
@@ -30,10 +28,11 @@ const EMPTY_PLACEHOLDER = 'Pas encore écrit — clique sur ✎ pour répondre.'
 export default function TraceDetailModal({
   trace,
   onClose,
-  editTrace,       // T7 — (id, fields) => Promise<void> (remplace onEdit no-op)
+  editTrace,
   onDelete,
-  isMobile,        // optionnel, non utilisé en 2A — réservé pour 2B/3
-  loadTraceBlob,   // T3 — fourni par App.jsx via db.loadTraceBlob
+  isMobile,
+  loadTraceBlob,
+  chapters,        // Lot B — tableau de chapitres fourni par App.jsx
 }) {
   const [blobUrl, setBlobUrl] = useState(null)
 
@@ -49,7 +48,7 @@ export default function TraceDetailModal({
   const statusContainerRef = useRef(null)
   useClickAway(statusContainerRef, () => setStatusOpen(false))
 
-  // Resync localTrace quand on change de trace (réouverture sur une autre fiche)
+  // Resync localTrace quand on change de trace
   useEffect(() => {
     setLocalTrace(trace)
     setEditingField(null)
@@ -97,8 +96,7 @@ export default function TraceDetailModal({
     }
   }, [editingField])
 
-  // T6A — Escape ferme le popover statut en priorité (capture phase pour
-  // passer AVANT le listener Escape de Modal qui ferme la modale entière).
+  // T6A — Escape ferme le popover statut en priorité
   useEffect(() => {
     if (!statusOpen) return
     const onKey = (e) => {
@@ -113,8 +111,6 @@ export default function TraceDetailModal({
 
   if (!localTrace) return null
 
-  // T7 — capacité d'édition : si editTrace n'est pas branchée, on grise les crayons
-  // (état défensif : ne devrait jamais arriver en prod car App.jsx fournit db.editTrace).
   const canEdit = typeof editTrace === 'function'
 
   const currentStatusKey = localTrace.status && STATUS_LABELS[localTrace.status]
@@ -131,8 +127,8 @@ export default function TraceDetailModal({
 
   // ── Édition inline ───────────────────────────────────────────
   const enterEdit = (fieldKey) => {
-    if (editingField) return                     // un seul champ à la fois
-    if (!canEdit) return                         // garde-fou : pas d'entrée en édition sans editTrace
+    if (editingField) return
+    if (!canEdit) return
     setDraftValue(localTrace[fieldKey] ?? '')
     setEditingField(fieldKey)
   }
@@ -145,7 +141,6 @@ export default function TraceDetailModal({
   const saveEdit = async () => {
     if (!editingField || saving) return
     if (!canEdit) {
-      // Défense double — ne devrait jamais s'exécuter car enterEdit est bloqué.
       console.warn('[T7] editTrace prop manquante — édition impossible')
       cancelEdit()
       return
@@ -153,31 +148,28 @@ export default function TraceDetailModal({
     const fieldKey = editingField
     const next = draftValue.trim()
     const prev = (localTrace[fieldKey] ?? '').trim()
-    // Aucun changement réel → on sort sans appel DB (pas de bump updatedAt inutile)
     if (next === prev) {
       cancelEdit()
       return
     }
     setSaving(true)
     try {
-      // editTrace côté useDB → updateTrace côté db.js applique updatedAt automatiquement
       await editTrace(localTrace.id, { [fieldKey]: next })
       setLocalTrace(t => ({ ...t, [fieldKey]: next, updatedAt: new Date().toISOString() }))
       setEditingField(null)
       setDraftValue('')
     } catch (err) {
       console.error('[T7] editTrace failed', err)
-      // On garde le mode édition pour permettre une nouvelle tentative
     } finally {
       setSaving(false)
     }
   }
 
-  // ── T6A — Changement de statut (aucun effet de bord) ─────────
+  // ── T6A — Changement de statut ───────────────────────────────
   const handleChangeStatus = async (newStatus) => {
     setStatusOpen(false)
     if (!canEdit) return
-    if (newStatus === currentStatusKey) return   // idempotent : pas d'appel DB si déjà ce statut
+    if (newStatus === currentStatusKey) return
     try {
       await editTrace(localTrace.id, { status: newStatus })
       setLocalTrace(t => ({
@@ -187,6 +179,20 @@ export default function TraceDetailModal({
       }))
     } catch (err) {
       console.error('[T6A] changement de statut échoué', err)
+    }
+  }
+
+  // ── Lot B — Rattachement chapitre ────────────────────────────
+  const hasChapters = Array.isArray(chapters) && chapters.length > 0
+  const handleChapterAttach = async (e) => {
+    if (!canEdit) return
+    const val = e.target.value   // '' = pas de rattachement, sinon id du chapitre
+    const chapterId = val === '' ? null : val
+    try {
+      await editTrace(localTrace.id, { chapterId })
+      setLocalTrace(t => ({ ...t, chapterId, updatedAt: new Date().toISOString() }))
+    } catch (err) {
+      console.error('[Tiroir] rattachement chapitre échoué', err)
     }
   }
 
@@ -223,7 +229,7 @@ export default function TraceDetailModal({
 
       {/* Body */}
       <div style={S.body}>
-        {/* Preview photo — T3 : blob chargé via loadTraceBlob, fallback Archive */}
+        {/* Preview photo */}
         <div style={S.preview}>
           {blobUrl ? (
             <img src={blobUrl} alt="" style={S.previewImg} />
@@ -232,13 +238,13 @@ export default function TraceDetailModal({
           )}
         </div>
 
-        {/* Statut — pastille colorée informationnelle */}
+        {/* Statut */}
         <div style={S.statusRow}>
           <span style={{ ...S.statusDot, background: status.color }} />
           <span style={S.statusLabel}>{status.label}</span>
         </div>
 
-        {/* Réponses — T7 : tous les champs affichés, édition par champ */}
+        {/* Réponses */}
         <div style={S.responses}>
           {RESPONSE_FIELDS.map((f) => {
             const value     = localTrace[f.key] ?? ''
@@ -319,11 +325,33 @@ export default function TraceDetailModal({
         </div>
       </div>
 
-      {/* Footer actions
-          T6A : bouton "Cette trace, j'en fais quoi ?" → popover sélecteur de statut.
-                Aucun effet de bord à ce stade (juste tag du champ status).
-                Décisions T6B (vrac auto / injection Léa / etc.) basées sur l'usage testeur. */}
+      {/* Footer */}
       <div style={S.footer}>
+        {/* Lot B — Rattacher à un chapitre (visible si chapitres disponibles) */}
+        {hasChapters && (
+          <div style={S.chapterRow}>
+            <BookOpen size={14} color="#8B6445" style={{ flexShrink: 0 }} />
+            <select
+              value={localTrace.chapterId ?? ''}
+              onChange={handleChapterAttach}
+              disabled={!canEdit}
+              style={{
+                ...S.chapterSelect,
+                opacity: canEdit ? 1 : 0.5,
+                cursor: canEdit ? 'pointer' : 'not-allowed',
+              }}
+              aria-label="Rattacher à un chapitre"
+            >
+              <option value="">Aucun chapitre</option>
+              {chapters.map(ch => (
+                <option key={ch.id} value={ch.id}>
+                  {ch.title || 'Sans titre'}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
         <div ref={statusContainerRef} style={{ position: 'relative' }}>
           <button
             type="button"
@@ -570,6 +598,28 @@ const S = {
     padding: '12px 20px',
     borderTop: '1px solid #EDE7DE',
     background: '#FAF7F2',
+    flexWrap: 'wrap',
+  },
+  // Lot B — Rattachement chapitre
+  chapterRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 6,
+    width: '100%',
+    marginBottom: 4,
+  },
+  chapterSelect: {
+    flex: 1,
+    padding: '6px 10px',
+    fontFamily: "'Nunito', sans-serif",
+    fontSize: '.76rem',
+    fontWeight: 600,
+    color: '#2A1A0E',
+    background: '#FFFEFB',
+    border: '1.5px solid #EDE7DE',
+    borderRadius: 10,
+    outline: 'none',
+    appearance: 'auto',
   },
   actionBtn: {
     display: 'flex',
@@ -585,7 +635,6 @@ const S = {
     color: '#8B6445',
     cursor: 'pointer',
   },
-  // T6A — Popover statut (positionné au-dessus du bouton, footer en bas de modale)
   statusDropdown: {
     position: 'absolute',
     bottom: 'calc(100% + 6px)',
