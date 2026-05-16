@@ -17,6 +17,59 @@
 
 import { jsPDF } from 'jspdf'
 
+// ─── D1 — Police Unicode embarquée ──────────────────────────────
+// jsPDF n'utilise par défaut que les fontes built-in PostScript (Times,
+// Helvetica, Courier) qui ne supportent qu'ISO-8859-1. Tout caractère
+// Unicode hors plage (❦ — … « » ' ' etc.) était rendu en mojibake.
+// On charge à la demande EB Garamond (Open Font License) depuis
+// public/fonts/, et on l'active comme famille active pour tous les
+// setFont() du fichier. Fallback gracieux sur Times si TTF absents.
+const FONT_FAMILY = 'EBGaramond'
+const FONT_PATH   = '/fonts/'
+
+function arrayBufferToBase64(buffer) {
+  const bytes = new Uint8Array(buffer)
+  let binary = ''
+  const CHUNK = 0x8000
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK))
+  }
+  return btoa(binary)
+}
+
+async function loadFontBase64(filename) {
+  const r = await fetch(FONT_PATH + filename, { cache: 'force-cache' })
+  if (!r.ok) throw new Error(`HTTP ${r.status} sur ${filename}`)
+  return arrayBufferToBase64(await r.arrayBuffer())
+}
+
+async function registerUnicodeFonts(pdf) {
+  try {
+    const [regular, italic] = await Promise.all([
+      loadFontBase64('EBGaramond-Regular.ttf'),
+      loadFontBase64('EBGaramond-Italic.ttf'),
+    ])
+    pdf.addFileToVFS('EBGaramond-Regular.ttf', regular)
+    pdf.addFileToVFS('EBGaramond-Italic.ttf',  italic)
+    pdf.addFont('EBGaramond-Regular.ttf', FONT_FAMILY, 'normal')
+    pdf.addFont('EBGaramond-Italic.ttf',  FONT_FAMILY, 'italic')
+    return FONT_FAMILY
+  } catch (e) {
+    console.warn(
+      '[PDF] Polices Unicode indisponibles — fallback Times. Les caractères',
+      'Unicode (❦ — … « ») seront mal rendus. Place EBGaramond-Regular.ttf',
+      'et EBGaramond-Italic.ttf dans public/fonts/ pour un PDF propre.',
+      e?.message,
+    )
+    return 'times'
+  }
+}
+
+// Famille de police active — réassignée par registerUnicodeFonts au début
+// de generateBookPDF. Reste 'times' si fallback (PDF moins propre mais pas crash).
+let _activeFamily = 'times'
+
+
 // ─── Constantes de mise en page (mm) ──────────────────────────────────────────
 const FORMAT = 'a5'
 const PAGE_W = 148
@@ -83,7 +136,7 @@ function rightMargin(pdf) { return isOddPage(pdf) ? MARGIN_OUTER : MARGIN_INNER 
 function drawPageNumber(pdf) {
   const n = pdf.internal.getNumberOfPages()
   if (n <= 1) return
-  pdf.setFont('times', 'normal')
+  pdf.setFont(_activeFamily, 'normal')
   pdf.setFontSize(9)
   pdf.setTextColor(COLOR_LIGHT)
   const x = isOddPage(pdf) ? PAGE_W - rightMargin(pdf) : leftMargin(pdf)
@@ -105,33 +158,33 @@ function ensureRecto(pdf) {
 // ─── Couverture ───────────────────────────────────────────────────
 function renderCover(pdf, { name, dateLabel }) {
   // Ornement haut
-  pdf.setFont('times', 'normal')
+  pdf.setFont(_activeFamily, 'normal')
   pdf.setFontSize(12)
   pdf.setTextColor(COLOR_GOLD)
   pdf.text(ORNAMENT, PAGE_W / 2, 60, { align: 'center' })
 
   // Titre
-  pdf.setFont('times', 'italic')
+  pdf.setFont(_activeFamily, 'italic')
   pdf.setFontSize(30)
   pdf.setTextColor(COLOR_INK)
   pdf.text('Mon Histoire', PAGE_W / 2, 90, { align: 'center' })
 
   // Prénom (défensif : skip si vide/null/whitespace)
   if (name && name.trim()) {
-    pdf.setFont('times', 'normal')
+    pdf.setFont(_activeFamily, 'normal')
     pdf.setFontSize(15)
     pdf.setTextColor(COLOR_BROWN)
     pdf.text(name.trim(), PAGE_W / 2, 112, { align: 'center' })
   }
 
   // Ornement médian
-  pdf.setFont('times', 'normal')
+  pdf.setFont(_activeFamily, 'normal')
   pdf.setFontSize(12)
   pdf.setTextColor(COLOR_GOLD)
   pdf.text(ORNAMENT, PAGE_W / 2, 144, { align: 'center' })
 
   // Date en pied
-  pdf.setFont('times', 'italic')
+  pdf.setFont(_activeFamily, 'italic')
   pdf.setFontSize(9)
   pdf.setTextColor(COLOR_LIGHT)
   pdf.text(`Imprimé le ${dateLabel}`, PAGE_W / 2, PAGE_H - 20, { align: 'center' })
@@ -157,18 +210,18 @@ function renderTOC(pdf, entries, startPageIdx) {
   pdf.setPage(pageIdx)
 
   // — Titre + ornement uniquement sur la 1ère page TOC —
-  pdf.setFont('times', 'italic')
+  pdf.setFont(_activeFamily, 'italic')
   pdf.setFontSize(22)
   pdf.setTextColor(COLOR_BROWN)
   pdf.text('Table des matières', PAGE_W / 2, MARGIN_TOP + 14, { align: 'center' })
 
-  pdf.setFont('times', 'normal')
+  pdf.setFont(_activeFamily, 'normal')
   pdf.setFontSize(10)
   pdf.setTextColor(COLOR_GOLD)
   pdf.text('❦', PAGE_W / 2, MARGIN_TOP + 22, { align: 'center' })
 
   // — Réglage du corps —
-  pdf.setFont('times', 'normal')
+  pdf.setFont(_activeFamily, 'normal')
   pdf.setFontSize(11)
   pdf.setTextColor(COLOR_INK)
 
@@ -178,7 +231,7 @@ function renderTOC(pdf, entries, startPageIdx) {
     if (y > yMax) {
       pageIdx += 1
       pdf.setPage(pageIdx)
-      pdf.setFont('times', 'normal')
+      pdf.setFont(_activeFamily, 'normal')
       pdf.setFontSize(11)
       pdf.setTextColor(COLOR_INK)
       y = yStart2
@@ -206,12 +259,12 @@ function renderChapter(pdf, chapter, indexHumain) {
   // Lot E3 — sanitize le titre de chapitre (peut contenir des glyphs absents)
   const safeTitle = sanitizeForGaramond(chapter.title || 'Sans titre')
 
-  pdf.setFont('times', 'normal')
+  pdf.setFont(_activeFamily, 'normal')
   pdf.setFontSize(10)
   pdf.setTextColor(COLOR_GOLD)
   pdf.text(`CHAPITRE ${indexHumain}`, PAGE_W / 2, MARGIN_TOP + 8, { align: 'center' })
 
-  pdf.setFont('times', 'italic')
+  pdf.setFont(_activeFamily, 'italic')
   pdf.setFontSize(20)
   pdf.setTextColor(COLOR_INK)
   const titleLines = pdf.splitTextToSize(safeTitle, CONTENT_W)
@@ -222,7 +275,7 @@ function renderChapter(pdf, chapter, indexHumain) {
   }
 
   if (chapter.intention && chapter.intention.trim()) {
-    pdf.setFont('times', 'italic')
+    pdf.setFont(_activeFamily, 'italic')
     pdf.setFontSize(10)
     pdf.setTextColor(COLOR_LIGHT)
     const safeIntention = sanitizeForGaramond(chapter.intention.trim())
@@ -235,7 +288,7 @@ function renderChapter(pdf, chapter, indexHumain) {
 
   // Séparateur ornemental
   y += 5
-  pdf.setFont('times', 'normal')
+  pdf.setFont(_activeFamily, 'normal')
   pdf.setFontSize(11)
   pdf.setTextColor(COLOR_GOLD)
   pdf.text(ORNAMENT, PAGE_W / 2, y, { align: 'center' })
@@ -252,7 +305,7 @@ function writeFlowText(pdf, text, startY) {
   const lineH = 5.6  // mm pour 11pt
   let y = startY
 
-  pdf.setFont('times', 'normal')
+  pdf.setFont(_activeFamily, 'normal')
   pdf.setFontSize(11)
   pdf.setTextColor(COLOR_INK)
 
@@ -269,7 +322,7 @@ function writeFlowText(pdf, text, startY) {
       if (y > PAGE_H - MARGIN_BOTTOM) {
         addPageWithNumber(pdf)
         y = MARGIN_TOP
-        pdf.setFont('times', 'normal')
+        pdf.setFont(_activeFamily, 'normal')
         pdf.setFontSize(11)
         pdf.setTextColor(COLOR_INK)
       }
@@ -329,13 +382,13 @@ async function renderPhotoPage(pdf, trace, blob) {
   pdf.addImage(dataUrl, 'JPEG', x, y, dispW, dispH)
 
   const legendY = MARGIN_TOP + maxH + 8
-  pdf.setFont('times', 'italic')
+  pdf.setFont(_activeFamily, 'italic')
   pdf.setFontSize(11)
   pdf.setTextColor(COLOR_BROWN)
   pdf.text(sanitizeForGaramond(trace.title || 'Souvenir'), PAGE_W / 2, legendY, { align: 'center' })
 
   if (trace.date) {
-    pdf.setFont('times', 'normal')
+    pdf.setFont(_activeFamily, 'normal')
     pdf.setFontSize(9)
     pdf.setTextColor(COLOR_LIGHT)
     let dateLabel = String(trace.date)
@@ -375,6 +428,11 @@ export async function generateBookPDF({
 
   const pdf = new jsPDF({ format: FORMAT, unit: 'mm', orientation: 'portrait' })
 
+  // D1 — Charger la police Unicode AVANT toute écriture. Le retour est
+  // 'EBGaramond' (succès) ou 'times' (fallback gracieux). On réassigne
+  // _activeFamily pour que tous les setFont() suivants utilisent la bonne.
+  _activeFamily = await registerUnicodeFonts(pdf)
+
   // Métadonnées (lues par les visionneuses : titre dans Apple Books, etc.)
   const safeName = (name || '').trim()
   pdf.setProperties({
@@ -398,7 +456,7 @@ export async function generateBookPDF({
   // Cas dégénéré : aucun chapitre éligible
   if (eligible.length === 0) {
     addPageWithNumber(pdf)
-    pdf.setFont('times', 'italic')
+    pdf.setFont(_activeFamily, 'italic')
     pdf.setFontSize(12)
     pdf.setTextColor(COLOR_LIGHT)
     pdf.text(
@@ -485,11 +543,11 @@ export async function generateBookPDF({
     addPageWithNumber(pdf)
     ensureRecto(pdf)
 
-    pdf.setFont('times', 'italic')
+    pdf.setFont(_activeFamily, 'italic')
     pdf.setFontSize(24)
     pdf.setTextColor(COLOR_BROWN)
     pdf.text('Souvenirs', PAGE_W / 2, PAGE_H / 2 - 6, { align: 'center' })
-    pdf.setFont('times', 'normal')
+    pdf.setFont(_activeFamily, 'normal')
     pdf.setFontSize(12)
     pdf.setTextColor(COLOR_GOLD)
     pdf.text(ORNAMENT, PAGE_W / 2, PAGE_H / 2 + 6, { align: 'center' })
