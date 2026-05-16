@@ -40,19 +40,17 @@ const Q2_OPTIONS = ['La page blanche', 'Ne pas être intéressante', 'La grammai
 const Q3_OPTIONS = ['Le matin', "L'après-midi", 'Le soir', 'La nuit', "N'importe quand"]
 
 export default function Onboarding({ onComplete }) {
-  const [step,      setStep]    = useState('welcome')
-  const [reaction,  setReact]   = useState('')
-  const [name,      setName]    = useState('')
-  const [q1,        setQ1]      = useState('')
-  const [q1libre,   setQ1libre] = useState('')
-  const [q2,        setQ2]      = useState('')
-  const [q3,        setQ3]      = useState('')
-  const [q4,        setQ4]      = useState('')
-  const [q5,        setQ5]      = useState('')
-  const [apiKey,    setApiKey]  = useState('')
-  // #19 — clé OpenAI optionnelle (voix de Léa)
-  const [openAiKey, setOpenAiKey] = useState('')
-  const [loading,   setLoading] = useState(false)
+  const [step,     setStep]    = useState('welcome')
+  const [reaction, setReact]   = useState('')
+  const [name,     setName]    = useState('')
+  const [q1,       setQ1]      = useState('')
+  const [q1libre,  setQ1libre] = useState('')
+  const [q2,       setQ2]      = useState('')
+  const [q3,       setQ3]      = useState('')
+  const [q4,       setQ4]      = useState('')
+  const [q5,       setQ5]      = useState('')
+  const [apiKey,   setApiKey]  = useState('')
+  const [loading,  setLoading] = useState(false)
 
   const react = (category, value, next) => {
     setReact(getReaction(category, value))
@@ -76,8 +74,7 @@ export default function Onboarding({ onComplete }) {
       feeling: q5,
       completedAt: new Date().toISOString(),
     }
-    // #19 — on passe openAiKey à onComplete pour stockage initial
-    await onComplete({ name: name.trim(), apiKey: apiKey.trim(), openAiKey: openAiKey.trim(), profile })
+    await onComplete({ name: name.trim(), apiKey: apiKey.trim(), profile })
     setLoading(false)
   }
 
@@ -205,8 +202,6 @@ export default function Onboarding({ onComplete }) {
                   onChange={e => setName(e.target.value)} autoFocus />
               </>
             )}
-
-            {/* Clé Anthropic — active Léa pour le chat */}
             <p style={S.label}>
               <Key size={12} style={{ marginRight: 4, verticalAlign: -1 }} />
               Mot de passe Léa
@@ -214,19 +209,6 @@ export default function Onboarding({ onComplete }) {
             <input style={S.input} type="password" placeholder="Le mot que Mourad t'a donné…"
               value={apiKey} onChange={e => setApiKey(e.target.value)} />
             <p style={S.hint}>Ce mot active Léa. Sans lui, tu peux écrire mais Léa restera silencieuse.</p>
-
-            {/* #19 — Clé OpenAI optionnelle — active la voix de Léa */}
-            <p style={{ ...S.label, marginTop: 10 }}>
-              <Key size={12} style={{ marginRight: 4, verticalAlign: -1 }} />
-              Clé OpenAI <span style={S.optional}>(optionnel — pour la voix)</span>
-            </p>
-            <input style={S.input} type="password"
-              placeholder="sk-… (pour entendre Léa parler)"
-              value={openAiKey} onChange={e => setOpenAiKey(e.target.value)} />
-            <p style={S.hint}>
-              La voix de Léa nécessite une clé OpenAI. Tu peux l'ajouter maintenant ou plus tard dans les Réglages.
-            </p>
-
             <div style={S.privacyBox}><p style={S.privacyTxt}>🔒 Tes textes restent sur ton appareil. Léa répond via un serveur sécurisé.</p></div>
             <button style={{ ...S.btn, opacity: name.trim() ? 1 : .45 }}
               disabled={!name.trim() || loading} onClick={handleComplete}>
@@ -279,7 +261,7 @@ const S = {
   choice:  { padding: '10px 14px', background: '#FAF7F2', border: '1.5px solid #DDD5C8', borderRadius: 10, fontSize: '.87rem', fontFamily: "'Nunito', sans-serif", color: '#2A1A0E', cursor: 'pointer', textAlign: 'left', transition: 'background .12s' },
   input: { width: '100%', padding: '11px 13px', border: '1.5px solid #DDD5C8', borderRadius: 10, fontSize: '.94rem', fontFamily: "'Nunito', sans-serif", background: '#FAF7F2', color: '#2A1A0E', outline: 'none', marginBottom: 12, boxSizing: 'border-box' },
   label:    { display: 'block', fontSize: '.72rem', fontWeight: 700, color: '#6B5A4E', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: 6 },
-  optional: { fontWeight: 400, textTransform: 'none', opacity: .7, fontSize: '.7rem' },
+  optional: { fontWeight: 400, textTransform: 'none', opacity: .7 },
   hint:     { fontSize: '.73rem', color: '#9C8878', lineHeight: 1.5, marginBottom: 10, marginTop: -4 },
   privacyBox: { background: '#F7EFE3', border: '1px solid #E8D5B8', borderRadius: 10, padding: '9px 13px', marginBottom: 12 },
   privacyTxt: { fontSize: '.75rem', color: '#8B6445', margin: 0 },
