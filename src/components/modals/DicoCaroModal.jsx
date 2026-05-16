@@ -591,11 +591,7 @@ const S = {
   },
   tabs: {
     display: 'flex', gap: 4, padding: '10px 16px 0',
-    overflowX: 'auto',
-    scrollSnapType: 'x proximity',
-    scrollbarWidth: 'none',
-    msOverflowStyle: 'none',
-    WebkitOverflowScrolling: 'touch',
+    flexWrap: 'wrap',  // NEW-01 : wrap pour éviter le débordement du 6e onglet
   },
   tab: {
     display: 'flex', alignItems: 'center', gap: 5,
@@ -604,7 +600,6 @@ const S = {
     fontSize: '.75rem', fontWeight: 600, color: '#8B7355',
     fontFamily: "'Nunito', sans-serif", whiteSpace: 'nowrap',
     transition: 'all .15s ease', flexShrink: 0,
-    scrollSnapAlign: 'center',
   },
   tabActive: { background: '#F0E8DC', color: '#5C4A32' },
   fadeLeft: {
