@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import Modal from '../ui/Modal'
 import { X, ImagePlus } from 'lucide-react'
 import { compressImage } from '../../lib/imageCompress'
@@ -12,6 +12,7 @@ import { runOCR, OCR_CONFIDENCE_THRESHOLD } from '../../lib/ocrWorker'
  *
  * Étape 1 — Importer :
  *   File picker (accept="image/*") → compressImage (Canvas 1600px + JPEG q=0.85).
+ *   OU initialFile prop (Share Target FEAT-B) → même pipeline, déclenché au mount.
  *
  * Étape 2 — Première écoute :
  *   Photo plein cadre + question « Pourquoi cette photo, maintenant ? »
@@ -28,8 +29,9 @@ import { runOCR, OCR_CONFIDENCE_THRESHOLD } from '../../lib/ocrWorker'
  * Props :
  *   onClose        : () => void
  *   onCreateTrace  : ({ metadata, blob }) => Promise<trace>
+ *   initialFile    : File | null — image pré-chargée (Share Target), null par défaut
  */
-export default function AddTraceFlow({ onClose, onCreateTrace }) {
+export default function AddTraceFlow({ onClose, onCreateTrace, initialFile = null }) {
   const [step, setStep] = useState('import')         // 'import' | 'firstListen'
   const [compressed, setCompressed] = useState(null) // { blob, mimeType, width, height, originalSize }
   const [previewUrl, setPreviewUrl] = useState(null)
@@ -106,16 +108,18 @@ export default function AddTraceFlow({ onClose, onCreateTrace }) {
     }
   }, [step, compressed])
 
-  const handlePickFile = () => {
-    setError(null)
-    fileInputRef.current?.click()
-  }
+  // FEAT-B — Share Target : si un fichier a été partagé depuis une autre app,
+  // on le traite directement au mount sans passer par le file picker.
+  useEffect(() => {
+    if (!initialFile) return
+    processFile(initialFile)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleFileChange = async (e) => {
-    const file = e.target.files?.[0]
-    e.target.value = ''
-    if (!file) return
-    // Stocke l'original — conservé pour compat / rollback, plus utilisé par l'OCR (T5/Phase 3).
+  /**
+   * processFile — pipeline commun pour handleFileChange ET initialFile (Share Target).
+   * compress → preview URL → passer à l'étape firstListen.
+   */
+  const processFile = useCallback(async (file) => {
     originalFileRef.current = file
     setSubmitting(true)
     setError(null)
@@ -130,6 +134,18 @@ export default function AddTraceFlow({ onClose, onCreateTrace }) {
     } finally {
       setSubmitting(false)
     }
+  }, [])
+
+  const handlePickFile = () => {
+    setError(null)
+    fileInputRef.current?.click()
+  }
+
+  const handleFileChange = async (e) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    await processFile(file)
   }
 
   const persistTrace = async (whyNowValue) => {
