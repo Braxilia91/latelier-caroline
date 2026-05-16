@@ -8,7 +8,7 @@ import { buildWelcomeMessage } from './lib/prompts'
 import { putTraceBlob } from './lib/db'
 // T11/#4 — Surveillance expiration token Drive
 // Lot B    — signInSilent : reconnexion sans interaction au boot
-import { onTokenExpiring, onTokenExpired, signInSilent } from './lib/googleDrive'
+import { onTokenExpiring, onTokenExpired, signInSilent, getCurrentUser } from './lib/googleDrive'
 
 // ── Imports critiques (chemin de rendu initial) ──────────────────
 import Onboarding from './components/onboarding/Onboarding'
@@ -221,6 +221,31 @@ function AppInner() {
       }
     })()
     return () => { cancelled = true }
+  }, [db.ready, db.isSetup, db.traces, toast])
+
+  // ── Rappel Drive 5 min — si Drive reste déconnecté et qu'on a des
+  //   photos locales (donc potentiellement non sauvegardées dans le
+  //   cloud), on rappelle gentiment toutes les 5 minutes. Toast info
+  //   non pressant + action "Réglages" qui ouvre directement la modale.
+  //   Stop dès que Drive est connecté (check à chaque tick).
+  useEffect(() => {
+    if (!db.ready || !db.isSetup) return
+    if (!Array.isArray(db.traces) || db.traces.length === 0) return
+
+    const FIVE_MIN = 5 * 60 * 1000
+    const tick = () => {
+      // Re-check à chaque tick : Drive peut s'être reconnecté entre-temps
+      if (getCurrentUser()) return
+      if (!Array.isArray(db.traces) || db.traces.length === 0) return
+      toast(
+        'Drive n\'est pas connecté. Tes photos sont en sécurité ici, mais pas encore sauvegardées dans le cloud.',
+        'info',
+        10000,
+        { label: 'Réglages', fn: () => setModal('settings') },
+      )
+    }
+    const intervalId = setInterval(tick, FIVE_MIN)
+    return () => clearInterval(intervalId)
   }, [db.ready, db.isSetup, db.traces, toast])
 
   // ── Thème ────────────────────────────────────────────────────
