@@ -44,8 +44,10 @@
     </style>
   </head>
   <body>
-    <a class="skip-link" href="#main-content">Aller au contenu principal</a>
-    <div id="root" id="main-content"></div>
+    <a class="skip-link" href="#root">Aller au contenu principal</a>
+    <!-- NEW-02 : h1 visually-hidden pour lecteurs d'écran -->
+    <h1 style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0">L'Atelier — Mon Histoire</h1>
+    <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
