@@ -125,14 +125,16 @@ export default function SettingsModal({
   // LOT 4F.2.2/4F.2.3 — Verrou réentrance Drive (upload + download).
   const [driveBusy, setDriveBusy] = useState(false)
 
-  const [confirmReset, setConfirmReset] = useState(false)
+  // BUG-04 — Confirmation par saisie "SUPPRIMER" (remplace le double-clic 5s)
+  const [resetInput, setResetInput] = useState('')
+  const resetConfirmed = resetInput === 'SUPPRIMER'
+
   const [exportDone, setExportDone] = useState(false)
 
   const fileInputRef = useRef(null)
   const [importing, setImporting] = useState(false)
 
   // LOT 4F.2.5 — Refs pour cleanup des timers à l'unmount (évite setState sur composant démonté)
-  const confirmResetTimerRef = useRef(null)
   const copiedSyncTimerRef   = useRef(null)
   const exportDoneTimerRef   = useRef(null)
 
@@ -148,7 +150,6 @@ export default function SettingsModal({
   // LOT 4F.2.5 — Cleanup des timers à l'unmount pour éviter setState sur composant démonté.
   useEffect(() => {
     return () => {
-      clearTimeout(confirmResetTimerRef.current)
       clearTimeout(copiedSyncTimerRef.current)
       clearTimeout(exportDoneTimerRef.current)
     }
@@ -322,14 +323,11 @@ export default function SettingsModal({
     }
   }
 
+  // BUG-04 — Reset déclenché uniquement si l'utilisateur a saisi "SUPPRIMER"
   const handleReset = async () => {
-    if (confirmReset) {
-      await onReset()
-      window.location.reload()
-    } else {
-      setConfirmReset(true)
-      confirmResetTimerRef.current = setTimeout(() => setConfirmReset(false), 5000)
-    }
+    if (!resetConfirmed) return
+    await onReset()
+    window.location.reload()
   }
 
   const handleCopySync = async () => {
@@ -783,6 +781,7 @@ export default function SettingsModal({
               </button>
             </div>
 
+            {/* BUG-04 — Zone danger avec confirmation par saisie "SUPPRIMER" */}
             <div style={S.dangerZone}>
               <div style={S.dangerHdr}>
                 <AlertTriangle size={13} color="#C0392B" />
@@ -790,9 +789,34 @@ export default function SettingsModal({
               </div>
               <p style={S.dangerTxt}>
                 Supprimer toutes les données efface définitivement tous tes chapitres et paramètres.
+                Pour confirmer, tape <strong>SUPPRIMER</strong> ci-dessous.
               </p>
-              <button type="button" style={S.dangerBtn} onClick={handleReset}>
-                {confirmReset ? '⚠️ Confirmer — effacer tout ?' : 'Supprimer toutes mes données'}
+              <input
+                type="text"
+                value={resetInput}
+                onChange={e => setResetInput(e.target.value)}
+                placeholder="Tape SUPPRIMER pour confirmer"
+                style={{
+                  ...S.input,
+                  marginBottom: 10,
+                  borderColor: resetInput.length > 0 && !resetConfirmed ? '#E87070' : '#DDD5C8',
+                }}
+                aria-label="Confirmation de suppression — tape SUPPRIMER"
+                autoComplete="off"
+                spellCheck={false}
+              />
+              <button
+                type="button"
+                style={{
+                  ...S.dangerBtn,
+                  opacity: resetConfirmed ? 1 : 0.4,
+                  cursor: resetConfirmed ? 'pointer' : 'not-allowed',
+                }}
+                onClick={handleReset}
+                disabled={!resetConfirmed}
+                aria-label="Supprimer définitivement toutes les données"
+              >
+                Supprimer toutes mes données
               </button>
             </div>
           </Section>
@@ -824,7 +848,6 @@ const S = {
   row: { display: 'flex', gap: 12, marginBottom: 0 },
   label: { display: 'block', fontSize: '.75rem', fontWeight: 700, fontFamily: "'Nunito', sans-serif", color: '#6B5A4E', marginBottom: 5 },
   badge: { display: 'inline-block', background: '#F7EFE3', border: '1px solid #E8D5B8', borderRadius: 10, fontSize: '.65rem', fontWeight: 700, color: '#8B6445', padding: '1px 7px', marginLeft: 6 },
-  // Fix trompe-l'œil "active le coach" : indicateur dynamique + bouton test
   coachTestRow:        { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 8, flexWrap: 'wrap' },
   coachStatus:         { fontSize: '.78rem', fontWeight: 700, fontFamily: "'Nunito', sans-serif", letterSpacing: '.02em', padding: '4px 10px', borderRadius: 8, display: 'inline-flex', alignItems: 'center' },
   coachStatusOff:      { background: '#F3EEE6', color: '#9C8878' },
@@ -856,7 +879,7 @@ const S = {
   dangerHdr: { display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 },
   dangerTitle: { fontSize: '.72rem', fontWeight: 800, color: '#C0392B', textTransform: 'uppercase', letterSpacing: '.5px', fontFamily: "'Nunito', sans-serif" },
   dangerTxt: { fontSize: '.78rem', color: '#7F1D1D', lineHeight: 1.5, fontFamily: "'Nunito', sans-serif", marginBottom: 10 },
-  dangerBtn: { padding: '8px 14px', background: '#C0392B', color: '#fff', border: 'none', borderRadius: 8, fontSize: '.78rem', fontWeight: 700, fontFamily: "'Nunito', sans-serif", cursor: 'pointer' },
+  dangerBtn: { padding: '8px 14px', background: '#C0392B', color: '#fff', border: 'none', borderRadius: 8, fontSize: '.78rem', fontWeight: 700, fontFamily: "'Nunito', sans-serif", cursor: 'pointer', transition: 'opacity .15s' },
   footer: { display: 'flex', gap: 10, justifyContent: 'flex-end', padding: '12px 20px', borderTop: '1px solid #EDE7DE', background: '#FAF7F2', flexShrink: 0 },
   cancelBtn: { padding: '9px 18px', background: 'transparent', border: '1.5px solid #EDE7DE', borderRadius: 10, fontSize: '.82rem', fontWeight: 600, fontFamily: "'Nunito', sans-serif", color: '#9C8878', cursor: 'pointer' },
   saveBtn: { display: 'flex', alignItems: 'center', gap: 6, padding: '9px 20px', background: 'linear-gradient(135deg, #8B6445, #C4956A)', color: '#fff', border: 'none', borderRadius: 10, fontSize: '.82rem', fontWeight: 700, fontFamily: "'Nunito', sans-serif", cursor: 'pointer' },
