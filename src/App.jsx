@@ -36,6 +36,9 @@ const ProgressModal   = lazy(() => import('./components/modals/ProgressModal'))
 // ── Durée idle avant auto-sync (ms) ─────────────────────────────
 const IDLE_SYNC_DELAY = 30_000
 
+// FEAT-B — Share Target : cache key partagé avec sw.js
+const SHARE_CACHE = 'share-target-v1'
+
 function AppSkeleton() {
   const pulse = {
     background: 'linear-gradient(90deg,#EDE7DE 25%,#E5DDD4 50%,#EDE7DE 75%)',
@@ -90,6 +93,8 @@ function AppInner() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [coachOpen, setCoachOpen] = useState(false)
   const [selectedTrace, setSelectedTrace] = useState(null)
+  // FEAT-B — Share Target : fichier partagé depuis une autre app (galerie, scanner…)
+  const [sharedFile, setSharedFile] = useState(null)
 
   const isMobile = useMediaQuery('(max-width: 767px)')
 
@@ -223,18 +228,13 @@ function AppInner() {
     return () => { cancelled = true }
   }, [db.ready, db.isSetup, db.traces, toast])
 
-  // ── Rappel Drive 5 min — si Drive reste déconnecté et qu'on a des
-  //   photos locales (donc potentiellement non sauvegardées dans le
-  //   cloud), on rappelle gentiment toutes les 5 minutes. Toast info
-  //   non pressant + action "Réglages" qui ouvre directement la modale.
-  //   Stop dès que Drive est connecté (check à chaque tick).
+  // ── Rappel Drive 5 min ────────────────────────────────────────
   useEffect(() => {
     if (!db.ready || !db.isSetup) return
     if (!Array.isArray(db.traces) || db.traces.length === 0) return
 
     const FIVE_MIN = 5 * 60 * 1000
     const tick = () => {
-      // Re-check à chaque tick : Drive peut s'être reconnecté entre-temps
       if (getCurrentUser()) return
       if (!Array.isArray(db.traces) || db.traces.length === 0) return
       toast(
@@ -292,6 +292,32 @@ function AppInner() {
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
   }, [sidebarOpen, coachOpen])
+
+  // ── FEAT-B — Share Target : détection au montage ─────────────
+  // Si l'OS a partagé une image vers L'Atelier (menu "Partager" iOS/Android),
+  // le SW a intercepté le POST /share-target, stocké le blob en Cache API,
+  // et redirigé vers /?share=pending.
+  // On lit ici le blob, on ouvre AddTraceFlow avec l'image pré-chargée.
+  useEffect(() => {
+    if (!window.location.search.includes('share=pending')) return
+    // Nettoyer le param URL immédiatement (sans rerender)
+    window.history.replaceState({}, '', '/')
+    ;(async () => {
+      try {
+        const cache = await caches.open(SHARE_CACHE)
+        const resp = await cache.match('/share-pending')
+        if (!resp) return
+        const blob = await resp.blob()
+        const filename = resp.headers.get('X-Share-Filename') || 'photo.jpg'
+        await cache.delete('/share-pending')
+        const file = new File([blob], filename, { type: blob.type || 'image/jpeg' })
+        setSharedFile(file)
+        setModal('addTrace')
+      } catch (err) {
+        console.warn('[share-target] échec lecture cache:', err)
+      }
+    })()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Coach ────────────────────────────────────────────────────
   const coach = useCoach({
@@ -533,7 +559,8 @@ function AppInner() {
         )}
         {modal === 'addTrace' && (
           <AddTraceFlow
-            onClose={() => setModal('tiroir')}
+            onClose={() => { setModal('tiroir'); setSharedFile(null) }}
+            initialFile={sharedFile}
             onCreateTrace={async ({ metadata, blob }) => {
               const trace = await db.createTrace(metadata)
               await putTraceBlob(trace.id, blob, metadata.mimeType)
