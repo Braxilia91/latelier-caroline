@@ -261,19 +261,11 @@ export default function SettingsModal({
     }
   }
 
-  const handleRestoreDrive = async () => {
-    if (driveBusy || googleBusy) return
-    if (!googleUser) return
-    const fresh = googleDrive.getCurrentUser()
-    if (!fresh) {
-      setGoogleUser(null)
-      toast('Session Google Drive expirée. Reconnecte-toi.', 'info')
-      return
-    }
-
-    if (!confirmDrive) { setConfirmDrive(true); return }
+  // Exécute la restauration Drive après confirmation — découplé de handleRestoreDrive.
+  // Le bouton "Confirmer la restauration" appelle cette fonction directement
+  // pour éviter le couplage implicite sur l'ordre d'exécution du guard confirmDrive.
+  const executeRestoreDrive = async () => {
     setConfirmDrive(false)
-
     setDriveBusy(true)
     try {
       const result = await googleDrive.downloadSnapshot()
@@ -299,6 +291,19 @@ export default function SettingsModal({
     } finally {
       setDriveBusy(false)
     }
+  }
+
+  const handleRestoreDrive = () => {
+    if (driveBusy || googleBusy) return
+    if (!googleUser) return
+    const fresh = googleDrive.getCurrentUser()
+    if (!fresh) {
+      setGoogleUser(null)
+      toast('Session Google Drive expirée. Reconnecte-toi.', 'info')
+      return
+    }
+    // Demande confirmation — l'exécution réelle est dans executeRestoreDrive()
+    setConfirmDrive(true)
   }
 
   const handleGoogleSignOut = async () => {
@@ -382,13 +387,12 @@ export default function SettingsModal({
     fileInputRef.current?.click()
   }
 
+  // FIX: accolade orpheline supprimée — une seule accolade fermante pour cette fonction.
   const handleFileSelected = async (e) => {
     const file = e.target.files?.[0]
     e.target.value = ''
     if (!file) return
-
     setPendingFile(file)
-    }
   }
 
   // Fix trompe-l'œil — test live du mot de passe contre /api/openai-tts.
@@ -687,7 +691,7 @@ export default function SettingsModal({
                     ⚠️ Cela va remplacer tes données actuelles par celles de Drive. Irréversible.
                     <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
                       <button type="button" style={S.actionBtn} onClick={() => setConfirmDrive(false)}>Annuler</button>
-                      <button type="button" style={{ ...S.syncBtn, flex: 1 }} onClick={handleRestoreDrive} disabled={driveBusy}>Confirmer la restauration</button>
+                      <button type="button" style={{ ...S.syncBtn, flex: 1 }} onClick={executeRestoreDrive} disabled={driveBusy}>Confirmer la restauration</button>
                     </div>
                   </div>
                 )}
