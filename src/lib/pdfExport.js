@@ -99,7 +99,25 @@ function renderCover(pdf, { name, dateLabel }) {
 }
 
 // ─── Table des matières ─────────────────────────────────────────
-function renderTOC(pdf, entries) {
+// ─── TOC ───────────────────────────────────────────────────────
+// T12-TOC : pagination multi-pages. Les pages TOC sont réservées en amont
+// dans generateBookPDF (addPageWithNumber x tocPagesNeeded). Cette fonction
+// les remplit dans l'ordre : titre + ornement sur la 1ère, entrées suivantes
+// sur les pages réservées. Plus de break silencieux.
+//
+// Capacités (A5 148×210, marges top/bottom 18mm, lineH 7mm) :
+//   - Page TOC #1 (avec titre + ornement) : 19 entrées max
+//   - Pages TOC #2+ (sans titre)          : 23 entrées max
+function renderTOC(pdf, entries, startPageIdx) {
+  const lineH    = 7
+  const yMax     = PAGE_H - MARGIN_BOTTOM - 4
+  const yStart1  = MARGIN_TOP + 38   // 1ère page : sous le titre + ornement
+  const yStart2  = MARGIN_TOP + 14   // pages suivantes : juste sous la marge
+
+  let pageIdx = startPageIdx
+  pdf.setPage(pageIdx)
+
+  // — Titre + ornement uniquement sur la 1ère page TOC —
   pdf.setFont('times', 'italic')
   pdf.setFontSize(22)
   pdf.setTextColor(COLOR_BROWN)
@@ -110,17 +128,29 @@ function renderTOC(pdf, entries) {
   pdf.setTextColor(COLOR_GOLD)
   pdf.text('✦', PAGE_W / 2, MARGIN_TOP + 22, { align: 'center' })
 
+  // — Réglage du corps —
   pdf.setFont('times', 'normal')
   pdf.setFontSize(11)
   pdf.setTextColor(COLOR_INK)
 
-  const lineH = 7
-  let y = MARGIN_TOP + 38
-  const leftX  = leftMargin(pdf)
-  const rightX = PAGE_W - rightMargin(pdf)
+  let y = yStart1
 
   for (let i = 0; i < entries.length; i++) {
-    if (y > PAGE_H - MARGIN_BOTTOM - 4) break  // TOC tient sur 1 page MVP
+    if (y > yMax) {
+      // Passer à la page TOC suivante (déjà réservée). Pas de titre.
+      pageIdx += 1
+      pdf.setPage(pageIdx)
+      // Re-régler le style après setPage (jsPDF peut perdre l'état)
+      pdf.setFont('times', 'normal')
+      pdf.setFontSize(11)
+      pdf.setTextColor(COLOR_INK)
+      y = yStart2
+    }
+
+    // Marges recto/verso recalculées à chaque entrée car le bord change
+    // selon la parité de la page TOC courante.
+    const leftX  = leftMargin(pdf)
+    const rightX = PAGE_W - rightMargin(pdf)
 
     const { title, pageNum } = entries[i]
     const cleanTitle = (title || 'Sans titre').slice(0, 42)
@@ -338,9 +368,23 @@ export async function generateBookPDF({
     return pdf.output('blob')
   }
 
-  // 3. Réserver la page TOC (sera remplie en fin de génération)
-  addPageWithNumber(pdf)
-  const tocPageIdx = pdf.internal.getNumberOfPages()
+  // 3. Réserver les pages TOC (T12-TOC : pagination dynamique)
+  // Calcul des pages nécessaires selon le nombre de chapitres :
+  //   - 1ère page TOC accueille 19 entrées (titre + ornement consomment de la place)
+  //   - pages TOC suivantes accueillent 23 entrées chacune
+  // Cas typique Caroline (< 20 chapitres) → 1 page, identique à l'ancien comportement.
+  const TOC_CAP_FIRST  = 19
+  const TOC_CAP_OTHERS = 23
+  let tocPagesNeeded
+  if (eligible.length <= TOC_CAP_FIRST) {
+    tocPagesNeeded = 1
+  } else {
+    tocPagesNeeded = 1 + Math.ceil((eligible.length - TOC_CAP_FIRST) / TOC_CAP_OTHERS)
+  }
+  const tocFirstPageIdx = pdf.internal.getNumberOfPages() + 1
+  for (let i = 0; i < tocPagesNeeded; i++) {
+    addPageWithNumber(pdf)
+  }
 
   // 4. Chapitres — chacun démarre sur une page recto
   const tocEntries = []
@@ -397,10 +441,9 @@ export async function generateBookPDF({
     }
   }
 
-  // 6. Remplir la TOC sur la page réservée
+  // 6. Remplir la TOC sur les pages réservées (T12-TOC : multi-pages)
   onProgress?.({ phase: 'toc' })
-  pdf.setPage(tocPageIdx)
-  renderTOC(pdf, tocEntries)
+  renderTOC(pdf, tocEntries, tocFirstPageIdx)
 
   // 7. Mode d'affichage pour les visionneuses (mobile-friendly)
   try {
