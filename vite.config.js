@@ -23,11 +23,17 @@ export default defineConfig({
       manifest: {
         name: "L'Atelier — Mon Histoire",
         short_name: "L'Atelier",
-        description: "Ton espace pour écrire ton histoire",
+        description: "Ton espace d'écriture autobiographique accompagné par Léa.",
+        // BUG #3 — par défaut VitePWA générait `lang: "en"` dans manifest.webmanifest,
+        // ce qui faisait suggérer des mots anglais au clavier virtuel Android et
+        // dégradait le signal i18n/SEO. Aligné explicitement sur public/manifest.json.
+        lang: 'fr',
         start_url: '/',
         display: 'standalone',
+        orientation: 'portrait-primary',
         background_color: '#FAF7F2',
         theme_color: '#8B6445',
+        categories: ['productivity', 'lifestyle'],
         icons: [
           { src: '/icon-192.png', sizes: '192x192', type: 'image/png' },
           { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' }
