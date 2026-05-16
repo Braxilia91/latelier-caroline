@@ -392,111 +392,110 @@ export async function importSnapshot(snapshot) {
   }
   await openDB()
 
-  // 1. Chapitres
-  await new Promise((resolve, reject) => {
-    const txn   = _db.transaction(['chapters'], 'readwrite')
-    const store = txn.objectStore('chapters')
-    txn.oncomplete = () => resolve()
-    txn.onerror    = (e) => reject(e.target.error)
-    txn.onabort    = ()  => reject(txn.error || new Error('chapters import aborted'))
-    store.clear()
-    const now = new Date().toISOString()
-    for (const ch of (snapshot.chapters || [])) {
-      store.put({ ...ch, updatedAt: now })
-    }
-  })
-
-  // 2. Vrac
-  await new Promise((resolve, reject) => {
-    const txn   = _db.transaction(['vrac'], 'readwrite')
-    const store = txn.objectStore('vrac')
-    txn.oncomplete = () => resolve()
-    txn.onerror    = (e) => reject(e.target.error)
-    txn.onabort    = ()  => reject(txn.error || new Error('vrac import aborted'))
-    store.clear()
-    for (const idea of (snapshot.vrac || [])) {
-      store.put(idea)
-    }
-  })
-
-  // 3. KV
-  const kv = snapshot.kv || {}
-  for (const [key, value] of Object.entries(kv)) {
-    if (KV_KEYS_SYNC.includes(key) && value !== undefined) {
-      await setKV(key, value)
-    }
-  }
-
-  // 4. Chat — #26 : on préserve l'id original du message (put au lieu de add).
-  // Le store chat a autoIncrement=true ET keyPath='id', donc put({ id, ...rest })
-  // réutilise l'id existant ; si l'id est absent (vieux snapshot), add() génère un nouvel id.
-  if (Array.isArray(snapshot.chat)) {
-    await new Promise((resolve, reject) => {
-      const txn   = _db.transaction(['chat'], 'readwrite')
-      const store = txn.objectStore('chat')
-      txn.oncomplete = () => resolve()
-      txn.onerror    = (e) => reject(e.target.error)
-      txn.onabort    = ()  => reject(txn.error || new Error('chat import aborted'))
-      store.clear()
-      for (const msg of snapshot.chat.slice(-500)) {
-        if (msg.id != null) {
-          store.put(msg)           // #26 : préserve l'id → pas de références cassées
-        } else {
-          const { id: _dropped, ...rest } = msg
-          store.add(rest)          // vieux snapshot sans id → auto-increment
-        }
-      }
-    })
-  }
-
-  // 5. T8.4a — Traces (v4+) : clear+import atomic si array présent.
-  if (Array.isArray(snapshot.traces)) {
-    await new Promise((resolve, reject) => {
-      const txn   = _db.transaction(['traces'], 'readwrite')
-      const store = txn.objectStore('traces')
-      txn.oncomplete = () => resolve()
-      txn.onerror    = (e) => reject(e.target.error)
-      txn.onabort    = ()  => reject(txn.error || new Error('traces import aborted'))
-      store.clear()
-      for (const tr of snapshot.traces) {
-        if (tr?.id) store.put(tr)
-      }
-    })
-  }
-
-  // 6. T8.4a — TraceBlobs (v5+) : décodage base64 puis import atomic.
-  // Clear+import UNIQUEMENT si l'array est non vide → préserve les blobs
-  // locaux quand le snapshot vient du sync Worker (traces sans blobs).
-  if (Array.isArray(snapshot.traceBlobs) && snapshot.traceBlobs.length > 0) {
-    // Pré-décodage hors transaction IDB (atob synchrone, mais on évite
-    // de bloquer la transaction si plusieurs gros blobs à décoder).
-    const decoded = []
+  // ── 1) Pré-décodage base64 des traceBlobs HORS transaction ──
+  // atob est synchrone : on évite de retenir une transaction IDB
+  // pendant un décodage potentiellement coûteux sur plusieurs blobs.
+  // En cas d'échec de décodage, on logge et on poursuit avec les blobs valides.
+  const decodedBlobs = []
+  if (Array.isArray(snapshot.traceBlobs)) {
     for (const entry of snapshot.traceBlobs) {
       if (!entry?.traceId || !entry?.base64) continue
       try {
         const blob = base64ToBlob(entry.base64, entry.mimeType)
-        decoded.push({ key: entry.traceId, blob, mimeType: entry.mimeType || 'image/jpeg' })
+        decodedBlobs.push({
+          key:      entry.traceId,
+          blob,
+          mimeType: entry.mimeType || 'image/jpeg',
+        })
       } catch (e) {
         console.warn('[Import] base64 decode failed for trace', entry.traceId, e?.message)
       }
     }
-
-    if (decoded.length > 0) {
-      await new Promise((resolve, reject) => {
-        const txn   = _db.transaction(['traceBlobs'], 'readwrite')
-        const store = txn.objectStore('traceBlobs')
-        txn.oncomplete = () => resolve()
-        txn.onerror    = (e) => reject(e.target.error)
-        txn.onabort    = ()  => reject(txn.error || new Error('traceBlobs import aborted'))
-        store.clear()
-        for (const item of decoded) {
-          store.put(item)
-        }
-      })
-    }
   }
 
-  await setKV('lastSyncedAt', snapshot.syncedAt || new Date().toISOString())
+  // ── 2) T9 — Transaction UNIQUE sur tous les stores impactés ──
+  // Atomicité IDB garantie par construction : si la transaction abort
+  // (erreur, crash, fermeture onglet), AUCUN store n'est modifié.
+  // Plus de risque d'état partiel "chapters importé, traces pas encore".
+  const now          = new Date().toISOString()
+  const lastSyncedAt = snapshot.syncedAt || now
+  const importChat   = Array.isArray(snapshot.chat)
+  const importTraces = Array.isArray(snapshot.traces)
+  // TraceBlobs : on ne clear que si l'array est non vide ET qu'on a
+  // au moins un blob décodable → préserve les blobs locaux quand le
+  // snapshot vient du sync Worker (metadata-only).
+  const importBlobs  =
+    Array.isArray(snapshot.traceBlobs) &&
+    snapshot.traceBlobs.length > 0 &&
+    decodedBlobs.length        > 0
+
+  await new Promise((resolve, reject) => {
+    const STORES = ['chapters', 'vrac', 'kv', 'chat', 'traces', 'traceBlobs']
+    const txn    = _db.transaction(STORES, 'readwrite')
+    txn.oncomplete = () => resolve()
+    txn.onerror    = (e) => reject(e.target.error)
+    txn.onabort    = ()  => reject(txn.error || new Error('importSnapshot aborted'))
+
+    // — Chapters : clear + put N (avec updatedAt rafraîchi)
+    const chaptersStore = txn.objectStore('chapters')
+    chaptersStore.clear()
+    for (const ch of (snapshot.chapters || [])) {
+      chaptersStore.put({ ...ch, updatedAt: now })
+    }
+
+    // — Vrac : clear + put N
+    const vracStore = txn.objectStore('vrac')
+    vracStore.clear()
+    for (const idea of (snapshot.vrac || [])) {
+      vracStore.put(idea)
+    }
+
+    // — KV : merge sélectif (PAS de clear → autres clés préservées)
+    //   + lastSyncedAt dans la même transaction (atomique avec le reste)
+    const kvStore = txn.objectStore('kv')
+    const kv      = snapshot.kv || {}
+    for (const [key, value] of Object.entries(kv)) {
+      if (KV_KEYS_SYNC.includes(key) && value !== undefined) {
+        kvStore.put({ key, value })
+      }
+    }
+    kvStore.put({ key: 'lastSyncedAt', value: lastSyncedAt })
+
+    // — Chat : clear + put/add si array présent
+    //   #26 : si msg.id présent → put (préserve l'id, pas de référence cassée)
+    //         sinon → add (auto-increment pour vieux snapshots)
+    if (importChat) {
+      const chatStore = txn.objectStore('chat')
+      chatStore.clear()
+      for (const msg of snapshot.chat.slice(-500)) {
+        if (msg.id != null) {
+          chatStore.put(msg)
+        } else {
+          const { id: _dropped, ...rest } = msg
+          chatStore.add(rest)
+        }
+      }
+    }
+
+    // — Traces : clear + put N si array présent
+    if (importTraces) {
+      const tracesStore = txn.objectStore('traces')
+      tracesStore.clear()
+      for (const tr of snapshot.traces) {
+        if (tr?.id) tracesStore.put(tr)
+      }
+    }
+
+    // — TraceBlobs : clear + put N uniquement si array non vide (v5+)
+    if (importBlobs) {
+      const blobsStore = txn.objectStore('traceBlobs')
+      blobsStore.clear()
+      for (const item of decodedBlobs) {
+        blobsStore.put(item)
+      }
+    }
+  })
+
   return true
 }
 
