@@ -75,9 +75,15 @@ export function buildSnapshot({ chapters, vrac, kvData, traces = [], chat = [] }
     log('sync', 'warn', `Chat tronqué à ${CAP} messages (${chat.length} total) — les anciens ne seront pas synchronisés.`)
   }
 
+  // Tag d'identification pour la recovery admin : permet à Mourad de retrouver
+  // le snapshot d'un utilisateur par son prénom via /admin/transfer quand il
+  // a oublié son mot de passe Sauvegarde. Pas un secret — visible côté KV.
+  const ownerName = ((kvData && kvData.name) || '').toString().trim() || null
+
   return {
     version:      3,
     syncedAt:     new Date().toISOString(),
+    _owner:       ownerName,
     chapters,
     vrac,
     traces:       safeTraces,
