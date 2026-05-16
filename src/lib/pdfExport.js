@@ -387,6 +387,28 @@ export async function generateBookPDF({
   }
 
   // 4. Chapitres — chacun démarre sur une page recto
+  //   Lot C — Photos rattachées : on indexe à l'avance traces par chapterId.
+  //   Les photos sans chapterId restent pour la section Souvenirs finale.
+  const tracesByChapter = new Map()
+  const orphanTraces    = []
+  const willRenderPhotos =
+    includePhotos &&
+    Array.isArray(traces) &&
+    traces.length > 0 &&
+    typeof loadTraceBlob === 'function'
+
+  if (willRenderPhotos) {
+    for (const tr of traces) {
+      if (!tr?.id) continue
+      if (tr.chapterId) {
+        if (!tracesByChapter.has(tr.chapterId)) tracesByChapter.set(tr.chapterId, [])
+        tracesByChapter.get(tr.chapterId).push(tr)
+      } else {
+        orphanTraces.push(tr)
+      }
+    }
+  }
+
   const tocEntries = []
   for (let i = 0; i < eligible.length; i++) {
     const ch = eligible[i]
@@ -404,10 +426,31 @@ export async function generateBookPDF({
     } catch (_) { /* tolérant : outline API peut varier selon version jsPDF */ }
 
     renderChapter(pdf, ch, i + 1)
+
+    // Lot C — Photos rattachées à ce chapitre, insérées juste après son contenu.
+    // Chaque photo prend sa page (renderPhotoPage). L'outline garde le bookmark
+    // du chapitre principal pour la nav native ; les photos sont sous-jacentes.
+    if (willRenderPhotos && tracesByChapter.has(ch.id)) {
+      const chTraces = tracesByChapter.get(ch.id)
+      for (let j = 0; j < chTraces.length; j++) {
+        const trace = chTraces[j]
+        onProgress?.({ phase: 'chapter-photo', chapterIndex: i, photoIndex: j, total: chTraces.length, title: trace.title })
+        try {
+          const blobRec = await loadTraceBlob(trace.id)
+          if (!blobRec?.blob) continue
+          addPageWithNumber(pdf)
+          await renderPhotoPage(pdf, trace, blobRec.blob)
+        } catch (e) {
+          console.warn('[PDF] photo failed for trace', trace.id, e?.message)
+        }
+      }
+    }
   }
 
-  // 5. Section Souvenirs (si traces et loader fournis)
-  if (includePhotos && Array.isArray(traces) && traces.length > 0 && typeof loadTraceBlob === 'function') {
+  // 5. Section Souvenirs — Lot C : uniquement les photos sans chapterId
+  //   (traces orphelines). Les photos rattachées ont déjà été insérées
+  //   après leur chapitre respectif (étape 4).
+  if (willRenderPhotos && orphanTraces.length > 0) {
     onProgress?.({ phase: 'photos-section' })
 
     addPageWithNumber(pdf)
@@ -426,9 +469,9 @@ export async function generateBookPDF({
       pdf.outline.add(null, 'Souvenirs', { pageNumber: pdf.internal.getNumberOfPages() })
     } catch (_) {}
 
-    for (let i = 0; i < traces.length; i++) {
-      const trace = traces[i]
-      onProgress?.({ phase: 'photo', index: i, total: traces.length, title: trace.title })
+    for (let i = 0; i < orphanTraces.length; i++) {
+      const trace = orphanTraces[i]
+      onProgress?.({ phase: 'photo', index: i, total: orphanTraces.length, title: trace.title })
 
       try {
         const blobRec = await loadTraceBlob(trace.id)
