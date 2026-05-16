@@ -596,9 +596,9 @@ export default function SettingsModal({
 
           <Section title="Sauvegarde en ligne" icon={<Wifi size={13} color="#8B6445" />}>
             <p style={S.syncTxt}>
-              Tes données sont enregistrées dans le cloud et restaurables si tu changes d'appareil ou
-              si ton navigateur est nettoyé. Choisis un mot secret <strong>(20+ caractères)</strong> —
-              le même sur tous tes appareils. Ne le partage pas.
+              Sauvegarde tous tes textes (chapitres, boîte à idées, chat Léa) dans un cloud sécurisé.
+              Restaurable si tu changes d'appareil ou si ton navigateur est nettoyé.
+              Choisis un mot secret <strong>(20+ caractères)</strong> — le même sur tous tes appareils. Ne le partage pas.
             </p>
             <div style={S.inputWrap}>
               <input
@@ -663,9 +663,9 @@ export default function SettingsModal({
 
           <Section title="Sauvegarde Google Drive" icon={<HardDrive size={13} color="#8B6445" />}>
             <p style={S.syncTxt}>
-              Sauvegarde durable de tes données dans ton Google Drive (dossier invisible,
-              ~50 KB). Complémentaire à la sauvegarde en ligne ci-dessus : sert de filet
-              de sécurité si tu perds tes données locales ou changes d'appareil.
+              Sauvegarde tes photos du Tiroir dans ton Google Drive personnel (dossier invisible, accessible uniquement par l'app).
+              Complémentaire à la Sauvegarde en ligne ci-dessus qui couvre tes textes —
+              Drive couvre tes photos. Les deux ensemble constituent ton filet de sécurité complet.
             </p>
             {googleUser ? (
               <>
