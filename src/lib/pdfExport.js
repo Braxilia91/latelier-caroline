@@ -6,6 +6,9 @@
 // Texte sélectionnable, métadonnées, outline (bookmarks), liens internes TOC.
 // Photos compressées à 1200px JPEG 0.8 pour taille fichier raisonnable.
 //
+// Lot E3 — Ornements ❦ (FLORAL HEART, U+2766, natif dans EB Garamond)
+//          + sanitizeForGaramond() pour caractères utilisateur hors police.
+//
 // API :
 //   import { generateBookPDF } from './pdfExport'
 //   const blob = await generateBookPDF({
@@ -14,7 +17,7 @@
 
 import { jsPDF } from 'jspdf'
 
-// ─── Constantes de mise en page (mm) ────────────────────────────
+// ─── Constantes de mise en page (mm) ──────────────────────────────────────────
 const FORMAT = 'a5'
 const PAGE_W = 148
 const PAGE_H = 210
@@ -31,7 +34,43 @@ const COLOR_BROWN  = '#8B6445'
 const COLOR_GOLD   = '#C4956A'
 const COLOR_LIGHT  = '#9C8878'
 
-// ─── Helpers pagination ─────────────────────────────────────────
+// Ornement floral (U+2766 FLORAL HEART) — présent dans EB Garamond et times
+const ORNAMENT = '❦ · ❦ · ❦'
+
+// ─── Sanitize — Lot E3 ────────────────────────────────────────────────
+/**
+ * Remplace les caractères Unicode absents d'EB Garamond / times
+ * par des équivalents sûrs, pour éviter les carrés vides dans le PDF.
+ *
+ * Glyphs présents dans times (jsPDF built-in) et EB Garamond :
+ *   ❦ ❧ † ‡ ‖ ― — – … « » ‘ ’ “ ” „ ‹ › • · ◆ ◇
+ *   Et tous les espaces typographiques, fractions, exposants de base.
+ *
+ * Glyphs ABSENTS — mappés ici :
+ *   Box Drawings U+2500─U+257F : ═ ─ ━ │ ┃ ┌ ┐ └ ┘ ┬ ┴ ┤ ├ ┼
+ *   Check marks  : ✓ ✔ ✗ ✘
+ *   Étoiles/florets : ★ ☆ ✦ ✧ ✪ ❀ ✿
+ *   Asterism / ref  : ⁂ ※
+ */
+function sanitizeForGaramond(text) {
+  if (!text) return text
+  return String(text)
+    // Box Drawings — lignes horizontales → tiret cadratin
+    .replace(/[═─━┄┅┈┉╌╍═]/g, '―')
+    // Box Drawings — lignes verticales → barre
+    .replace(/[│┃┆┇┊┋╎╏]/g, '|')
+    // Box Drawings — coins et jonctions → plus
+    .replace(/[┌┍┎┏┐┑┒┓└┕┖┗┘┙┚┛├┝┞┟┠┡┢┣┤┥┦┧┨┩┪┫┬┭┮┯┰┱┲┳┴┵┶┷┸┹┺┻┼┽┾┿╀╁╂╃╄╅╆╇╈╉╊╋]/g, '+')
+    // Check marks
+    .replace(/[✓✔]/g, 'OK')
+    .replace(/[✗✘]/g, 'X')
+    // Étoiles et florets — remplacés par ❦ (floral heart, présent)
+    .replace(/[★☆✦✧✪✫✬✭✮✯✰✱✲✳✴✵✶✷✸✹✺✻✼✽✾✿❀❁❂❃❄❅❆❇❈❉❊❋]/g, '❦')
+    // Asterism / reference mark
+    .replace(/[⁂※]/g, '❦')
+}
+
+// ─── Helpers pagination ───────────────────────────────────────────────────
 
 /** Page courante impaire = recto (page de droite dans un livre). */
 function isOddPage(pdf) {
@@ -63,13 +102,13 @@ function ensureRecto(pdf) {
   if (!isOddPage(pdf)) addPageWithNumber(pdf)
 }
 
-// ─── Couverture ─────────────────────────────────────────────────
+// ─── Couverture ───────────────────────────────────────────────────
 function renderCover(pdf, { name, dateLabel }) {
   // Ornement haut
   pdf.setFont('times', 'normal')
   pdf.setFontSize(12)
   pdf.setTextColor(COLOR_GOLD)
-  pdf.text('✦ · ✦ · ✦', PAGE_W / 2, 60, { align: 'center' })
+  pdf.text(ORNAMENT, PAGE_W / 2, 60, { align: 'center' })
 
   // Titre
   pdf.setFont('times', 'italic')
@@ -89,7 +128,7 @@ function renderCover(pdf, { name, dateLabel }) {
   pdf.setFont('times', 'normal')
   pdf.setFontSize(12)
   pdf.setTextColor(COLOR_GOLD)
-  pdf.text('✦ · ✦ · ✦', PAGE_W / 2, 144, { align: 'center' })
+  pdf.text(ORNAMENT, PAGE_W / 2, 144, { align: 'center' })
 
   // Date en pied
   pdf.setFont('times', 'italic')
@@ -98,8 +137,8 @@ function renderCover(pdf, { name, dateLabel }) {
   pdf.text(`Imprimé le ${dateLabel}`, PAGE_W / 2, PAGE_H - 20, { align: 'center' })
 }
 
-// ─── Table des matières ─────────────────────────────────────────
-// ─── TOC ───────────────────────────────────────────────────────
+// ─── Table des matières ────────────────────────────────────────────────
+// ─── TOC ────────────────────────────────────────────────────────────────
 // T12-TOC : pagination multi-pages. Les pages TOC sont réservées en amont
 // dans generateBookPDF (addPageWithNumber x tocPagesNeeded). Cette fonction
 // les remplit dans l'ordre : titre + ornement sur la 1ère, entrées suivantes
@@ -126,7 +165,7 @@ function renderTOC(pdf, entries, startPageIdx) {
   pdf.setFont('times', 'normal')
   pdf.setFontSize(10)
   pdf.setTextColor(COLOR_GOLD)
-  pdf.text('✦', PAGE_W / 2, MARGIN_TOP + 22, { align: 'center' })
+  pdf.text('❦', PAGE_W / 2, MARGIN_TOP + 22, { align: 'center' })
 
   // — Réglage du corps —
   pdf.setFont('times', 'normal')
@@ -137,23 +176,20 @@ function renderTOC(pdf, entries, startPageIdx) {
 
   for (let i = 0; i < entries.length; i++) {
     if (y > yMax) {
-      // Passer à la page TOC suivante (déjà réservée). Pas de titre.
       pageIdx += 1
       pdf.setPage(pageIdx)
-      // Re-régler le style après setPage (jsPDF peut perdre l'état)
       pdf.setFont('times', 'normal')
       pdf.setFontSize(11)
       pdf.setTextColor(COLOR_INK)
       y = yStart2
     }
 
-    // Marges recto/verso recalculées à chaque entrée car le bord change
-    // selon la parité de la page TOC courante.
     const leftX  = leftMargin(pdf)
     const rightX = PAGE_W - rightMargin(pdf)
 
     const { title, pageNum } = entries[i]
-    const cleanTitle = (title || 'Sans titre').slice(0, 42)
+    // Lot E3 — sanitize les titres de chapitre dans la TOC
+    const cleanTitle = sanitizeForGaramond((title || 'Sans titre').slice(0, 42))
     pdf.text(`${i + 1}.  ${cleanTitle}`, leftX, y)
     pdf.text(String(pageNum), rightX, y, { align: 'right' })
 
@@ -165,8 +201,11 @@ function renderTOC(pdf, entries, startPageIdx) {
   }
 }
 
-// ─── Chapitre ───────────────────────────────────────────────────
+// ─── Chapitre ─────────────────────────────────────────────────────────────────
 function renderChapter(pdf, chapter, indexHumain) {
+  // Lot E3 — sanitize le titre de chapitre (peut contenir des glyphs absents)
+  const safeTitle = sanitizeForGaramond(chapter.title || 'Sans titre')
+
   pdf.setFont('times', 'normal')
   pdf.setFontSize(10)
   pdf.setTextColor(COLOR_GOLD)
@@ -175,7 +214,7 @@ function renderChapter(pdf, chapter, indexHumain) {
   pdf.setFont('times', 'italic')
   pdf.setFontSize(20)
   pdf.setTextColor(COLOR_INK)
-  const titleLines = pdf.splitTextToSize(chapter.title || 'Sans titre', CONTENT_W)
+  const titleLines = pdf.splitTextToSize(safeTitle, CONTENT_W)
   let y = MARGIN_TOP + 26
   for (const line of titleLines) {
     pdf.text(line, PAGE_W / 2, y, { align: 'center' })
@@ -186,7 +225,8 @@ function renderChapter(pdf, chapter, indexHumain) {
     pdf.setFont('times', 'italic')
     pdf.setFontSize(10)
     pdf.setTextColor(COLOR_LIGHT)
-    const intLines = pdf.splitTextToSize(`✦ ${chapter.intention.trim()}`, CONTENT_W * 0.85)
+    const safeIntention = sanitizeForGaramond(chapter.intention.trim())
+    const intLines = pdf.splitTextToSize(`❦  ${safeIntention}`, CONTENT_W * 0.85)
     for (const line of intLines) {
       pdf.text(line, PAGE_W / 2, y, { align: 'center' })
       y += 5
@@ -198,7 +238,7 @@ function renderChapter(pdf, chapter, indexHumain) {
   pdf.setFont('times', 'normal')
   pdf.setFontSize(11)
   pdf.setTextColor(COLOR_GOLD)
-  pdf.text('✦ · ✦ · ✦', PAGE_W / 2, y, { align: 'center' })
+  pdf.text(ORNAMENT, PAGE_W / 2, y, { align: 'center' })
   y += 12
 
   writeFlowText(pdf, chapter.content || '', y)
@@ -206,8 +246,7 @@ function renderChapter(pdf, chapter, indexHumain) {
 
 /**
  * Écrit du texte en flux avec pagination automatique.
- * Découpe par paragraphes (\n+), wrap mot à mot, saute de page si dépassement.
- * Recalcule la marge gauche à chaque ligne (alternance recto/verso).
+ * Lot E3 — sanitizeForGaramond appliqué sur chaque paragraphe.
  */
 function writeFlowText(pdf, text, startY) {
   const lineH = 5.6  // mm pour 11pt
@@ -220,8 +259,10 @@ function writeFlowText(pdf, text, startY) {
   const paragraphs = String(text).split(/\n{2,}/g)
 
   for (let p = 0; p < paragraphs.length; p++) {
-    const paragraph = paragraphs[p].replace(/\n+/g, ' ').trim()
-    if (!paragraph) continue
+    const raw = paragraphs[p].replace(/\n+/g, ' ').trim()
+    if (!raw) continue
+    // Lot E3 — sanitize avant wrap
+    const paragraph = sanitizeForGaramond(raw)
 
     const lines = pdf.splitTextToSize(paragraph, CONTENT_W)
     for (const line of lines) {
@@ -239,7 +280,7 @@ function writeFlowText(pdf, text, startY) {
   }
 }
 
-// ─── Photo pleine page ──────────────────────────────────────────
+// ─── Photo pleine page ───────────────────────────────────────────────────
 
 async function compressImage(blob, maxDim = 1200, quality = 0.8) {
   return new Promise((resolve, reject) => {
@@ -291,7 +332,7 @@ async function renderPhotoPage(pdf, trace, blob) {
   pdf.setFont('times', 'italic')
   pdf.setFontSize(11)
   pdf.setTextColor(COLOR_BROWN)
-  pdf.text(trace.title || 'Souvenir', PAGE_W / 2, legendY, { align: 'center' })
+  pdf.text(sanitizeForGaramond(trace.title || 'Souvenir'), PAGE_W / 2, legendY, { align: 'center' })
 
   if (trace.date) {
     pdf.setFont('times', 'normal')
@@ -307,7 +348,7 @@ async function renderPhotoPage(pdf, trace, blob) {
   }
 }
 
-// ─── Main API ───────────────────────────────────────────────────
+// ─── Main API ────────────────────────────────────────────────────
 
 /**
  * Génère le livre PDF complet.
@@ -369,10 +410,6 @@ export async function generateBookPDF({
   }
 
   // 3. Réserver les pages TOC (T12-TOC : pagination dynamique)
-  // Calcul des pages nécessaires selon le nombre de chapitres :
-  //   - 1ère page TOC accueille 19 entrées (titre + ornement consomment de la place)
-  //   - pages TOC suivantes accueillent 23 entrées chacune
-  // Cas typique Caroline (< 20 chapitres) → 1 page, identique à l'ancien comportement.
   const TOC_CAP_FIRST  = 19
   const TOC_CAP_OTHERS = 23
   let tocPagesNeeded
@@ -387,8 +424,6 @@ export async function generateBookPDF({
   }
 
   // 4. Chapitres — chacun démarre sur une page recto
-  //   Lot C — Photos rattachées : on indexe à l'avance traces par chapterId.
-  //   Les photos sans chapterId restent pour la section Souvenirs finale.
   const tracesByChapter = new Map()
   const orphanTraces    = []
   const willRenderPhotos =
@@ -420,16 +455,12 @@ export async function generateBookPDF({
     const pageNum = pdf.internal.getNumberOfPages()
     tocEntries.push({ title: ch.title, pageNum })
 
-    // Bookmark PDF (outline) — navigation native dans les visionneuses
     try {
       pdf.outline.add(null, `Chapitre ${i + 1} — ${ch.title || 'Sans titre'}`, { pageNumber: pageNum })
-    } catch (_) { /* tolérant : outline API peut varier selon version jsPDF */ }
+    } catch (_) {}
 
     renderChapter(pdf, ch, i + 1)
 
-    // Lot C — Photos rattachées à ce chapitre, insérées juste après son contenu.
-    // Chaque photo prend sa page (renderPhotoPage). L'outline garde le bookmark
-    // du chapitre principal pour la nav native ; les photos sont sous-jacentes.
     if (willRenderPhotos && tracesByChapter.has(ch.id)) {
       const chTraces = tracesByChapter.get(ch.id)
       for (let j = 0; j < chTraces.length; j++) {
@@ -447,9 +478,7 @@ export async function generateBookPDF({
     }
   }
 
-  // 5. Section Souvenirs — Lot C : uniquement les photos sans chapterId
-  //   (traces orphelines). Les photos rattachées ont déjà été insérées
-  //   après leur chapitre respectif (étape 4).
+  // 5. Section Souvenirs — photos orphelines uniquement
   if (willRenderPhotos && orphanTraces.length > 0) {
     onProgress?.({ phase: 'photos-section' })
 
@@ -463,7 +492,7 @@ export async function generateBookPDF({
     pdf.setFont('times', 'normal')
     pdf.setFontSize(12)
     pdf.setTextColor(COLOR_GOLD)
-    pdf.text('✦ · ✦ · ✦', PAGE_W / 2, PAGE_H / 2 + 6, { align: 'center' })
+    pdf.text(ORNAMENT, PAGE_W / 2, PAGE_H / 2 + 6, { align: 'center' })
 
     try {
       pdf.outline.add(null, 'Souvenirs', { pageNumber: pdf.internal.getNumberOfPages() })
@@ -484,14 +513,14 @@ export async function generateBookPDF({
     }
   }
 
-  // 6. Remplir la TOC sur les pages réservées (T12-TOC : multi-pages)
+  // 6. Remplir la TOC sur les pages réservées
   onProgress?.({ phase: 'toc' })
   renderTOC(pdf, tocEntries, tocFirstPageIdx)
 
-  // 7. Mode d'affichage pour les visionneuses (mobile-friendly)
+  // 7. Mode d'affichage pour les visionneuses
   try {
     pdf.setDisplayMode('fit', 'single', 'UseOutlines')
-  } catch (_) { /* tolérant si setDisplayMode signature varie */ }
+  } catch (_) {}
 
   onProgress?.({ phase: 'done' })
   return pdf.output('blob')
