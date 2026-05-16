@@ -52,7 +52,7 @@ export default function Header({
   }, [moodOpen, ambientOpen, setMoodOpen, setAmbientOpen])
 
   return (
-    <header style={styles.hdr}>
+    <header style={isMobile ? { ...styles.hdr, ...styles.hdrMobile } : styles.hdr}>
 
       {/* Bouton hamburger mobile (Sidebar) */}
       {isMobile && (
@@ -205,7 +205,7 @@ export default function Header({
 function BtnH({ icon, label, onClick, isMobile }) {
   return (
     <button
-      style={styles.hdrBtn}
+      style={isMobile ? { ...styles.hdrBtn, ...styles.hdrBtnMobile } : styles.hdrBtn}
       onClick={onClick}
       title={label}
       aria-label={label}
@@ -225,6 +225,13 @@ const styles = {
     borderBottom: '1px solid var(--border-l)',
     gap: 12, flexShrink: 0,
     position: 'relative', zIndex: 10,
+  },
+  // Mobile compact — réduit gap + padding pour que coachBtn (Léa) reste
+  // visible à droite sur écran ≤ 412px. Sans ce reset, actions+coachBtn
+  // dépassaient la largeur viewport et Léa se retrouvait hors écran.
+  hdrMobile: {
+    padding: '0 8px',
+    gap: 6,
   },
   menuBtn: {
     width: 36, height: 36,
@@ -320,6 +327,12 @@ const styles = {
     transition: 'all .15s',
     whiteSpace: 'nowrap',
     position: 'relative',
+  },
+  // Mobile compact — padding horizontal réduit pour gagner ~70 px sur la
+  // topbar et garantir que coachBtn (Léa) reste visible à droite.
+  // Tap target reste acceptable (icône 16 + 2×5 = 26 px d'écart entre icônes).
+  hdrBtnMobile: {
+    padding: '6px 5px',
   },
   hdrBtnPlaying: {
     background: 'var(--gold-ll)',
