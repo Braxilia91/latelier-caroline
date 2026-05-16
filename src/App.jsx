@@ -201,14 +201,6 @@ function AppInner() {
   }, [db.streakMilestone, db.dismissStreakMilestone, toast])
 
   // ── Lot A + B — Reconnexion Drive silencieuse au boot ────────
-  // B : tente signInSilent (GIS prompt:'none'). Si Caroline est encore
-  //     loggée à Google dans son navigateur (cas le plus fréquent),
-  //     reconnexion auto transparente sans popup.
-  // A : si B échoue ET on a des traces locales (donc potentiellement
-  //     des blobs non synchronisés vers Drive), toast informatif pour
-  //     que Caroline reclique "Connecter" dans Réglages.
-  // Le ref garantit qu'on ne tente qu'une fois par instance App (1 fois
-  // par chargement de page). Retrigger naturel au prochain refresh.
   useEffect(() => {
     if (!db.ready || !db.isSetup) return
     if (driveSilentTriedRef.current) return
@@ -536,6 +528,7 @@ function AppInner() {
             }}
             isMobile={isMobile}
             loadTraceBlob={db.loadTraceBlob}
+            chapters={db.chapters}
           />
         )}
         {/* T11b — ProgressModal (heatmap régularité) */}
