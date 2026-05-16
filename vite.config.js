@@ -19,7 +19,12 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['icon-192.png','icon-512.png'],
+      // FEAT-B — injectManifest : nécessaire pour gérer le Share Target POST dans sw.js
+      // generateSW ne permet pas d'intercepter des requêtes POST custom.
+      strategies: 'injectManifest',
+      srcDir: 'src',
+      filename: 'sw.js',
+      includeAssets: ['icon-192.png', 'icon-512.png'],
       manifest: {
         name: "L'Atelier — Mon Histoire",
         short_name: "L'Atelier",
@@ -37,17 +42,23 @@ export default defineConfig({
         icons: [
           { src: '/icon-192.png', sizes: '192x192', type: 'image/png' },
           { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' }
-        ]
-      },
-      workbox: {
-        // mp3 exclus du precache (cafe.mp3 = 3.86MB > limite Workbox 2MB)
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
-        runtimeCaching: [{
-          urlPattern: new RegExp('^https://fonts\.googleapis\.com/.*', 'i'),
-          handler: 'CacheFirst',
-          options: { cacheName: 'google-fonts', expiration: { maxEntries: 10, maxAgeSeconds: 31536000 } }
-        }]
+        ],
+        // FEAT-B — Share Target : L'Atelier apparaît dans le menu de partage iOS/Android
+        // quand l'app est installée en PWA.
+        // URL absolue obligatoire : Chrome Android rejette silencieusement les URL relatives
+        // dans share_target.action (bug Chromium connu).
+        share_target: {
+          action: 'https://latelier-caroline.pages.dev/share-target',
+          method: 'POST',
+          enctype: 'multipart/form-data',
+          params: {
+            title: 'title',
+            text: 'text',
+            files: [{ name: 'image', accept: ['image/*'] }]
+          }
+        }
       }
+      // workbox config supprimée — désormais gérée directement dans src/sw.js
     })
   ]
 })
