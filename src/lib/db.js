@@ -245,6 +245,7 @@ export async function addTrace(trace) {
     date:      trace?.date  || new Date().toISOString().split('T')[0],
     ...trace,
     id:        `tr_${Date.now()}`,
+    chapterId: trace?.chapterId ?? null,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   }
