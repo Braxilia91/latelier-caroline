@@ -97,6 +97,19 @@ async function blobToBase64(blob) {
 }
 
 /**
+ * Convertit une string base64 pure en Uint8Array.
+ * docx v9 ImageRun.data n'accepte pas une string — il faut un Uint8Array.
+ * @param {string} base64 — base64 pur (sans préfixe data:...)
+ * @returns {Uint8Array}
+ */
+function base64ToUint8Array(base64) {
+  const binary = atob(base64)
+  const bytes  = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+  return bytes
+}
+
+/**
  * Compresse une image (canvas) et retourne { dataUrl, w, h }.
  * Parité avec pdfExport.compressImage.
  */
@@ -182,22 +195,23 @@ async function buildChapterBlocks(D, chapter, indexHumain, chapterPhotos, loadTr
         if (!blobRec?.blob) continue
 
         const { dataUrl, w, h } = await compressImage(blobRec.blob, 1200, 0.8)
-        // Convertir px en EMU (914400 EMU = 1 inch ; 96 dpi).
-        // Largeur max = zone de texte ≈ 450 px (A4 - marges 2.5 cm * 2)
-        const maxPx   = 450
-        const scale   = Math.min(maxPx / w, 1)
-        const emuW    = Math.round(w * scale * 914400 / 96)
-        const emuH    = Math.round(h * scale * 914400 / 96)
 
-        // Extraire la partie base64 pure
-        const base64  = dataUrl.split(',')[1]
+        // FIX: transformation prend des PIXELS — docx v9 convertit en EMU en interne.
+        // Ne pas pré-calculer en EMU, sinon factor ×9525 appliqué deux fois.
+        const maxPx = 450
+        const scale = Math.min(maxPx / w, 1)
+        const pxW   = Math.round(w * scale)
+        const pxH   = Math.round(h * scale)
+
+        // FIX: data attend un Uint8Array — base64 string → 0 bytes dans le zip.
+        const imgBytes = base64ToUint8Array(dataUrl.split(',')[1])
 
         blocks.push(pageBreakPara(D))
         blocks.push(new D.Paragraph({
           children: [
             new D.ImageRun({
-              data: base64,
-              transformation: { width: emuW, height: emuH },
+              data: imgBytes,
+              transformation: { width: pxW, height: pxH },
               type: 'jpg',
             }),
           ],
@@ -301,16 +315,18 @@ async function buildSouvenirsBlocks(D, orphanTraces, loadTraceBlob, onProgress) 
       if (!blobRec?.blob) continue
 
       const { dataUrl, w, h } = await compressImage(blobRec.blob, 1200, 0.8)
-      const maxPx = 450
-      const scale = Math.min(maxPx / w, 1)
-      const emuW  = Math.round(w * scale * 914400 / 96)
-      const emuH  = Math.round(h * scale * 914400 / 96)
-      const base64 = dataUrl.split(',')[1]
+
+      // FIX: pixels directs + Uint8Array (même correctif que buildChapterBlocks)
+      const maxPx  = 450
+      const scale  = Math.min(maxPx / w, 1)
+      const pxW    = Math.round(w * scale)
+      const pxH    = Math.round(h * scale)
+      const imgBytes = base64ToUint8Array(dataUrl.split(',')[1])
 
       blocks.push(pageBreakPara(D))
       blocks.push(new D.Paragraph({
         children: [
-          new D.ImageRun({ data: base64, transformation: { width: emuW, height: emuH }, type: 'jpg' }),
+          new D.ImageRun({ data: imgBytes, transformation: { width: pxW, height: pxH }, type: 'jpg' }),
         ],
         alignment: D.AlignmentType.CENTER,
         spacing: { after: 160 },
