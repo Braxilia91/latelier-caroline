@@ -37,6 +37,20 @@ async function getToken() {
   return user.token
 }
 
+/**
+ * Fix spam — Vérification non-throwing de la connexion Drive avant batch.
+ * Évite de faire échouer N appels getToken() (1 par trace) quand on sait
+ * déjà qu'on n'a pas de session. Un seul console.info au lieu de N warn.
+ */
+async function isDriveConnected() {
+  try {
+    const { getCurrentUser } = await import('./googleDrive')
+    return !!getCurrentUser()?.token
+  } catch (_) {
+    return false
+  }
+}
+
 function blobFilename(traceId) {
   return `${BLOB_PREFIX}${traceId}.b64`
 }
@@ -162,6 +176,13 @@ function base64ToBlob(b64, mimeType) {
  * @returns {Promise<{ uploaded: number, skipped: number, errors: string[] }>}
  */
 export async function uploadAllBlobs(traces = [], onProgress = null) {
+  // Fix spam — early-return si Drive déconnecté. Évite N warn cascade
+  // (un par trace) quand on sait déjà qu'aucun upload ne réussira.
+  if (!(await isDriveConnected())) {
+    console.info('[driveSync] uploadAllBlobs annulé — non connecté à Google Drive')
+    return { uploaded: 0, skipped: 0, errors: ['Non connecté à Google Drive'] }
+  }
+
   let uploaded = 0
   let skipped  = 0
   const errors = []
@@ -215,6 +236,12 @@ export async function uploadAllBlobs(traces = [], onProgress = null) {
  * @returns {Promise<{ restored: number, skipped: number, errors: string[] }>}
  */
 export async function downloadAllBlobs(traces = [], onProgress = null) {
+  // Fix spam — symétrique : early-return si Drive déconnecté.
+  if (!(await isDriveConnected())) {
+    console.info('[driveSync] downloadAllBlobs annulé — non connecté à Google Drive')
+    return { restored: 0, skipped: 0, errors: ['Non connecté à Google Drive'] }
+  }
+
   let restored = 0
   let skipped  = 0
   const errors = []
