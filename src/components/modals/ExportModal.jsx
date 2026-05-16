@@ -2,7 +2,7 @@ import { useState } from 'react'
 
 import Modal from '../ui/Modal'
 import { useToast } from '../ui/Toast'
-import { X, Download, FileText, BookOpen } from 'lucide-react'
+import { X, Download, FileText, BookOpen, FileSignature } from 'lucide-react'
 // T8.4c — buildLocalBackup v5 inclut traces metadata + blobs base64.
 import { buildLocalBackup } from '../../lib/db'
 
@@ -13,6 +13,8 @@ export default function ExportModal({ chapters, name, traces = [], loadTraceBlob
   const [exporting, setExporting] = useState(false)
   // T12 — État bloquant pendant la génération PDF
   const [generatingPdf, setGeneratingPdf] = useState(false)
+  // Lot E — État bloquant pendant la génération DOCX
+  const [generatingDocx, setGeneratingDocx] = useState(false)
 
   // Fix #6 — Sentinelle défensive pour name : évite crash sur null,
   // évite "MON HISTOIRE — " avec tiret trailing si vide.
@@ -78,8 +80,6 @@ export default function ExportModal({ chapters, name, traces = [], loadTraceBlob
       a.click()
       URL.revokeObjectURL(url)
     } catch (err) {
-      // T12 quick fix — remonter l'échec en toast visible pour Caroline
-      // (avant : console.warn invisible). On garde aussi la trace console pour debug.
       console.warn('[PDF] generation failed:', err?.message)
       toast(
         'PDF impossible à générer — réessaie, ou exporte en TXT en attendant',
@@ -88,6 +88,40 @@ export default function ExportModal({ chapters, name, traces = [], loadTraceBlob
       )
     } finally {
       setGeneratingPdf(false)
+    }
+  }
+
+  // Lot E — Génère le manuscrit Word (.docx) pour maison d'édition.
+  // Dynamic import : docx chargé seulement au clic (pas dans le bundle principal).
+  const exportDOCX = async () => {
+    if (generatingDocx) return
+    setGeneratingDocx(true)
+    try {
+      const { generateBookDOCX } = await import('../../lib/docxExport')
+      const selected = selectChapters()
+      const blob = await generateBookDOCX({
+        name: safeName,
+        chapters: selected,
+        traces,
+        loadTraceBlob,
+        options: { includePhotos: true },
+      })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      const suffix = mode === 'public' ? '-public' : ''
+      a.href = url
+      a.download = `mon-manuscrit${suffix}-${new Date().toISOString().slice(0,10)}.docx`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      console.warn('[DOCX] generation failed:', err?.message)
+      toast(
+        'DOCX impossible à générer — réessaie, ou exporte en PDF en attendant',
+        'error',
+        6000
+      )
+    } finally {
+      setGeneratingDocx(false)
     }
   }
 
@@ -106,9 +140,6 @@ export default function ExportModal({ chapters, name, traces = [], loadTraceBlob
       a.click()
       URL.revokeObjectURL(url)
     } catch (err) {
-      // T12bis §9 — sauvegarde silencieuse = risque critique (Caroline pouvait croire
-      // avoir sauvegardé alors que le fichier n'a pas été produit).
-      // Toast rassurant : on distingue l'échec de la perte de données (IDB intact).
       console.warn('[Export] buildLocalBackup failed:', err?.message)
       toast(
         'La sauvegarde n\'a pas pu être créée — tes textes restent bien dans l\'app. Réessaie dans un moment.',
@@ -189,6 +220,24 @@ export default function ExportModal({ chapters, name, traces = [], loadTraceBlob
         }
       </button>
 
+      {/* Lot E — Manuscrit Word pour maison d'édition */}
+      <button
+        style={{
+          ...styles.btnDocx,
+          opacity: generatingDocx ? 0.6 : 1,
+          cursor: generatingDocx ? 'wait' : 'pointer',
+        }}
+        onClick={exportDOCX}
+        disabled={generatingDocx}
+        aria-busy={generatingDocx}
+      >
+        <FileSignature size={16} />
+        {generatingDocx
+          ? 'Préparation du manuscrit…'
+          : <>Manuscrit Word (.docx) <span style={styles.hint2}>(maison d’édition, KDP…)</span></>
+        }
+      </button>
+
       <div style={styles.sep}>
         <div style={styles.sepLine} />
         Sauvegarde complète
@@ -249,6 +298,17 @@ const styles = {
     padding: '12px 16px',
     background: 'linear-gradient(135deg, #C4956A, #E8D5B8)',
     color: '#5C3D1E', border: '1.5px solid #C4956A',
+    borderRadius: 12, fontSize: '.88rem', fontWeight: 700,
+    fontFamily: "'Nunito', sans-serif", cursor: 'pointer',
+    marginBottom: 10,
+    transition: 'opacity .15s',
+  },
+  // Lot E — Bouton DOCX : palette sage (vert sauge) — format pro éditeur
+  btnDocx: {
+    width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+    padding: '12px 16px',
+    background: 'linear-gradient(135deg, #6B8F71, #A8C09B)',
+    color: '#fff', border: '1.5px solid #6B8F71',
     borderRadius: 12, fontSize: '.88rem', fontWeight: 700,
     fontFamily: "'Nunito', sans-serif", cursor: 'pointer',
     marginBottom: 12,
