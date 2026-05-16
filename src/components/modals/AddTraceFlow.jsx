@@ -1,67 +1,44 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import Modal from '../ui/Modal'
-import { X, ImagePlus } from 'lucide-react'
+import { X, ImagePlus, Sparkles } from 'lucide-react'
 import { compressImage } from '../../lib/imageCompress'
 import { runOCR, OCR_CONFIDENCE_THRESHOLD } from '../../lib/ocrWorker'
+import { runVisionOCR } from '../../lib/visionOCR'
 
 /**
  * AddTraceFlow — Flow d'ajout d'une trace photo dans Le tiroir.
  *
- * Spec : docs/le-tiroir-v1.md §4 étapes 1-3 (V1 photo uniquement).
- * LOT 3 = étapes 1-2. LOT 4 = étape 3 (OCR conditionnel). Étapes 4-5 reportées LOT 5-6.
- *
- * Étape 1 — Importer :
- *   File picker (accept="image/*") → compressImage (Canvas 1600px + JPEG q=0.85).
- *   OU initialFile prop (Share Target FEAT-B) → même pipeline, déclenché au mount.
- *
- * Étape 2 — Première écoute :
- *   Photo plein cadre + question « Pourquoi cette photo, maintenant ? »
- *   OCR lancé en arrière-plan en parallèle (non bloquant).
- *
- * Étape 3 — OCR conditionnel (pendant étape 2) :
- *   Si confiance > OCR_CONFIDENCE_THRESHOLD : ligne discrète sous textarea.
- *   Si "Oui" : encart dépliable, OCR brut éditable + question whatItStirs.
- *   Si OCR encore en cours au Save : sauvegarde sans attendre (ocrRunAt null).
- *
- * Architecture (Option 1 stricte) :
- *   Pas de touche IDB directe. Persistance déléguée au parent via onCreateTrace.
- *
  * Props :
  *   onClose        : () => void
  *   onCreateTrace  : ({ metadata, blob }) => Promise<trace>
- *   initialFile    : File | null — image pré-chargée (Share Target), null par défaut
+ *   initialFile    : File | null — image pré-chargée (Share Target FEAT-B)
+ *   apiKey         : string     — mot de passe Léa pour /api/vision-ocr (FEAT-C)
  */
-export default function AddTraceFlow({ onClose, onCreateTrace, initialFile = null }) {
-  const [step, setStep] = useState('import')         // 'import' | 'firstListen'
-  const [compressed, setCompressed] = useState(null) // { blob, mimeType, width, height, originalSize }
+export default function AddTraceFlow({ onClose, onCreateTrace, initialFile = null, apiKey = '' }) {
+  const [step, setStep] = useState('import')
+  const [compressed, setCompressed] = useState(null)
   const [previewUrl, setPreviewUrl] = useState(null)
   const [whyNow, setWhyNow] = useState('')
   const [error, setError] = useState(null)
   const [submitting, setSubmitting] = useState(false)
 
-  // OCR state
-  const [ocrStatus, setOcrStatus] = useState('idle') // 'idle'|'running'|'done'|'skipped'|'error'
-  const [ocrResult, setOcrResult] = useState(null)   // { text, confidence } | null
+  const [ocrStatus, setOcrStatus] = useState('idle')
+  const [ocrResult, setOcrResult] = useState(null)
   const [ocrExpanded, setOcrExpanded] = useState(false)
   const [ocrTextEdited, setOcrTextEdited] = useState('')
   const [whatItStirs, setWhatItStirs] = useState('')
 
+  const [visionOcrStatus, setVisionOcrStatus] = useState('idle')
+  const [visionOcrErrorMsg, setVisionOcrErrorMsg] = useState(null)
+
   const fileInputRef = useRef(null)
   const textareaRef = useRef(null)
-  // T5/Phase 3 — Référence au fichier original conservée pour compatibilité / rollback.
-  // L'OCR utilise compressed.blob (cf. useEffect ci-dessous), pas l'original :
-  // mesures T5/Phase 2 = 0 pp de perte d'accuracy sur 16 cas + ×6-18 gain de durée
-  // sur photos smartphone modernes (validé en prod : 89s → ~5-15s estimés).
   const originalFileRef = useRef(null)
 
-  // Libère l'ObjectURL au démontage ou remplacement du blob.
   useEffect(() => {
-    return () => {
-      if (previewUrl) URL.revokeObjectURL(previewUrl)
-    }
+    return () => { if (previewUrl) URL.revokeObjectURL(previewUrl) }
   }, [previewUrl])
 
-  // Focus textarea à l'arrivée sur étape 2.
   useEffect(() => {
     if (step === 'firstListen') {
       const id = setTimeout(() => {
@@ -71,23 +48,13 @@ export default function AddTraceFlow({ onClose, onCreateTrace, initialFile = nul
     }
   }, [step])
 
-  // Lance l'OCR en parallèle dès l'arrivée sur étape 2.
-  // Non bloquant : si OCR en cours au Save, on sauve sans attendre.
-  // T5/Phase 3 — OCR sur compressed.blob (1600px JPEG q=0.85, cf. imageCompress.js).
-  //   Mesures T5/Phase 2 : accuracy identique vs original sur 16 cas test, durée
-  //   divisée ×6-18 sur grosses photos. Économise CPU/batterie sans dégrader l'OCR.
-  // Dépendances explicites [step, compressed] — pas de stale closure.
-  // Guard cancelled dans le cleanup : retours tardifs ignorés.
   useEffect(() => {
     if (step !== 'firstListen' || !compressed || !originalFileRef.current) return
-
     let cancelled = false
     const sourceFile = compressed.blob
-
     setOcrStatus('running')
     setOcrResult(null)
     setOcrExpanded(false)
-
     runOCR(sourceFile)
       .then(({ text, confidence }) => {
         if (cancelled) return
@@ -99,26 +66,15 @@ export default function AddTraceFlow({ onClose, onCreateTrace, initialFile = nul
           setOcrStatus('skipped')
         }
       })
-      .catch(() => {
-        if (!cancelled) setOcrStatus('error')
-      })
-
-    return () => {
-      cancelled = true
-    }
+      .catch(() => { if (!cancelled) setOcrStatus('error') })
+    return () => { cancelled = true }
   }, [step, compressed])
 
-  // FEAT-B — Share Target : si un fichier a été partagé depuis une autre app,
-  // on le traite directement au mount sans passer par le file picker.
   useEffect(() => {
     if (!initialFile) return
     processFile(initialFile)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  /**
-   * processFile — pipeline commun pour handleFileChange ET initialFile (Share Target).
-   * compress → preview URL → passer à l'étape firstListen.
-   */
   const processFile = useCallback(async (file) => {
     originalFileRef.current = file
     setSubmitting(true)
@@ -136,10 +92,7 @@ export default function AddTraceFlow({ onClose, onCreateTrace, initialFile = nul
     }
   }, [])
 
-  const handlePickFile = () => {
-    setError(null)
-    fileInputRef.current?.click()
-  }
+  const handlePickFile = () => { setError(null); fileInputRef.current?.click() }
 
   const handleFileChange = async (e) => {
     const file = e.target.files?.[0]
@@ -147,6 +100,26 @@ export default function AddTraceFlow({ onClose, onCreateTrace, initialFile = nul
     if (!file) return
     await processFile(file)
   }
+
+  const handleVisionOCR = useCallback(async () => {
+    if (!compressed?.blob || !apiKey || visionOcrStatus === 'running') return
+    setVisionOcrStatus('running')
+    setVisionOcrErrorMsg(null)
+    try {
+      const text = await runVisionOCR(compressed.blob, apiKey)
+      if (text.trim()) {
+        setOcrTextEdited(text)
+        setOcrExpanded(true)
+        setVisionOcrStatus('done')
+      } else {
+        setVisionOcrStatus('error')
+        setVisionOcrErrorMsg("L'IA n'a pas détecté de texte dans cette image.")
+      }
+    } catch (err) {
+      setVisionOcrStatus('error')
+      setVisionOcrErrorMsg(err?.message || 'Erreur lors de la lecture IA.')
+    }
+  }, [compressed, apiKey, visionOcrStatus])
 
   const persistTrace = async (whyNowValue) => {
     if (!compressed || submitting) return
@@ -165,7 +138,6 @@ export default function AddTraceFlow({ onClose, onCreateTrace, initialFile = nul
           height: compressed.height,
           sizeBytes: compressed.blob.size,
           whyNow: (whyNowValue || '').trim(),
-          // OCR — null si OCR non terminé ou sous le seuil (non bloquant)
           ocrText: ocrExpanded
             ? (ocrTextEdited.trim() || null)
             : (ocrResult?.text?.trim() || null),
@@ -179,7 +151,7 @@ export default function AddTraceFlow({ onClose, onCreateTrace, initialFile = nul
       })
       onClose?.()
     } catch (err) {
-      setError(err?.message || "La sauvegarde a échoué. Réessaye dans un instant.")
+      setError(err?.message || 'La sauvegarde a échoué. Réessaye dans un instant.')
       setSubmitting(false)
     }
   }
@@ -187,41 +159,29 @@ export default function AddTraceFlow({ onClose, onCreateTrace, initialFile = nul
   const handleSkip = () => persistTrace('')
   const handleNext = () => persistTrace(whyNow)
 
+  const showVisionBtn = step === 'firstListen'
+    && !!apiKey
+    && ocrStatus !== 'running'
+    && visionOcrStatus !== 'done'
+
   return (
-    <Modal
-      onClose={onClose}
-      ariaLabel="Ajouter au tiroir"
-      overlayStyle={S.overlay}
-      modalStyle={S.modal}
-    >
-      {/* Header */}
+    <Modal onClose={onClose} ariaLabel="Ajouter au tiroir" overlayStyle={S.overlay} modalStyle={S.modal}>
       <div style={S.hdr}>
         <div style={S.hdrLeft}>
           <span style={S.hdrIcon}>🪶</span>
           <div>
             <div style={S.hdrTitle}>Ajouter au tiroir</div>
             <div style={S.hdrSub}>
-              {step === 'import'
-                ? "Choisis une photo qui te parle aujourd'hui."
-                : 'Pourquoi cette photo, maintenant ?'}
+              {step === 'import' ? "Choisis une photo qui te parle aujourd'hui." : 'Pourquoi cette photo, maintenant ?'}
             </div>
           </div>
         </div>
-        <button style={S.closeBtn} onClick={onClose} aria-label="Fermer">
-          <X size={18} />
-        </button>
+        <button style={S.closeBtn} onClick={onClose} aria-label="Fermer"><X size={18} /></button>
       </div>
 
-      {/* Étape 1 — Importer */}
       {step === 'import' && (
         <div style={S.bodyImport}>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            onChange={handleFileChange}
-            style={{ display: 'none' }}
-          />
+          <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileChange} style={{ display: 'none' }} />
           <button
             data-autofocus
             style={{ ...S.pickBtn, opacity: submitting ? 0.6 : 1, cursor: submitting ? 'wait' : 'pointer' }}
@@ -236,7 +196,6 @@ export default function AddTraceFlow({ onClose, onCreateTrace, initialFile = nul
         </div>
       )}
 
-      {/* Étape 2 — Première écoute + OCR conditionnel */}
       {step === 'firstListen' && (
         <div style={S.bodyListen}>
           <div style={S.imgWrap}>
@@ -253,17 +212,13 @@ export default function AddTraceFlow({ onClose, onCreateTrace, initialFile = nul
             disabled={submitting}
           />
 
-          {/* OCR — ligne discrète si confiance > seuil */}
           {ocrStatus === 'done' && !ocrExpanded && (
             <div style={S.ocrHint}>
               <span style={S.ocrHintText}>Un texte se cache dans cette image. Le lire ?</span>
-              <button style={S.ocrYesBtn} onClick={() => setOcrExpanded(true)}>
-                Oui
-              </button>
+              <button style={S.ocrYesBtn} onClick={() => setOcrExpanded(true)}>Oui</button>
             </div>
           )}
 
-          {/* OCR — encart dépliable */}
           {ocrExpanded && (
             <div style={S.ocrPanel}>
               <p style={S.ocrLabel}>Texte détecté — modifie-le si besoin :</p>
@@ -283,6 +238,26 @@ export default function AddTraceFlow({ onClose, onCreateTrace, initialFile = nul
                 rows={2}
                 disabled={submitting}
               />
+            </div>
+          )}
+
+          {showVisionBtn && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <button
+                style={{
+                  ...S.visionBtn,
+                  opacity: visionOcrStatus === 'running' ? 0.6 : 1,
+                  cursor: visionOcrStatus === 'running' ? 'wait' : 'pointer',
+                }}
+                onClick={handleVisionOCR}
+                disabled={visionOcrStatus === 'running' || submitting}
+              >
+                <Sparkles size={14} />
+                {visionOcrStatus === 'running' ? 'Lecture en cours…' : "Lire avec l'IA"}
+              </button>
+              {visionOcrStatus === 'error' && visionOcrErrorMsg && (
+                <p style={S.visionErrMsg}>{visionOcrErrorMsg}</p>
+              )}
             </div>
           )}
 
@@ -310,186 +285,32 @@ export default function AddTraceFlow({ onClose, onCreateTrace, initialFile = nul
 }
 
 const S = {
-  overlay: {
-    position: 'fixed', inset: 0,
-    background: 'rgba(42,26,14,.45)',
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    zIndex: 1000, padding: 16,
-  },
-  modal: {
-    background: '#FFFEFB',
-    borderRadius: 18,
-    width: '100%', maxWidth: '90vw',
-    maxHeight: '90vh',
-    display: 'flex', flexDirection: 'column',
-    boxShadow: '0 24px 60px rgba(42,26,14,.25)',
-    overflow: 'hidden',
-  },
-  hdr: {
-    display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
-    padding: '16px 20px 14px',
-    borderBottom: '1px solid #EDE7DE',
-    background: '#FAF7F2',
-  },
+  overlay: { position: 'fixed', inset: 0, background: 'rgba(42,26,14,.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 },
+  modal: { background: '#FFFEFB', borderRadius: 18, width: '100%', maxWidth: '90vw', maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 24px 60px rgba(42,26,14,.25)', overflow: 'hidden' },
+  hdr: { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', padding: '16px 20px 14px', borderBottom: '1px solid #EDE7DE', background: '#FAF7F2' },
   hdrLeft: { display: 'flex', alignItems: 'flex-start', gap: 12 },
   hdrIcon: { fontSize: '1.5rem', marginTop: 2 },
-  hdrTitle: {
-    fontFamily: "'Cormorant Garamond', serif",
-    fontSize: '1.1rem', fontWeight: 700, color: '#2A1A0E',
-  },
-  hdrSub: {
-    fontSize: '.78rem', color: '#9C8878', marginTop: 2,
-    fontFamily: "'Lora', serif", fontStyle: 'italic',
-  },
-  closeBtn: {
-    width: 32, height: 32, borderRadius: 10,
-    background: 'transparent', border: '1.5px solid #EDE7DE',
-    color: '#9C8878', cursor: 'pointer',
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    flexShrink: 0,
-  },
-
-  bodyImport: {
-    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-    padding: '40px 28px',
-    gap: 14,
-  },
-  pickBtn: {
-    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
-    padding: '14px 24px',
-    background: 'linear-gradient(135deg, #8B6445, #C4956A)',
-    color: '#fff',
-    border: 'none', borderRadius: 12,
-    fontSize: '.95rem', fontWeight: 700,
-    fontFamily: "'Nunito', sans-serif",
-    cursor: 'pointer',
-  },
-  hint: {
-    fontFamily: "'Lora', serif", fontStyle: 'italic',
-    fontSize: '.82rem', color: '#9C8878',
-    margin: 0,
-  },
-
-  bodyListen: {
-    display: 'flex', flexDirection: 'column',
-    padding: '16px 20px 18px',
-    gap: 12,
-    overflowY: 'auto',
-  },
-  imgWrap: {
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    background: '#FAF7F2',
-    borderRadius: 14,
-    padding: 8,
-    border: '1px solid #EDE7DE',
-  },
-  img: {
-    display: 'block',
-    maxWidth: '100%',
-    maxHeight: '55vh',
-    borderRadius: 8,
-    objectFit: 'contain',
-  },
-  textarea: {
-    width: '100%',
-    padding: '10px 13px',
-    border: '1.5px solid #EDE7DE',
-    borderRadius: 12,
-    fontFamily: "'Lora', serif",
-    fontSize: '.9rem', lineHeight: 1.6,
-    background: '#FAF7F2', color: '#2A1A0E',
-    outline: 'none', resize: 'vertical',
-    caretColor: '#8B6445',
-    boxSizing: 'border-box',
-    minHeight: 76,
-  },
-
-  // OCR styles
-  ocrHint: {
-    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-    padding: '8px 12px',
-    background: '#F5F0E8',
-    border: '1px solid #EDE7DE',
-    borderRadius: 10,
-  },
-  ocrHintText: {
-    fontFamily: "'Lora', serif", fontStyle: 'italic',
-    fontSize: '.82rem', color: '#7A6555',
-  },
-  ocrYesBtn: {
-    padding: '4px 14px',
-    background: 'transparent',
-    color: '#8B6445',
-    border: '1.5px solid #C4956A',
-    borderRadius: 8,
-    fontSize: '.8rem', fontWeight: 700,
-    fontFamily: "'Nunito', sans-serif",
-    cursor: 'pointer',
-    flexShrink: 0,
-    marginLeft: 10,
-  },
-  ocrPanel: {
-    display: 'flex', flexDirection: 'column', gap: 8,
-    padding: '12px 14px',
-    background: '#F5F0E8',
-    border: '1px solid #EDE7DE',
-    borderRadius: 12,
-  },
-  ocrLabel: {
-    margin: 0,
-    fontFamily: "'Lora', serif", fontStyle: 'italic',
-    fontSize: '.78rem', color: '#9C8878',
-  },
-  ocrTextarea: {
-    width: '100%',
-    padding: '8px 11px',
-    border: '1.5px solid #EDE7DE',
-    borderRadius: 10,
-    fontFamily: "'Lora', serif",
-    fontSize: '.85rem', lineHeight: 1.5,
-    background: '#FFFEFB', color: '#2A1A0E',
-    outline: 'none', resize: 'vertical',
-    caretColor: '#8B6445',
-    boxSizing: 'border-box',
-    minHeight: 64,
-  },
-  ocrQuestion: {
-    margin: 0,
-    fontFamily: "'Cormorant Garamond', serif",
-    fontSize: '.95rem', fontWeight: 600, color: '#2A1A0E',
-  },
-
-  errorInline: {
-    margin: 0,
-    padding: '8px 12px',
-    background: '#FEF0F0',
-    border: '1px solid #E8A0A0',
-    borderRadius: 10,
-    color: '#8B2020',
-    fontSize: '.8rem',
-    fontFamily: "'Nunito', sans-serif",
-  },
-  footer: {
-    display: 'flex', justifyContent: 'flex-end', gap: 10,
-    marginTop: 4,
-  },
-  skipBtn: {
-    padding: '9px 18px',
-    background: '#FAF7F2',
-    color: '#8B6445',
-    border: '1.5px solid #EDE7DE',
-    borderRadius: 10,
-    fontSize: '.85rem', fontWeight: 700,
-    fontFamily: "'Nunito', sans-serif",
-    cursor: 'pointer',
-  },
-  nextBtn: {
-    padding: '9px 20px',
-    background: 'linear-gradient(135deg, #8B6445, #C4956A)',
-    color: '#fff',
-    border: 'none', borderRadius: 10,
-    fontSize: '.85rem', fontWeight: 700,
-    fontFamily: "'Nunito', sans-serif",
-    cursor: 'pointer',
-  },
+  hdrTitle: { fontFamily: "'Cormorant Garamond', serif", fontSize: '1.1rem', fontWeight: 700, color: '#2A1A0E' },
+  hdrSub: { fontSize: '.78rem', color: '#9C8878', marginTop: 2, fontFamily: "'Lora', serif", fontStyle: 'italic' },
+  closeBtn: { width: 32, height: 32, borderRadius: 10, background: 'transparent', border: '1.5px solid #EDE7DE', color: '#9C8878', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  bodyImport: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40px 28px', gap: 14 },
+  pickBtn: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '14px 24px', background: 'linear-gradient(135deg, #8B6445, #C4956A)', color: '#fff', border: 'none', borderRadius: 12, fontSize: '.95rem', fontWeight: 700, fontFamily: "'Nunito', sans-serif", cursor: 'pointer' },
+  hint: { fontFamily: "'Lora', serif", fontStyle: 'italic', fontSize: '.82rem', color: '#9C8878', margin: 0 },
+  bodyListen: { display: 'flex', flexDirection: 'column', padding: '16px 20px 18px', gap: 12, overflowY: 'auto' },
+  imgWrap: { display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#FAF7F2', borderRadius: 14, padding: 8, border: '1px solid #EDE7DE' },
+  img: { display: 'block', maxWidth: '100%', maxHeight: '55vh', borderRadius: 8, objectFit: 'contain' },
+  textarea: { width: '100%', padding: '10px 13px', border: '1.5px solid #EDE7DE', borderRadius: 12, fontFamily: "'Lora', serif", fontSize: '.9rem', lineHeight: 1.6, background: '#FAF7F2', color: '#2A1A0E', outline: 'none', resize: 'vertical', caretColor: '#8B6445', boxSizing: 'border-box', minHeight: 76 },
+  ocrHint: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: '#F5F0E8', border: '1px solid #EDE7DE', borderRadius: 10 },
+  ocrHintText: { fontFamily: "'Lora', serif", fontStyle: 'italic', fontSize: '.82rem', color: '#7A6555' },
+  ocrYesBtn: { padding: '4px 14px', background: 'transparent', color: '#8B6445', border: '1.5px solid #C4956A', borderRadius: 8, fontSize: '.8rem', fontWeight: 700, fontFamily: "'Nunito', sans-serif", cursor: 'pointer', flexShrink: 0, marginLeft: 10 },
+  ocrPanel: { display: 'flex', flexDirection: 'column', gap: 8, padding: '12px 14px', background: '#F5F0E8', border: '1px solid #EDE7DE', borderRadius: 12 },
+  ocrLabel: { margin: 0, fontFamily: "'Lora', serif", fontStyle: 'italic', fontSize: '.78rem', color: '#9C8878' },
+  ocrTextarea: { width: '100%', padding: '8px 11px', border: '1.5px solid #EDE7DE', borderRadius: 10, fontFamily: "'Lora', serif", fontSize: '.85rem', lineHeight: 1.5, background: '#FFFEFB', color: '#2A1A0E', outline: 'none', resize: 'vertical', caretColor: '#8B6445', boxSizing: 'border-box', minHeight: 64 },
+  ocrQuestion: { margin: 0, fontFamily: "'Cormorant Garamond', serif", fontSize: '.95rem', fontWeight: 600, color: '#2A1A0E' },
+  visionBtn: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, padding: '7px 16px', background: 'transparent', color: '#7A6555', border: '1.5px solid #D4B896', borderRadius: 10, fontSize: '.8rem', fontWeight: 600, fontFamily: "'Nunito', sans-serif", cursor: 'pointer', alignSelf: 'flex-start' },
+  visionErrMsg: { margin: 0, fontSize: '.75rem', color: '#9C8878', fontFamily: "'Lora', serif", fontStyle: 'italic', paddingLeft: 2 },
+  errorInline: { margin: 0, padding: '8px 12px', background: '#FEF0F0', border: '1px solid #E8A0A0', borderRadius: 10, color: '#8B2020', fontSize: '.8rem', fontFamily: "'Nunito', sans-serif" },
+  footer: { display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 4 },
+  skipBtn: { padding: '9px 18px', background: '#FAF7F2', color: '#8B6445', border: '1.5px solid #EDE7DE', borderRadius: 10, fontSize: '.85rem', fontWeight: 700, fontFamily: "'Nunito', sans-serif", cursor: 'pointer' },
+  nextBtn: { padding: '9px 20px', background: 'linear-gradient(135deg, #8B6445, #C4956A)', color: '#fff', border: 'none', borderRadius: 10, fontSize: '.85rem', fontWeight: 700, fontFamily: "'Nunito', sans-serif", cursor: 'pointer' },
 }
