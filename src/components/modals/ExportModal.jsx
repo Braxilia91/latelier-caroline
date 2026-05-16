@@ -82,7 +82,7 @@ export default function ExportModal({ chapters, name, traces = [], loadTraceBlob
       // (avant : console.warn invisible). On garde aussi la trace console pour debug.
       console.warn('[PDF] generation failed:', err?.message)
       toast(
-        `PDF impossible à générer — ${err?.message || 'réessaie, ou exporte en TXT en attendant'}`,
+        'PDF impossible à générer — réessaie, ou exporte en TXT en attendant',
         'error',
         6000
       )
@@ -106,7 +106,15 @@ export default function ExportModal({ chapters, name, traces = [], loadTraceBlob
       a.click()
       URL.revokeObjectURL(url)
     } catch (err) {
+      // T12bis §9 — sauvegarde silencieuse = risque critique (Caroline pouvait croire
+      // avoir sauvegardé alors que le fichier n'a pas été produit).
+      // Toast rassurant : on distingue l'échec de la perte de données (IDB intact).
       console.warn('[Export] buildLocalBackup failed:', err?.message)
+      toast(
+        'La sauvegarde n\'a pas pu être créée — tes textes restent bien dans l\'app. Réessaie dans un moment.',
+        'error',
+        8000
+      )
     } finally {
       setExporting(false)
     }
