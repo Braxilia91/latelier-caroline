@@ -561,6 +561,7 @@ function AppInner() {
           <AddTraceFlow
             onClose={() => { setModal('tiroir'); setSharedFile(null) }}
             initialFile={sharedFile}
+            apiKey={db.apiKey}
             onCreateTrace={async ({ metadata, blob }) => {
               const trace = await db.createTrace(metadata)
               await putTraceBlob(trace.id, blob, metadata.mimeType)
