@@ -7,7 +7,8 @@ import { ToastProvider, useToast } from './components/ui/Toast'
 import { buildWelcomeMessage } from './lib/prompts'
 import { putTraceBlob } from './lib/db'
 // T11/#4 — Surveillance expiration token Drive
-import { onTokenExpiring, onTokenExpired } from './lib/googleDrive'
+// Lot B    — signInSilent : reconnexion sans interaction au boot
+import { onTokenExpiring, onTokenExpired, signInSilent } from './lib/googleDrive'
 
 // ── Imports critiques (chemin de rendu initial) ──────────────────
 import Onboarding from './components/onboarding/Onboarding'
@@ -95,6 +96,9 @@ function AppInner() {
   // T9 — ref pour le timer idle auto-sync
   const idleSyncTimerRef = useRef(null)
   const syncReadyRef     = useRef(false)
+  // Lot A+B — Ne tenter la reconnexion Drive silencieuse qu'une fois par
+  // chargement de page (sinon retrigger à chaque maj de db.traces).
+  const driveSilentTriedRef = useRef(false)
 
   const openSidebar = () => { setSidebarOpen(true); setCoachOpen(false) }
   const openCoach   = () => { setCoachOpen(true);   setSidebarOpen(false) }
@@ -195,6 +199,37 @@ function AppInner() {
     toast(db.streakMilestone.message, 'success', 10000)
     db.dismissStreakMilestone()
   }, [db.streakMilestone, db.dismissStreakMilestone, toast])
+
+  // ── Lot A + B — Reconnexion Drive silencieuse au boot ────────
+  // B : tente signInSilent (GIS prompt:'none'). Si Caroline est encore
+  //     loggée à Google dans son navigateur (cas le plus fréquent),
+  //     reconnexion auto transparente sans popup.
+  // A : si B échoue ET on a des traces locales (donc potentiellement
+  //     des blobs non synchronisés vers Drive), toast informatif pour
+  //     que Caroline reclique "Connecter" dans Réglages.
+  // Le ref garantit qu'on ne tente qu'une fois par instance App (1 fois
+  // par chargement de page). Retrigger naturel au prochain refresh.
+  useEffect(() => {
+    if (!db.ready || !db.isSetup) return
+    if (driveSilentTriedRef.current) return
+    driveSilentTriedRef.current = true
+    let cancelled = false
+    ;(async () => {
+      let user = null
+      try {
+        user = await signInSilent()
+      } catch (_) { /* tolérant — signInSilent ne devrait jamais throw */ }
+      if (cancelled) return
+      if (!user && Array.isArray(db.traces) && db.traces.length > 0) {
+        toast(
+          'Drive n\'est pas connecté. Reconnecte-toi depuis Réglages pour que tes photos soient sauvegardées dans le cloud.',
+          'info',
+          12000,
+        )
+      }
+    })()
+    return () => { cancelled = true }
+  }, [db.ready, db.isSetup, db.traces, toast])
 
   // ── Thème ────────────────────────────────────────────────────
   useEffect(() => {
@@ -318,7 +353,7 @@ function AppInner() {
     if (editorWidth  !== undefined) await db.setEditorWidth(editorWidth)
     if (chatScale    !== undefined) await db.setChatScale(chatScale)
     if (uiScale      !== undefined) await db.setUiScale(uiScale)
-    if (layoutScale  !== undefined) await db.setLayoutScale(layoutScale)
+    if (layoutScale !== undefined) await db.setLayoutScale(layoutScale)
     if (sidebarWidth !== undefined) await db.setSidebarWidth(sidebarWidth)
     if (coachWidth   !== undefined) await db.setCoachWidth(coachWidth)
     toast('Réglages sauvegardés ✓', 'success')
