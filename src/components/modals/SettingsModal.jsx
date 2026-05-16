@@ -40,6 +40,18 @@ const WIDTHS = [
   { value: 'full', label: 'Pleine page', desc: '100 %' },
 ]
 
+// BUG-03 — Masquage partiel de l'email Gmail
+// Cas limites : null/undefined → 'Google Drive', sans @ → email brut, 1 lettre avant @ → email brut
+function maskEmail(email) {
+  if (!email || typeof email !== 'string') return 'Google Drive'
+  const at = email.indexOf('@')
+  if (at < 0) return email
+  const local = email.slice(0, at)
+  const domain = email.slice(at)
+  if (local.length <= 1) return email
+  return local[0] + '...' + local[local.length - 1] + domain
+}
+
 function Section({ title, icon, children }) {
   return (
     <div style={S.section}>
@@ -209,7 +221,7 @@ export default function SettingsModal({
       const user = await googleDrive.signIn()
       setGoogleUser(googleDrive.getCurrentUser())
       toast(
-        user.email ? `Connecté à ${user.email} ✓` : 'Connecté à Google Drive ✓',
+        user.email ? `Connecté à ${maskEmail(user.email)} ✓` : 'Connecté à Google Drive ✓',
         'success'
       )
     } catch (err) {
@@ -659,7 +671,7 @@ export default function SettingsModal({
             </p>
             {googleUser ? (
               <>
-                <p style={S.okMsg}>✓ Connecté à : {googleUser.email || 'Google Drive'}</p>
+                <p style={S.okMsg}>✓ Connecté à : {googleUser.email ? maskEmail(googleUser.email) : 'Google Drive'}</p>
                 <p style={S.hint}>{formatDriveSyncAge(state.lastDriveSyncedAt)}</p>
                 {state.lastDriveError && (
                   <p style={S.driveWarnMsg}>⚠ Erreur sauvegarde auto Drive : {state.lastDriveError}</p>
