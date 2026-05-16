@@ -97,6 +97,9 @@ export default function SettingsModal({
 
   // LOT 4F.1.4 — Visibilité afficher/masquer pour les deux champs sensibles
   const [showApiKey, setShowApiKey]     = useState(false)
+  // Fix trompe-l'œil "active le coach" — vrai indicateur de validation.
+  // States possibles : null (pas testé) | 'testing' | 'ok' | 'bad' | 'unreachable'
+  const [coachTest, setCoachTest] = useState(null)
   const [showSyncTok, setShowSyncTok]   = useState(false)
   const [copiedSync, setCopiedSync]     = useState(false)
 
@@ -388,6 +391,24 @@ export default function SettingsModal({
     }
   }
 
+  // Fix trompe-l'œil — test live du mot de passe contre /api/openai-tts.
+  const handleTestCoach = async () => {
+    if (!apiKey || coachTest === 'testing') return
+    setCoachTest('testing')
+    try {
+      const r = await fetch('/api/openai-tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Lea-Pass': apiKey },
+        body: JSON.stringify({ model: 'tts-1', voice: 'nova', input: 'Bonjour.', speed: 1 }),
+      })
+      if (r.ok)                    setCoachTest('ok')
+      else if (r.status === 401)   setCoachTest('bad')
+      else                         setCoachTest('unreachable')
+    } catch (_) {
+      setCoachTest('unreachable')
+    }
+  }
+
   return (
     <Modal
       onClose={onClose}
@@ -409,14 +430,14 @@ export default function SettingsModal({
             </div>
 
             <div style={S.fg}>
-              <label htmlFor="settings-api-key" style={S.label}>Mot de passe Léa <span style={S.badge}>active le coach</span></label>
+              <label htmlFor="settings-api-key" style={S.label}>Mot de passe Léa</label>
               <div style={S.inputWrap}>
                 <input
                   id="settings-api-key"
                   style={{ ...S.input, paddingRight: 40 }}
                   type={showApiKey ? 'text' : 'password'}
                   value={apiKey}
-                  onChange={e => setApiKey(e.target.value)}
+                  onChange={(e) => { setApiKey(e.target.value); setCoachTest(null) }}
                   placeholder="Le mot que Mourad t'a donné…"
                   aria-label="Mot de passe Léa"
                 />
@@ -431,6 +452,41 @@ export default function SettingsModal({
                 </button>
               </div>
               <p style={S.hint}>🔒 Stocké sur cet appareil uniquement. Ce mot de passe active les réponses de Léa et sa voix via un serveur sécurisé — les vraies clés API ne transitent jamais sur ton appareil.</p>
+
+              {/* Fix trompe-l'œil — indicateur dynamique + bouton de test live */}
+              <div style={S.coachTestRow}>
+                {!apiKey && (
+                  <span style={{ ...S.coachStatus, ...S.coachStatusOff }}>○ Coach désactivé</span>
+                )}
+                {apiKey && coachTest === null && (
+                  <span style={{ ...S.coachStatus, ...S.coachStatusPending }}>● Saisi (non vérifié)</span>
+                )}
+                {apiKey && coachTest === 'testing' && (
+                  <span style={{ ...S.coachStatus, ...S.coachStatusPending }}>… vérification</span>
+                )}
+                {apiKey && coachTest === 'ok' && (
+                  <span style={{ ...S.coachStatus, ...S.coachStatusOk }}>✓ Coach actif</span>
+                )}
+                {apiKey && coachTest === 'bad' && (
+                  <span style={{ ...S.coachStatus, ...S.coachStatusBad }}>✗ Mot de passe rejeté</span>
+                )}
+                {apiKey && coachTest === 'unreachable' && (
+                  <span style={{ ...S.coachStatus, ...S.coachStatusBad }}>⚠ Serveur indisponible</span>
+                )}
+                <button
+                  type="button"
+                  style={{
+                    ...S.testBtn,
+                    opacity: (!apiKey || coachTest === 'testing') ? 0.5 : 1,
+                    cursor: (!apiKey || coachTest === 'testing') ? 'not-allowed' : 'pointer',
+                  }}
+                  onClick={handleTestCoach}
+                  disabled={!apiKey || coachTest === 'testing'}
+                  aria-label="Tester la connexion au coach Léa"
+                >
+                  {coachTest === 'testing' ? '…' : 'Tester'}
+                </button>
+              </div>
             </div>
 
             {apiKey && (
@@ -756,6 +812,14 @@ const S = {
   row: { display: 'flex', gap: 12, marginBottom: 0 },
   label: { display: 'block', fontSize: '.75rem', fontWeight: 700, fontFamily: "'Nunito', sans-serif", color: '#6B5A4E', marginBottom: 5 },
   badge: { display: 'inline-block', background: '#F7EFE3', border: '1px solid #E8D5B8', borderRadius: 10, fontSize: '.65rem', fontWeight: 700, color: '#8B6445', padding: '1px 7px', marginLeft: 6 },
+  // Fix trompe-l'œil "active le coach" : indicateur dynamique + bouton test
+  coachTestRow:        { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 8, flexWrap: 'wrap' },
+  coachStatus:         { fontSize: '.78rem', fontWeight: 700, fontFamily: "'Nunito', sans-serif", letterSpacing: '.02em', padding: '4px 10px', borderRadius: 8, display: 'inline-flex', alignItems: 'center' },
+  coachStatusOff:      { background: '#F3EEE6', color: '#9C8878' },
+  coachStatusPending:  { background: '#FFF7E6', color: '#B8860B' },
+  coachStatusOk:       { background: '#E6F4EA', color: '#1E7C42' },
+  coachStatusBad:      { background: '#FBE9E7', color: '#B02A1F' },
+  testBtn:             { padding: '5px 12px', background: '#FFFFFF', border: '1.5px solid #C4956A', borderRadius: 8, fontSize: '.78rem', fontWeight: 700, fontFamily: "'Nunito', sans-serif", color: '#8B6445', transition: 'all .15s' },
   badgeOpt: { fontSize: '.7rem', fontWeight: 400, color: '#9C8878', marginLeft: 4 },
   input: { width: '100%', boxSizing: 'border-box', padding: '9px 12px', border: '1.5px solid #DDD5C8', borderRadius: 8, fontFamily: "'Nunito', sans-serif", fontSize: '.85rem', background: '#FFFEFB', color: '#2A1A0E', outline: 'none', caretColor: '#8B6445' },
   inputWrap: { position: 'relative', width: '100%' },
