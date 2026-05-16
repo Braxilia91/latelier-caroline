@@ -1,11 +1,13 @@
 import { useState } from 'react'
 
 import Modal from '../ui/Modal'
+import { useToast } from '../ui/Toast'
 import { X, Download, FileText, BookOpen } from 'lucide-react'
 // T8.4c — buildLocalBackup v5 inclut traces metadata + blobs base64.
 import { buildLocalBackup } from '../../lib/db'
 
 export default function ExportModal({ chapters, name, traces = [], loadTraceBlob = null, onClose }) {
+  const toast = useToast()
   // T15 — 3 modes : 'full' (tout) | 'written' (contenu non vide) | 'public' (non privé + contenu)
   const [mode, setMode] = useState('full')
   const [exporting, setExporting] = useState(false)
@@ -76,7 +78,14 @@ export default function ExportModal({ chapters, name, traces = [], loadTraceBlob
       a.click()
       URL.revokeObjectURL(url)
     } catch (err) {
+      // T12 quick fix — remonter l'échec en toast visible pour Caroline
+      // (avant : console.warn invisible). On garde aussi la trace console pour debug.
       console.warn('[PDF] generation failed:', err?.message)
+      toast(
+        `PDF impossible à générer — ${err?.message || 'réessaie, ou exporte en TXT en attendant'}`,
+        'error',
+        6000
+      )
     } finally {
       setGeneratingPdf(false)
     }
