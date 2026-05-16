@@ -132,7 +132,9 @@ export default function SettingsModal({
   const [exportDone, setExportDone] = useState(false)
 
   const fileInputRef = useRef(null)
-  const [importing, setImporting] = useState(false)
+  const [importing,    setImporting]   = useState(false)
+  const [confirmDrive, setConfirmDrive] = useState(false)
+  const [pendingFile,  setPendingFile]  = useState(null)
 
   // LOT 4F.2.5 — Refs pour cleanup des timers à l'unmount (évite setState sur composant démonté)
   const copiedSyncTimerRef   = useRef(null)
@@ -238,6 +240,7 @@ export default function SettingsModal({
     const fresh = googleDrive.getCurrentUser()
     if (!fresh) {
       setGoogleUser(null)
+      setConfirmDrive(false)
       toast('Session Google Drive expirée. Reconnecte-toi.', 'info')
       return
     }
@@ -268,18 +271,8 @@ export default function SettingsModal({
       return
     }
 
-    const confirmed = window.confirm(
-      '⚠️ Attention\n\n' +
-      'Cela va remplacer TES DONNÉES ACTUELLES par celles de la sauvegarde Drive :\n' +
-      '• Chapitres\n' +
-      '• Idées vrac\n' +
-      '• Historique du chat\n' +
-      '• Profil et mémoire de Léa\n\n' +
-      'Cette action est irréversible.\n\n' +
-      'Astuce : tu peux faire "Exporter une sauvegarde" en bas avant pour avoir un filet de sécurité local.\n\n' +
-      'Continuer ?'
-    )
-    if (!confirmed) return
+    if (!confirmDrive) { setConfirmDrive(true); return }
+    setConfirmDrive(false)
 
     setDriveBusy(true)
     try {
@@ -367,6 +360,24 @@ export default function SettingsModal({
     }
   }
 
+  const handleConfirmImport = async () => {
+    if (!pendingFile) return
+    const file = pendingFile
+    setPendingFile(null)
+    setImporting(true)
+    try {
+      const result = await onImport?.(file)
+      if (result?.ok) {
+        alert('✓ Sauvegarde restaurée avec succès.\n\nL\'application va redémarrer pour rafraîchir.')
+        window.location.reload()
+      } else {
+        toast(result?.message || 'Échec de l\'import', 'error')
+      }
+    } finally {
+      setImporting(false)
+    }
+  }
+
   const handleImportClick = () => {
     fileInputRef.current?.click()
   }
@@ -376,28 +387,7 @@ export default function SettingsModal({
     e.target.value = ''
     if (!file) return
 
-    const confirmed = window.confirm(
-      '⚠️ Attention\n\n' +
-      'Cela va remplacer TES DONNÉES ACTUELLES par celles du fichier :\n' +
-      '• Chapitres\n' +
-      '• Idées vrac\n' +
-      '• Historique du chat\n' +
-      '• Profil et mémoire de Léa\n\n' +
-      'Cette action est irréversible. Continuer ?'
-    )
-    if (!confirmed) return
-
-    setImporting(true)
-    try {
-      const result = await onImport?.(file)
-      if (result?.ok) {
-        alert('✓ Sauvegarde restaurée avec succès.\n\nL\'application va redémarrer pour rafraîchir.')
-        window.location.reload()
-      } else {
-        alert('✗ Échec de l\'import : ' + (result?.message || 'erreur inconnue'))
-      }
-    } finally {
-      setImporting(false)
+    setPendingFile(file)
     }
   }
 
@@ -692,6 +682,15 @@ export default function SettingsModal({
                   <Download size={13} />
                   {driveBusy ? 'Opération Drive en cours…' : 'Restaurer depuis Drive'}
                 </button>
+                {confirmDrive && (
+                  <div style={S.warnBox}>
+                    ⚠️ Cela va remplacer tes données actuelles par celles de Drive. Irréversible.
+                    <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                      <button type="button" style={S.actionBtn} onClick={() => setConfirmDrive(false)}>Annuler</button>
+                      <button type="button" style={{ ...S.syncBtn, flex: 1 }} onClick={handleRestoreDrive} disabled={driveBusy}>Confirmer la restauration</button>
+                    </div>
+                  </div>
+                )}
                 <button
                   type="button"
                   style={{ ...S.actionBtn, opacity: googleBusy ? 0.5 : 1, marginTop: 8 }}
@@ -759,6 +758,15 @@ export default function SettingsModal({
                 {importing ? 'Import…' : 'Importer'}
               </button>
             </div>
+            {pendingFile && (
+              <div style={S.warnBox}>
+                ⚠️ Cela va remplacer tes données actuelles par celles du fichier <strong>{pendingFile.name}</strong>. Irréversible.
+                <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                  <button type="button" style={S.actionBtn} onClick={() => setPendingFile(null)}>Annuler</button>
+                  <button type="button" style={{ ...S.syncBtn, flex: 1 }} onClick={handleConfirmImport}>Confirmer l'import</button>
+                </div>
+              </div>
+            )}
             <input
               ref={fileInputRef}
               type="file"
