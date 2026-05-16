@@ -5,6 +5,10 @@
 // T8.3    — Versionning rotatif : 3 snapshots (current / prev / daily)
 // T11/#4  — Surveillance expiration token : listeners onTokenExpiring +
 //           onTokenExpired (toast pré-expiration 5 min + toast expiration)
+// Lot B   — signInSilent : reconnexion sans interaction au boot via
+//           GIS prompt='none'. Sécurité MVP préservée (pas de token
+//           persisté), mais évite la déconnexion silencieuse au refresh
+//           si Caroline est encore loggée à Google dans son navigateur.
 //
 // Rotation lors de chaque uploadSnapshot :
 //   1. atelier-snapshot.json         → snapshot courant
@@ -97,6 +101,68 @@ export async function signIn() {
       reject(new Error(msg))
     }
     tokenClient.requestAccessToken({ prompt: '' })
+  })
+}
+
+/**
+ * Lot B — Reconnexion silencieuse au boot.
+ *
+ * Tente d'obtenir un nouvel access_token sans interaction utilisateur via
+ * GIS requestAccessToken({ prompt: 'none' }). Si Caroline est encore loggée
+ * à Google dans son navigateur (cas le plus fréquent — Google reste loggé
+ * sur le même profil Chrome / Safari), la reconnexion réussit transparente.
+ * Sinon : échec sans popup, retourne null.
+ *
+ * Caractéristique importante : aucune popup n'est ouverte même en cas
+ * d'échec — Caroline ne voit aucune fenêtre s'ouvrir au boot.
+ *
+ * Sécurité : aucun token persisté en IDB / cookie. La reconnexion ne
+ * marche que si Caroline a déjà autorisé l'app ET reste loggée à Google
+ * dans CE navigateur. Sur un PC partagé, si l'autre utilisateur s'est
+ * délogué de Google, signInSilent échoue → l'autre utilisateur n'a pas
+ * accès au Drive de Caroline.
+ *
+ * @returns {Promise<{email: string, name: string} | null>}
+ */
+export async function signInSilent() {
+  try {
+    await ensureTokenClient()
+  } catch (_) {
+    // SDK pas chargé ou pas de CLIENT_ID : échec silencieux
+    return null
+  }
+  return new Promise((resolve) => {
+    tokenClient.callback = async (response) => {
+      if (response.error || !response.access_token) return resolve(null)
+      currentToken = response.access_token
+      const expiresInSec = Number(response.expires_in) || 3600
+      expiresAt = new Date(Date.now() + expiresInSec * 1000)
+      scheduleExpirationTimers()
+      try {
+        const r = await fetch(USERINFO_URL, { headers: { Authorization: `Bearer ${currentToken}` } })
+        if (r.ok) {
+          const info = await r.json()
+          currentEmail = info.email || ''
+          currentName  = info.name  || ''
+        } else {
+          currentEmail = ''
+          currentName  = ''
+        }
+      } catch {
+        currentEmail = ''
+        currentName  = ''
+      }
+      resolve({ email: currentEmail, name: currentName })
+    }
+    // error_callback est appelé par GIS si prompt: 'none' échoue (session
+    // expirée, utilisateur déloggué Google, etc.). On résout null sans
+    // jamais throw, pour que App.jsx puisse retomber sur le toast.
+    tokenClient.error_callback = () => resolve(null)
+    try {
+      tokenClient.requestAccessToken({ prompt: 'none' })
+    } catch (_) {
+      resolve(null)
+    }
   })
 }
 
@@ -323,7 +389,6 @@ export async function uploadSnapshot(jsonString) {
           const todayKey = new Date().toISOString().slice(0, 10) // YYYY-MM-DD
           let   shouldWriteDaily = true
           if (dailyId) {
-            // Lire le daily existant et comparer le jour de syncedAt
             const dailyText = await readFileText(dailyId)
             if (dailyText) {
               try {
@@ -389,7 +454,7 @@ export async function downloadSnapshot() {
       if (!jsonText) continue
 
       let data
-      try { data = JSON.parse(jsonText) } catch { continue }  // JSON invalide → essai suivant
+      try { data = JSON.parse(jsonText) } catch { continue }
 
       const blob = new Blob([jsonText], { type: 'application/json' })
       let file
