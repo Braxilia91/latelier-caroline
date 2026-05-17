@@ -196,7 +196,7 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
     // TTS/Patience — prefetch en parallèle du fetch main dès text_done.
     // Lance le fetch patience immédiatement si shouldPlayAmorce, sans attendre
     // de savoir si on en aura besoin. Décision jouée/ignorée différée.
-    let patienceData = null          // { text, patienceIdx }
+    let patienceData               // { text, patienceIdx }
     let patienceAudioPromise = null  // Promise<HTMLAudioElement> | null
 
     if (shouldPlayAmorce) {
