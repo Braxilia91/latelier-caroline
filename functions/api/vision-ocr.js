@@ -42,10 +42,14 @@ export async function onRequestPost(context) {
     })
   }
 
-  // ── Convertir base64 → binary string (format documenté Workers AI LLaVA) ──
-  let imageBinary
+  // ── Convertir base64 → Uint8Array (format documenté Workers AI LLaVA : number[]) ──
+  let imageBytes
   try {
-    imageBinary = atob(base64)
+    const binary = atob(base64)
+    imageBytes = new Uint8Array(binary.length)
+    for (let i = 0; i < binary.length; i++) {
+      imageBytes[i] = binary.charCodeAt(i)
+    }
   } catch {
     return new Response(JSON.stringify({ error: "Impossible de décoder le base64 de l'image" }), {
       status: 400,
@@ -58,7 +62,7 @@ export async function onRequestPost(context) {
   try {
     result = await env.AI.run('@cf/llava-hf/llava-1.5-7b-hf', {
       prompt: 'Transcris exactement le texte visible dans cette image en français. Retourne uniquement le texte brut, sans commentaire ni explication.',
-      image: imageBinary,
+      image: [...imageBytes],
       max_tokens: 1024,
     })
   } catch (err) {
