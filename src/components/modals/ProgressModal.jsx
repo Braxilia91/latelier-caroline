@@ -75,11 +75,13 @@ export default function ProgressModal({
   onClose,
 }) {
   const today = new Date()
+  const todayKey = today.toDateString()
 
   // Set pour lookup O(1) dans la grille
   const sessionSet = useMemo(() => new Set(sessionDates), [sessionDates])
 
-  const { weeks } = useMemo(() => buildGrid(sessionSet, today), [sessionSet, today.toDateString()])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const { weeks } = useMemo(() => buildGrid(sessionSet, today), [sessionSet, todayKey])
   const ticks     = useMemo(() => monthTicks(weeks), [weeks])
 
   // Première date de session (= début de la pratique de Caroline)
