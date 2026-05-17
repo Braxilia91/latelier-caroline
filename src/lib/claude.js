@@ -32,7 +32,7 @@ export function cleanForTTS(text) {
     .replace(/[\u{1F000}-\u{1F02F}]/gu, '')
     .replace(/[\u{1F100}-\u{1F1FF}]/gu, '')
     .replace(/[\u{1FA00}-\u{1FAFF}]/gu, '')
-    .replace(/[\u{200D}\u{FE0F}]/gu, '')
+    .replace(/\u{200D}|\u{FE0F}/gu, '')
     // Bullet markers en début de ligne
     .replace(/^[-•*]\s+/gm, '')
     .replace(/^\d+\.\s+/gm, '')
