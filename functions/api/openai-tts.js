@@ -33,7 +33,7 @@ export async function onRequestPost(context) {
   // Permet de distinguer clé absente, quota, modèle invalide, timeout, etc.
   // On conserve une réponse HTTP 500 côté client pour déclencher le fallback navigateur.
   if (!response.ok) {
-    let openaiBodyPreview = ''
+    let openaiBodyPreview
     try {
       const raw = await response.text()
       openaiBodyPreview = raw.length > 400 ? raw.slice(0, 400) + '…' : raw
