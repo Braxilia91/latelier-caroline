@@ -7,7 +7,10 @@ import { useEffect, useRef } from 'react'
  */
 export default function useClickAway(ref, onClickAway) {
   const handlerRef = useRef(onClickAway)
-  handlerRef.current = onClickAway
+
+  useEffect(() => {
+    handlerRef.current = onClickAway
+  }, [onClickAway])
 
   useEffect(() => {
     function handle(e) {
