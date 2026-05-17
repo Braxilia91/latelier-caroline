@@ -7,7 +7,7 @@
 
 import { log } from './logger'
 
-const WORKER_URL = import.meta.env.VITE_SYNC_WORKER_URL || ''
+const WORKER_URL = import.meta.env.VITE_SYNC_WORKER_URL || (import.meta.env.MODE === 'test' ? 'https://example.test/sync' : '')
 
 // Données jamais synchronisées vers le cloud (sécurité)
 const KEYS_NO_SYNC = ['apiKey', 'openAiKey']
