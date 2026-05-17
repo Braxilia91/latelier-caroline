@@ -20,7 +20,7 @@ const SOUNDS = [
 ]
 
 export default function Header({
-  name, moodToday, setMood, streak,
+  name: _name, moodToday, setMood, streak,
   onDictate, onPlan, onExport, onSettings, onInspir, onVocab, onTiroir,
   onProgress,                                            // T11b — ouvre ProgressModal
   moodOpen, setMoodOpen,
