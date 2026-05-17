@@ -379,7 +379,11 @@ function AppInner() {
   // ── Handlers ─────────────────────────────────────────────────
   const handleSetupComplete = async ({ name, apiKey, profile }) => {
     await db.setName(name)
-    if (apiKey)  await db.setApiKey(apiKey)
+    if (apiKey) {
+      await db.setApiKey(apiKey)
+      await db.setOaiKey(apiKey)
+      await db.setVoice('nova')
+    }
     if (profile) await db.setCarolineProfile(profile)
     await db.createChapter()
     toast(`Bienvenue ${name} ! Ton atelier est prêt 🌿`, 'success')
