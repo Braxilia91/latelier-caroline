@@ -317,7 +317,7 @@ function AppInner() {
         console.warn('[share-target] échec lecture cache:', err)
       }
     })()
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [])
 
   // ── Coach ────────────────────────────────────────────────────
   const coach = useCoach({
