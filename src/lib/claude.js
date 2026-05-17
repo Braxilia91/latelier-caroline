@@ -215,7 +215,7 @@ export async function speakWithOpenAI({ openAiKey, text, voice = 'nova', speed =
         let sb
         try {
           sb = ms.addSourceBuffer('audio/mpeg')
-        } catch (e) {
+        } catch (_e) {
           // MIME non supporté sur ce navigateur malgré isTypeSupported
           // Fallback blob
           ms.endOfStream()
