@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { ArrowRight, Feather, Key } from 'lucide-react'
+import { useRef, useState } from 'react'
+import { ArrowRight, Feather, Key, Upload } from 'lucide-react'
 
 const LEA_REACTIONS = {
   topic: {
@@ -39,7 +39,7 @@ const Q1_OPTIONS = ['Enfance & famille', 'Amour & relations', 'Parcours de vie',
 const Q2_OPTIONS = ['La page blanche', 'Ne pas être intéressante', 'La grammaire', 'Être jugée', "Rien, j'ai hâte !"]
 const Q3_OPTIONS = ['Le matin', "L'après-midi", 'Le soir', 'La nuit', "N'importe quand"]
 
-export default function Onboarding({ onComplete }) {
+export default function Onboarding({ onComplete, onImportBackup }) {
   const [step,     setStep]    = useState('welcome')
   const [reaction, setReact]   = useState('')
   const [name,     setName]    = useState('')
@@ -51,6 +51,8 @@ export default function Onboarding({ onComplete }) {
   const [q5,       setQ5]      = useState('')
   const [apiKey,   setApiKey]  = useState('')
   const [loading,  setLoading] = useState(false)
+  const [importing, setImporting] = useState(false)
+  const fileInputRef = useRef(null)
 
   const react = (category, value, next) => {
     setReact(getReaction(category, value))
@@ -78,6 +80,29 @@ export default function Onboarding({ onComplete }) {
     setLoading(false)
   }
 
+  const handleImportFile = async (event) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file || importing || !onImportBackup) return
+    const ok = window.confirm(
+      `Restaurer la sauvegarde "${file.name}" ?\n\n` +
+      "Cela va charger le profil, les textes, les traces et le chat contenus dans ce fichier."
+    )
+    if (!ok) return
+    setImporting(true)
+    try {
+      const result = await onImportBackup(file)
+      if (result?.ok) {
+        alert("✓ Sauvegarde restaurée avec succès.\n\nL'application va redémarrer pour rafraîchir.")
+        window.location.reload()
+      } else {
+        alert(result?.message || "Échec de la restauration.")
+      }
+    } finally {
+      setImporting(false)
+    }
+  }
+
   return (
     <div style={S.bg}>
       <div style={S.card}>
@@ -101,6 +126,20 @@ export default function Onboarding({ onComplete }) {
             <p style={S.subMsg}>Avant qu'on commence à écrire ensemble, j'aimerais mieux te connaître. On prend 5 minutes ?</p>
             <button style={S.btn} onClick={() => setStep('name')}>Allons-y <ArrowRight size={15} /></button>
             <button style={S.link} onClick={() => setStep('apikey')}>Je préfère commencer directement →</button>
+            {onImportBackup && (
+              <>
+                <button
+                  type="button"
+                  style={S.restoreLink}
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={importing}
+                >
+                  <Upload size={13} />
+                  {importing ? 'Restauration…' : "J'ai déjà une sauvegarde"}
+                </button>
+                <p style={S.restoreHint}>À utiliser après une réinstallation ou une suppression volontaire.</p>
+              </>
+            )}
           </div>
         )}
 
@@ -217,6 +256,13 @@ export default function Onboarding({ onComplete }) {
           </div>
         )}
       </div>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="application/json,.json"
+        onChange={handleImportFile}
+        style={{ display: 'none' }}
+      />
     </div>
   )
 }
@@ -267,4 +313,6 @@ const S = {
   privacyTxt: { fontSize: '.75rem', color: '#8B6445', margin: 0 },
   btn:  { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '12px 20px', background: 'linear-gradient(135deg, #8B6445, #C4956A)', color: '#fff', border: 'none', borderRadius: 12, fontSize: '.9rem', fontWeight: 700, fontFamily: "'Nunito', sans-serif", cursor: 'pointer', marginTop: 4 },
   link: { display: 'block', width: '100%', marginTop: 8, background: 'transparent', border: 'none', color: '#9C8878', fontSize: '.77rem', fontFamily: "'Nunito', sans-serif", cursor: 'pointer', padding: '5px 0', textAlign: 'center' },
+  restoreLink: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, width: '100%', marginTop: 14, background: 'transparent', border: 'none', color: '#8B6445', fontSize: '.78rem', fontWeight: 700, fontFamily: "'Nunito', sans-serif", cursor: 'pointer', padding: '6px 0', textAlign: 'center' },
+  restoreHint: { margin: '0 auto', maxWidth: 290, color: '#9C8878', fontSize: '.7rem', lineHeight: 1.45, textAlign: 'center' },
 }
