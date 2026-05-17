@@ -234,12 +234,11 @@ export async function speakWithOpenAI({ openAiKey, text, voice = 'nova', speed =
         sb.mode = 'sequence'
         const reader = res.body.getReader()
         let firstChunkAppended = false
-        let done = false
 
         const pump = async () => {
           while (true) {
             const { done: d, value } = await reader.read()
-            if (d) { done = true; break }
+            if (d) break
             if (!value?.length) continue
 
             // Attendre que le SourceBuffer soit prêt à recevoir
@@ -250,7 +249,6 @@ export async function speakWithOpenAI({ openAiKey, text, voice = 'nova', speed =
               sb.appendBuffer(value)
             } catch (_) {
               // QuotaExceededError ou InvalidStateError — on stoppe proprement
-              done = true
               break
             }
 
