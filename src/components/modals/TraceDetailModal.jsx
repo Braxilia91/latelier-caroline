@@ -3,6 +3,7 @@ import Modal from '../ui/Modal'
 import { X, Edit3, Check, Trash2, Archive, Tag, BookOpen, Sparkles } from 'lucide-react'
 import useClickAway from '../../hooks/useClickAway'
 import { runVisionOCR } from '../../lib/visionOCR'
+import { runVisionInspire } from '../../lib/visionInspire'
 
 // T6A.1 — palette saturée (ADN atelier + distinctivité accrue pour les pastilles vignettes)
 const STATUS_LABELS = {
@@ -56,6 +57,12 @@ export default function TraceDetailModal({
   const [visionErr, setVisionErr] = useState(null)
   const [visionSaving, setVisionSaving] = useState(false)
 
+  // FEAT-D — "Faire parler cette trace" : inspiration visuelle volatile
+  const [inspireStatus, setInspireStatus] = useState('idle')
+  const [inspireText, setInspireText] = useState('')
+  const [inspireErr, setInspireErr] = useState(null)
+  const [inspireCopied, setInspireCopied] = useState(false)
+
   // Resync localTrace quand on change de trace
   useEffect(() => {
     setLocalTrace(trace)
@@ -67,6 +74,10 @@ export default function TraceDetailModal({
     setVisionPreviewText('')
     setVisionErr(null)
     setVisionSaving(false)
+    setInspireStatus('idle')
+    setInspireText('')
+    setInspireErr(null)
+    setInspireCopied(false)
   }, [trace?.id, trace])
 
   useEffect(() => {
@@ -290,6 +301,52 @@ export default function TraceDetailModal({
     }
   }
 
+  // ── FEAT-D — Faire parler l'image pour ouvrir des pistes d'écriture ──
+  const handleVisionInspire = async () => {
+    if (!traceBlob || !apiKey || inspireStatus === 'running') return
+    setInspireStatus('running')
+    setInspireErr(null)
+    setInspireText('')
+    setInspireCopied(false)
+    try {
+      const text = await runVisionInspire(traceBlob, apiKey, {
+        whyNow: localTrace.whyNow || '',
+        detail: localTrace.detail || '',
+        unseen: localTrace.unseen || '',
+        leftToday: localTrace.leftToday || '',
+        ocrText: localTrace.ocrText || '',
+      })
+      if (text && text.trim()) {
+        setInspireText(text.trim())
+        setInspireStatus('done')
+      } else {
+        setInspireStatus('error')
+        setInspireErr("L'IA n'a pas réussi à proposer de pistes pour cette image.")
+      }
+    } catch (err) {
+      setInspireStatus('error')
+      setInspireErr(err?.message || 'Erreur lors de la lecture sensible de l’image.')
+    }
+  }
+
+  const handleCopyInspiration = async () => {
+    if (!inspireText) return
+    try {
+      await navigator.clipboard.writeText(inspireText)
+      setInspireCopied(true)
+    } catch (err) {
+      console.warn('[FEAT-D] copie inspiration impossible', err)
+      setInspireCopied(false)
+    }
+  }
+
+  const handleDiscardInspiration = () => {
+    setInspireStatus('idle')
+    setInspireText('')
+    setInspireErr(null)
+    setInspireCopied(false)
+  }
+
   const tryClose = () => {
     if (editingField) {
       const ok = window.confirm('Vraiment fermer sans enregistrer cette réponse ?')
@@ -309,6 +366,8 @@ export default function TraceDetailModal({
   const canRunVision = hasBlob && !!apiKey && canEdit
   const showVisionInitialBtn = canRunVision && !hasOcrSaved && visionStatus === 'idle'
   const showVisionRerunBtn = canRunVision && hasOcrSaved && visionStatus === 'idle'
+  const canRunInspire = hasBlob && !!apiKey
+  const showInspireBlock = canRunInspire || inspireStatus === 'running' || inspireStatus === 'done' || inspireStatus === 'error'
 
   return (
     <Modal
@@ -422,6 +481,65 @@ export default function TraceDetailModal({
                     </button>
                   )}
                 </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* FEAT-D — Faire parler cette trace : inspiration visuelle */}
+        {showInspireBlock && (
+          <div style={S.inspireBlock}>
+            {inspireStatus === 'idle' && canRunInspire && (
+              <div style={S.inspireIntro}>
+                <div>
+                  <p style={S.inspireTitle}>Faire parler cette trace</p>
+                  <p style={S.inspireHint}>
+                    L’IA part des mots de Caroline, puis de l’image, pour proposer des pistes sans écrire à sa place.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleVisionInspire}
+                  style={S.inspireBtn}
+                >
+                  <Sparkles size={14} /> Me donner des pistes
+                </button>
+              </div>
+            )}
+
+            {inspireStatus === 'running' && (
+              <div style={S.inspireRunning}>
+                <Sparkles size={14} style={{ opacity: 0.6 }} />
+                <span>La trace cherche ce qu’elle peut suggérer…</span>
+              </div>
+            )}
+
+            {inspireStatus === 'done' && (
+              <div style={S.inspireResult}>
+                <p style={S.inspireResultLabel}>Pistes proposées par l’IA</p>
+                <p style={S.inspireResultText}>{inspireText}</p>
+                <div style={S.inspireActions}>
+                  <button type="button" onClick={handleDiscardInspiration} style={S.cancelBtn}>
+                    Ignorer
+                  </button>
+                  <button type="button" onClick={handleCopyInspiration} style={S.visionBtnSecondary}>
+                    {inspireCopied ? 'Copié ✓' : 'Copier les pistes'}
+                  </button>
+                  <button type="button" onClick={handleVisionInspire} style={S.visionBtnSecondary}>
+                    <Sparkles size={14} /> Relancer
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {inspireStatus === 'error' && inspireErr && (
+              <div style={S.ocrErrRow}>
+                <p style={S.ocrErrMsg}>{inspireErr}</p>
+                {canRunInspire && (
+                  <button type="button" onClick={handleVisionInspire} style={S.linkBtn}>
+                    Réessayer
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -1016,5 +1134,91 @@ const S = {
     alignItems: 'center',
     gap: 8,
     justifyContent: 'flex-end',
+  },
+  inspireBlock: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 8,
+    padding: '12px 14px',
+    background: '#FFFEFB',
+    border: '1.5px solid #E7D6BF',
+    borderRadius: 14,
+  },
+  inspireIntro: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 10,
+  },
+  inspireTitle: {
+    margin: 0,
+    fontFamily: "'Cormorant Garamond', serif",
+    fontSize: '1rem',
+    fontWeight: 700,
+    color: '#6E3A1E',
+  },
+  inspireHint: {
+    margin: '3px 0 0',
+    fontFamily: "'Lora', serif",
+    fontStyle: 'italic',
+    fontSize: '.82rem',
+    lineHeight: 1.55,
+    color: '#7A6555',
+  },
+  inspireBtn: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+    padding: '8px 14px',
+    background: '#F5F0E8',
+    color: '#6E3A1E',
+    border: '1.5px solid #D4B896',
+    borderRadius: 10,
+    fontSize: '.82rem',
+    fontWeight: 700,
+    fontFamily: "'Nunito', sans-serif",
+    cursor: 'pointer',
+    alignSelf: 'flex-start',
+  },
+  inspireRunning: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    padding: '8px 12px',
+    background: '#F5F0E8',
+    borderRadius: 10,
+    fontFamily: "'Lora', serif",
+    fontStyle: 'italic',
+    fontSize: '.82rem',
+    color: '#7A6555',
+  },
+  inspireResult: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 8,
+  },
+  inspireResultLabel: {
+    margin: 0,
+    fontFamily: "'Nunito', sans-serif",
+    fontSize: '.7rem',
+    fontWeight: 700,
+    textTransform: 'uppercase',
+    letterSpacing: '.05em',
+    color: '#7A6555',
+  },
+  inspireResultText: {
+    margin: 0,
+    fontFamily: "'Lora', serif",
+    fontSize: '.88rem',
+    color: '#2A1A0E',
+    lineHeight: 1.65,
+    whiteSpace: 'pre-wrap',
+  },
+  inspireActions: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    justifyContent: 'flex-end',
+    flexWrap: 'wrap',
   },
 }
