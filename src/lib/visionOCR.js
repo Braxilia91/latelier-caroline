@@ -31,8 +31,8 @@ export async function runVisionOCR(blob, password) {
   let data
   try {
     data = await resp.json()
-  } catch (_) {
-    throw new Error(`Vision OCR : réponse non-JSON (HTTP ${resp.status})`)
+  } catch (e) {
+    throw new Error(`Vision OCR : réponse non-JSON (HTTP ${resp.status})`, { cause: e })
   }
 
   if (!resp.ok) {
