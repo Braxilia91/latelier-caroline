@@ -84,19 +84,6 @@ function pageBreakPara(D) {
 }
 
 /**
- * Convertit un blob image en base64 DataURL.
- * Utilisé pour insérer les photos dans le DOCX.
- */
-async function blobToBase64(blob) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload  = () => resolve(reader.result)
-    reader.onerror = () => reject(new Error('FileReader failed'))
-    reader.readAsDataURL(blob)
-  })
-}
-
-/**
  * Convertit une string base64 pure en Uint8Array.
  * docx v9 ImageRun.data n'accepte pas une string — il faut un Uint8Array.
  * @param {string} base64 — base64 pur (sans préfixe data:...)
