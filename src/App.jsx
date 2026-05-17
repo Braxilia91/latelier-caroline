@@ -584,8 +584,12 @@ function AppInner() {
             chapters={db.chapters}
             currentChapter={db.currentChapter}
             apiKey={db.apiKey}
-            onContinueWithLea={async (briefText, uiMessage) => {
-              await coach.sendMessage(briefText, { uiMessage, type: 'trace' })
+            onContinueWithLea={(briefText, uiMessage) => {
+              // Fire-and-forget : on ne wait pas la réponse de Léa pour fermer la modale.
+              // Sinon Caroline voit la modale rester ouverte pendant que Léa streame sa
+              // réponse, et peut être tentée de re-cliquer sur "En route…".
+              // Les erreurs sont déjà gérées dans useCoach via mapCoachError.
+              coach.sendMessage(briefText, { uiMessage, type: 'trace' })
               setSelectedTrace(null)
               setModal('tiroir')
             }}
