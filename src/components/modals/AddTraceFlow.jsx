@@ -70,11 +70,6 @@ export default function AddTraceFlow({ onClose, onCreateTrace, initialFile = nul
     return () => { cancelled = true }
   }, [step, compressed])
 
-  useEffect(() => {
-    if (!initialFile) return
-    processFile(initialFile)
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
-
   const processFile = useCallback(async (file) => {
     originalFileRef.current = file
     setSubmitting(true)
@@ -91,6 +86,11 @@ export default function AddTraceFlow({ onClose, onCreateTrace, initialFile = nul
       setSubmitting(false)
     }
   }, [])
+
+  useEffect(() => {
+    if (!initialFile) return
+    processFile(initialFile)
+  }, [initialFile, processFile])
 
   const handlePickFile = () => { setError(null); fileInputRef.current?.click() }
 
