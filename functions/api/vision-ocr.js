@@ -70,6 +70,7 @@ export async function onRequestPost(context) {
     '- Ne décris jamais l\'image.',
     '- Ne dis jamais "je vois", "le texte visible est", "voici le texte", ou une formule équivalente.',
     '- Conserve la langue originale du texte visible. Ne traduis pas.',
+    '- Ne détaille jamais les mots lettre par lettre : si un libellé visible est START/PAUSE, retourne START/PAUSE, pas S.T.A.R.T / P.A.U.S.E.',
   ].join('\n')
 
   let result
@@ -100,7 +101,14 @@ export async function onRequestPost(context) {
     /retourne uniquement/i.test(normalizedText) ||
     /tu es un OCR/i.test(normalizedText)
 
-  const text = isNoText ? '' : normalizedText
+  const compactedText = normalizedText
+    .replace(
+      /\b(?:[A-Za-zÀ-ÖØ-öø-ÿ]\s*\.\s*){2,}[A-Za-zÀ-ÖØ-öø-ÿ]\s*\.?(?=\W|$)/g,
+      (match) => match.replace(/[\s.]/g, '')
+    )
+    .replace(/\s*\/\s*/g, '/')
+
+  const text = isNoText ? '' : compactedText
 
   return new Response(JSON.stringify({ text }), {
     status: 200,
