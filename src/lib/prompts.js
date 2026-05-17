@@ -519,7 +519,7 @@ export function buildTraceContinuationPrompt({ trace, ocrText, inspireText, chap
     chapterTitle
       ? `Caroline travaille en ce moment sur le chapitre "${chapterTitle}" de son autobiographie.`
       : 'Caroline travaille sur son autobiographie.',
-    `Elle revient sur une trace photo du ${dateStr} (statut actuel : ${statusLabel}).`,
+    `Elle revient sur une trace datée du ${dateStr} (statut actuel : ${statusLabel}). Cette date est une donnée système, pas une information sur le moment de la prise de vue ou sur la scène.`,
     answersBlock,
     ocrLine,
     inspireLine,
@@ -542,6 +542,7 @@ Règles strictes :
 - Ne répète pas les mots déjà écrits par Caroline.
 - Ne dis pas "je vois que tu as écrit", "tu as noté", "voici une trace".
 - Pas d'introduction, pas de résumé du contexte.
+- N'invente jamais le jour de la semaine, l'heure de la prise de vue, le lieu, la météo, les personnes présentes ou toute autre information sur la scène photographiée. Tu n'as accès qu'à ce que Caroline a écrit explicitement et à la description IA si elle a été générée.
 
 Réponds en français, dans le ton habituel de Léa.`
     .trim()
