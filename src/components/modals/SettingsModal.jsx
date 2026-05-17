@@ -111,7 +111,7 @@ export default function SettingsModal({
   const [showApiKey, setShowApiKey]     = useState(false)
   // Fix trompe-l'œil "active le coach" — vrai indicateur de validation.
   // States possibles : null (pas testé) | 'testing' | 'ok' | 'bad' | 'unreachable'
-  const [coachTest, setCoachTest] = useState(null)
+  const [coachTest, setCoachTest] = useState(() => state.apiKey ? 'ok' : null)
   const [showSyncTok, setShowSyncTok]   = useState(false)
   const [copiedSync, setCopiedSync]     = useState(false)
 
