@@ -5,7 +5,7 @@ import { LEA_COMMANDS } from '../../lib/commands'
 export default function CoachPanel({
   coach, hasKey, currentChapter, chatHistory, welcomeMsg, onOpenVrac,
   isOnline = true,
-  isMobile, isOpen, onClose,
+  isMobile, isOpen, onClose: _onClose,
 }) {
   const [input, setInput] = useState('')
   const bottomRef = useRef(null)
