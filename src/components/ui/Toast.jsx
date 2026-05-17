@@ -10,8 +10,9 @@ export function ToastProvider({ children }) {
   const timers = useRef({})
 
   useEffect(() => {
+    const activeTimers = timers.current
     return () => {
-      Object.values(timers.current).forEach(clearTimeout)
+      Object.values(activeTimers).forEach(clearTimeout)
     }
   }, [])
 
