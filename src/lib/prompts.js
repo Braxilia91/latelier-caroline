@@ -218,16 +218,26 @@ Réponds en 3-4 phrases maximum, de façon douce et encourageante.`
 
 // ─── Retrouver le fil ─────────────────────────────────────────
 export function buildThreadPrompt(chapterText) {
-  return `Voici un extrait du chapitre de Caroline :
+  const text = (chapterText || '').trim()
+  const excerpt = text.length > 1400 ? text.slice(-1400) : text
 
-"${chapterText.slice(0, 2000)}"
+  return `Voici la fin du chapitre de Caroline :
 
-Elle a l'impression de perdre le fil. Aide-la à :
-1. Résumer en une phrase ce qu'elle est en train de raconter
-2. Suggérer comment continuer naturellement, sans réécrire à sa place
-3. Proposer une question ou une idée qui pourrait relancer l'écriture
+"${excerpt}"
 
-Sois très courte et très encourageante.`
+Elle a l'impression de perdre le fil.
+
+Réponds en français, avec 3 phrases complètes maximum :
+- Une phrase pour résumer ce qu'elle est en train de raconter.
+- Une phrase pour suggérer comment continuer naturellement, sans réécrire à sa place.
+- Une question courte pour relancer l'écriture.
+
+Contraintes strictes :
+- 80 mots maximum.
+- Termine toujours ta dernière phrase.
+- Ne termine jamais par une virgule, deux-points ou une phrase suspendue.
+- Si tu proposes une question, elle doit être complète et se terminer par un point d'interrogation.
+- Sois très courte, douce et encourageante.`
 }
 
 // ─── Inspiration ──────────────────────────────────────────────
