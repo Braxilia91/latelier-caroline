@@ -582,7 +582,13 @@ function AppInner() {
             isMobile={isMobile}
             loadTraceBlob={db.loadTraceBlob}
             chapters={db.chapters}
+            currentChapter={db.currentChapter}
             apiKey={db.apiKey}
+            onContinueWithLea={async (briefText, uiMessage) => {
+              await coach.sendMessage(briefText, { uiMessage, type: 'trace' })
+              setSelectedTrace(null)
+              setModal('tiroir')
+            }}
           />
         )}
         {/* T11b — ProgressModal (heatmap régularité) */}

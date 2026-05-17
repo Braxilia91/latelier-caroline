@@ -478,3 +478,71 @@ Propose 6 mots utiles, répartis en 3 catégories :
 Pour chaque mot : le mot + 1 ligne d'explication simple + 1 exemple dans une phrase personnelle.
 Ton : léger, curieux, jamais magistral. Une trouvaille, pas une leçon.`
 }
+
+// ─── Tiroir — "Continuer avec Léa" depuis une trace ─────────────
+export function buildTraceContinuationPrompt({ trace, ocrText, inspireText, chapterTitle }) {
+  const STATUS_LABEL = {
+    private: 'Gardée dans le tiroir',
+    vrac:    'Envoyée au vrac',
+    note:    'Note brute',
+    scene:   'Scène avec Léa',
+    letter:  'Lettre',
+  }
+
+  const safe = (v) => (typeof v === 'string' ? v.trim() : '')
+  const dateStr = trace?.createdAt
+    ? new Date(trace.createdAt).toLocaleDateString('fr-FR', {
+        day: 'numeric', month: 'long', year: 'numeric',
+      })
+    : 'sans date'
+  const statusLabel = STATUS_LABEL[trace?.status] || STATUS_LABEL.private
+
+  const answers = []
+  if (safe(trace?.whyNow))    answers.push(`- Pourquoi cette photo, maintenant ? « ${safe(trace.whyNow)} »`)
+  if (safe(trace?.detail))    answers.push(`- Quel détail te frappe en premier ? « ${safe(trace.detail)} »`)
+  if (safe(trace?.unseen))    answers.push(`- Ce qu'on ne voit pas, mais qui était pourtant là : « ${safe(trace.unseen)} »`)
+  if (safe(trace?.leftToday)) answers.push(`- Ce que cette trace lui laisse aujourd'hui : « ${safe(trace.leftToday)} »`)
+
+  const answersBlock = answers.length
+    ? `Ce qu'elle a déjà posé sur cette trace :\n${answers.join('\n')}`
+    : 'Elle n’a encore rien écrit sur cette trace.'
+
+  const ocrLine = safe(ocrText)
+    ? `Texte transcrit depuis l'image (par OCR IA) : « ${safe(ocrText)} »`
+    : ''
+
+  const inspireLine = safe(inspireText)
+    ? `Pistes que l'IA vient de lui suggérer pour cette trace (non encore appropriées) :\n${safe(inspireText)}`
+    : ''
+
+  const contextLines = [
+    chapterTitle
+      ? `Caroline travaille en ce moment sur le chapitre "${chapterTitle}" de son autobiographie.`
+      : 'Caroline travaille sur son autobiographie.',
+    `Elle revient sur une trace photo du ${dateStr} (statut actuel : ${statusLabel}).`,
+    answersBlock,
+    ocrLine,
+    inspireLine,
+  ].filter(Boolean).join('\n\n')
+
+  return `
+${contextLines}
+
+Ta mission :
+Aide-la à creuser cette trace pour ouvrir l'écriture. Ne reformule pas, ne résume pas. Ne raconte pas à sa place.
+
+Règles strictes :
+- Choisis UNE seule direction :
+  soit pose UNE question ouverte qui part de ce qu'elle a déjà écrit ou de ce que l'image laisse entrevoir,
+  soit propose UN angle qu'elle n'a peut-être pas vu,
+  soit pointe UN détail concret qui mérite qu'elle s'y attarde.
+- Ne propose pas de paragraphe rédigé. Tu ouvres, tu n'écris pas.
+- Réponse très brève : 2 à 4 phrases maximum.
+- Sois concrète et précise, pas abstraite.
+- Ne répète pas les mots déjà écrits par Caroline.
+- Ne dis pas "je vois que tu as écrit", "tu as noté", "voici une trace".
+- Pas d'introduction, pas de résumé du contexte.
+
+Réponds en français, dans le ton habituel de Léa.`
+    .trim()
+}

@@ -4,6 +4,7 @@ import { X, Edit3, Check, Trash2, Archive, Tag, BookOpen, Sparkles } from 'lucid
 import useClickAway from '../../hooks/useClickAway'
 import { runVisionOCR } from '../../lib/visionOCR'
 import { runVisionInspire } from '../../lib/visionInspire'
+import { buildTraceContinuationPrompt } from '../../lib/prompts'
 
 // T6A.1 — palette saturée (ADN atelier + distinctivité accrue pour les pastilles vignettes)
 const STATUS_LABELS = {
@@ -34,7 +35,9 @@ export default function TraceDetailModal({
   onDelete,
   loadTraceBlob,
   chapters,        // Lot B — tableau de chapitres fourni par App.jsx
+  currentChapter,  // FEAT-E — chapitre courant, utilisé pour le contexte du brief "Continuer avec Léa"
   apiKey = '',     // FEAT-C — mot de passe Léa pour /api/vision-ocr
+  onContinueWithLea, // FEAT-E — callback (briefText, uiMessage) => Promise<void>, ouvre le Coach avec contexte
 }) {
   const [blobUrl, setBlobUrl] = useState(null)
   const [traceBlob, setTraceBlob] = useState(null)
@@ -62,6 +65,7 @@ export default function TraceDetailModal({
   const [inspireText, setInspireText] = useState('')
   const [inspireErr, setInspireErr] = useState(null)
   const [inspireCopied, setInspireCopied] = useState(false)
+  const [continuing, setContinuing] = useState(false)
 
   // Resync localTrace quand on change de trace
   useEffect(() => {
@@ -78,6 +82,7 @@ export default function TraceDetailModal({
     setInspireText('')
     setInspireErr(null)
     setInspireCopied(false)
+    setContinuing(false)
   }, [trace?.id, trace])
 
   useEffect(() => {
@@ -360,6 +365,31 @@ export default function TraceDetailModal({
   }
 
   const handleDelete = () => { if (typeof onDelete === 'function') onDelete(localTrace) }
+
+  // FEAT-E — "Continuer avec Léa" depuis cette trace
+  const handleContinueWithLea = async () => {
+    if (continuing) return
+    if (typeof onContinueWithLea !== 'function') return
+    if (!apiKey) return
+    // Protéger un brouillon en cours d'édition
+    if (editingField) {
+      const ok = window.confirm("Tu as une réponse en cours d'édition. Continuer avec Léa quand même ?")
+      if (!ok) return
+    }
+    setContinuing(true)
+    try {
+      const briefText = buildTraceContinuationPrompt({
+        trace: localTrace,
+        ocrText: localTrace.ocrText || '',
+        inspireText: inspireStatus === 'done' ? inspireText : '',
+        chapterTitle: currentChapter?.title || '',
+      })
+      const uiMessage = "J'aimerais creuser cette trace avec toi."
+      await onContinueWithLea(briefText, uiMessage)
+    } finally {
+      setContinuing(false)
+    }
+  }
 
   const hasBlob = !!traceBlob
   const hasOcrSaved = typeof localTrace.ocrText === 'string' && localTrace.ocrText.trim().length > 0
@@ -657,6 +687,23 @@ export default function TraceDetailModal({
               ))}
             </select>
           </div>
+        )}
+
+        {/* FEAT-E — CTA primaire "Continuer avec Léa" */}
+        {!!apiKey && typeof onContinueWithLea === 'function' && (
+          <button
+            type="button"
+            onClick={handleContinueWithLea}
+            disabled={continuing}
+            style={{
+              ...S.continueBtn,
+              opacity: continuing ? 0.6 : 1,
+              cursor: continuing ? 'wait' : 'pointer',
+            }}
+            aria-label="Continuer cette trace avec Léa"
+          >
+            <Sparkles size={14} /> {continuing ? 'En route…' : 'Continuer avec Léa'}
+          </button>
         )}
 
         <div ref={statusContainerRef} style={{ position: 'relative' }}>
@@ -981,6 +1028,22 @@ const S = {
   },
   statusOptionLabel: { flex: 1 },
   statusCheck: { color: '#6B8F71', flexShrink: 0 },
+  // FEAT-E — CTA primaire "Continuer avec Léa"
+  continueBtn: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 6,
+    padding: '8px 14px',
+    background: '#8B6445',
+    color: '#FFFEFB',
+    border: '1.5px solid #8B6445',
+    borderRadius: 10,
+    fontSize: '.78rem',
+    fontWeight: 700,
+    fontFamily: "'Nunito', sans-serif",
+    cursor: 'pointer',
+    boxShadow: '0 2px 8px rgba(139,100,69,.15)',
+  },
   deleteBtn: {
     display: 'flex',
     alignItems: 'center',
