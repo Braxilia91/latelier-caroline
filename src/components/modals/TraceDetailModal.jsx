@@ -431,6 +431,15 @@ export default function TraceDetailModal({
           )}
         </div>
 
+        {/* FEAT-F — Bandeau apiKey absent : explique pourquoi les boutons IA sont muets sur cet appareil */}
+        {hasBlob && !apiKey && (
+          <div style={S.noApiKeyHint}>
+            <p style={S.noApiKeyText}>
+              L'IA n'est pas activée sur cet appareil. Va dans Réglages — Mot de passe Léa pour activer la lecture de texte, les pistes d'écriture et la conversation avec Léa.
+            </p>
+          </div>
+        )}
+
         {/* FEAT-C — Bloc OCR vision a posteriori */}
         {(showVisionInitialBtn || showVisionRerunBtn || hasOcrSaved || visionStatus === 'running' || visionStatus === 'preview' || visionStatus === 'error') && (
           <div style={S.ocrBlock}>
@@ -1028,6 +1037,21 @@ const S = {
   },
   statusOptionLabel: { flex: 1 },
   statusCheck: { color: '#6B8F71', flexShrink: 0 },
+  // FEAT-F — Bandeau apiKey absent
+  noApiKeyHint: {
+    padding: '10px 14px',
+    background: '#FAF7F2',
+    border: '1px solid #EDE7DE',
+    borderRadius: 12,
+  },
+  noApiKeyText: {
+    margin: 0,
+    fontFamily: "'Lora', serif",
+    fontStyle: 'italic',
+    fontSize: '.82rem',
+    color: '#7A6555',
+    lineHeight: 1.5,
+  },
   // FEAT-E — CTA primaire "Continuer avec Léa"
   continueBtn: {
     display: 'flex',
