@@ -17,6 +17,21 @@ import { registerRoute } from 'workbox-routing'
 import { CacheFirst } from 'workbox-strategies'
 import { ExpirationPlugin } from 'workbox-expiration'
 
+// ── FEAT-G — Mise à jour PWA instantanée ─────────────────────────
+// Sans cela, un nouveau SW reste en "waiting" jusqu'à ce que tous les
+// onglets soient fermés. Sur PWA installée, l'utilisateur peut rester
+// avec un vieux SW pendant des jours/semaines et ne pas voir les
+// nouvelles features (observé sur Xiaomi : boutons IA absents car
+// le SW servait un bundle pré-OCR malgré ff83a39 côté CDN).
+// skipWaiting + clients.claim font que le nouveau SW remplace l'ancien
+// dès qu'il est installé, et prend le contrôle des clients ouverts.
+self.addEventListener('install', () => {
+  self.skipWaiting()
+})
+self.addEventListener('activate', (event) => {
+  event.waitUntil(self.clients.claim())
+})
+
 // ── FEAT-B — Share Target ─────────────────────────────────────────
 // Intercepté EN PREMIER, avant workbox, pour éviter tout conflit avec
 // le précache handler (qui ne gère que les requêtes GET).
