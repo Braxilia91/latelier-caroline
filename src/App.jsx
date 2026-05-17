@@ -385,6 +385,38 @@ function AppInner() {
     toast(`Bienvenue ${name} ! Ton atelier est prêt 🌿`, 'success')
   }
 
+  const handleImportBackup = async (file) => {
+    if (!file) return { ok: false, message: 'Aucun fichier sélectionné' }
+    try {
+      const raw = await file.text()
+      const data = JSON.parse(raw)
+      const snapshot = data?.kv
+        ? data
+        : {
+            version: data?.version || 5,
+            syncedAt: data?.syncedAt || data?.backedUpAt || data?.exportedAt || new Date().toISOString(),
+            chapters: Array.isArray(data?.chapters) ? data.chapters : [],
+            vrac: Array.isArray(data?.vrac) ? data.vrac : (Array.isArray(data?.vracIdeas) ? data.vracIdeas : []),
+            chat: Array.isArray(data?.chat) ? data.chat : [],
+            traces: Array.isArray(data?.traces) ? data.traces : [],
+            traceBlobs: Array.isArray(data?.traceBlobs) ? data.traceBlobs : [],
+            kv: {
+              name: data?.name || '',
+              streak: data?.streak || 0,
+              sessions: data?.sessions || 0,
+              caroline_profile: data?.profile || null,
+              lea_memory: data?.leaMemory || null,
+            },
+          }
+      const ok = await db.importSnapshot(snapshot)
+      return ok
+        ? { ok: true, message: 'Sauvegarde restaurée' }
+        : { ok: false, message: 'Fichier de sauvegarde invalide' }
+    } catch (err) {
+      return { ok: false, message: err?.message || 'Impossible de lire cette sauvegarde' }
+    }
+  }
+
   const handleSaveSettings = async ({ name, apiKey, openAiKey, leaVoice, syncToken, editorFont, editorTheme, editorWidth, chatScale, uiScale, layoutScale, sidebarWidth, coachWidth }) => {
     await db.setName(name)
     await db.setApiKey(apiKey)
@@ -423,7 +455,7 @@ function AppInner() {
   }, [db, toast])
 
   if (!db.ready) return <AppSkeleton />
-  if (!db.isSetup) return <Onboarding onComplete={handleSetupComplete} />
+  if (!db.isSetup) return <Onboarding onComplete={handleSetupComplete} onImportBackup={handleImportBackup} />
 
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -520,6 +552,7 @@ function AppInner() {
           }}
           chapters={db.chapters} vracIdeas={db.vracIdeas} name={db.name}
           onClose={() => setModal(null)} onSave={handleSaveSettings} onReset={db.resetAllData}
+          onImport={handleImportBackup} buildLocalBackup={db.buildLocalBackup}
           onOpenMemory={() => setModal('memory')}
           isMobile={isMobile}
         />}
