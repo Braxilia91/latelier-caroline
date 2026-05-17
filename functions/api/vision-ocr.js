@@ -28,7 +28,7 @@ export async function onRequestPost(context) {
   try {
     const body = await request.json()
     base64 = body.image
-  } catch (_) {
+  } catch {
     return new Response(JSON.stringify({ error: 'Body JSON invalide — champ requis : image (base64)' }), {
       status: 400,
       headers: { 'Content-Type': 'application/json' },
@@ -46,7 +46,7 @@ export async function onRequestPost(context) {
   let imageBinary
   try {
     imageBinary = atob(base64)
-  } catch (_) {
+  } catch {
     return new Response(JSON.stringify({ error: "Impossible de décoder le base64 de l'image" }), {
       status: 400,
       headers: { 'Content-Type': 'application/json' },
@@ -56,7 +56,7 @@ export async function onRequestPost(context) {
   // ── Appel Workers AI — LLaVA 1.5 7B ────────────────────────────
   let result
   try {
-    result = await env.AI.run('@cf/llava-1.5-7b-hf', {
+    result = await env.AI.run('@cf/llava-hf/llava-1.5-7b-hf', {
       prompt: 'Transcris exactement le texte visible dans cette image en français. Retourne uniquement le texte brut, sans commentaire ni explication.',
       image: imageBinary,
       max_tokens: 1024,
