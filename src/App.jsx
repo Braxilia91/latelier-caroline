@@ -93,6 +93,7 @@ function AppInner() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [coachOpen, setCoachOpen] = useState(false)
   const [selectedTrace, setSelectedTrace] = useState(null)
+  const [selectedPassage, setSelectedPassage] = useState({ text: '', chapterId: null })
   // FEAT-B — Share Target : fichier partagé depuis une autre app (galerie, scanner…)
   const [sharedFile, setSharedFile] = useState(null)
 
@@ -514,6 +515,7 @@ function AppInner() {
           chapter={db.currentChapter} updateChapter={db.updateChapter}
           recordSession={db.recordSession}
           editorFont={db.editorFont} editorTheme={db.editorTheme} editorWidth={db.editorWidth}
+          onSelectionChange={setSelectedPassage}
         />
         <CoachPanel
           coach={{ ...coach, clearChat: db.clearChat, removeMessage: db.removeMessage }}
@@ -526,6 +528,7 @@ function AppInner() {
           })}
           onOpenVrac={() => setModal('vrac')}
           isMobile={isMobile} isOpen={coachOpen} onClose={() => setCoachOpen(false)}
+          selectedPassage={selectedPassage}
         />
       </div>
 

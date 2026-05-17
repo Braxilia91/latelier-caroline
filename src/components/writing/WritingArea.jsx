@@ -17,9 +17,12 @@ const TITLE_WARN = 80
 export default function WritingArea({
   chapter, updateChapter, recordSession,
   editorFont = 'm', editorTheme = 'jour', editorWidth = 'confort',
+  onSelectionChange,
 }) {
 
   const savedRef = useRef(null)
+  const taRef = useRef(null)
+  const lastSelectionRef = useRef({ text: '', chapterId: null })
 
   const saveContent = useCallback((val) => {
     if (chapter) {
@@ -33,6 +36,20 @@ export default function WritingArea({
   }, [chapter, updateChapter, recordSession])
 
   useAutoSave(chapter?.content ?? '', saveContent)
+
+  const handleSelectionChange = useCallback(() => {
+    if (!onSelectionChange || !taRef.current) return
+
+    const ta = taRef.current
+    const chapterId = chapter?.id || null
+    const text = ta.value.slice(ta.selectionStart, ta.selectionEnd)
+    const last = lastSelectionRef.current
+
+    if (last.text === text && last.chapterId === chapterId) return
+
+    lastSelectionRef.current = { text, chapterId }
+    onSelectionChange({ text, chapterId })
+  }, [chapter?.id, onSelectionChange])
 
   if (!chapter) return (
     <div style={styles.empty}>
@@ -89,9 +106,13 @@ export default function WritingArea({
 
         {/* Zone d'écriture */}
         <textarea
+          ref={taRef}
           style={{ ...styles.ta, background: theme.areaBg, color: theme.text, caretColor: theme.caret, fontSize: fSize }}
           value={chapter.content || ''}
           onChange={e => updateChapter(chapter.id, { content: e.target.value })}
+          onSelect={handleSelectionChange}
+          onMouseUp={handleSelectionChange}
+          onKeyUp={handleSelectionChange}
           placeholder="Commence à écrire ici… Prends ton temps. Tes mots comptent."
           spellCheck
           lang="fr"

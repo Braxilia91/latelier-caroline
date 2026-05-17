@@ -8,7 +8,7 @@ import {
   buildDiscoveryPrompt, buildSynonymPrompt,
   buildWordSearchPrompt, buildAkinatorSoftPrompt,
   buildPredictivePrompt, buildAkinatorTurnPrompt,
-  buildMemoryExtractPrompt,
+  buildMemoryExtractPrompt, buildDigPrompt,
 } from '../lib/prompts'
 
 const AKINATOR_SYSTEM_PROMPT = `Tu joues à un jeu de devinette lexicale en français pour aider Caroline à trouver un mot. Tu poses des questions courtes et pertinentes, ou tu proposes des candidats finaux. Tu réponds UNIQUEMENT au format JSON demandé. Aucun markdown, aucun préambule, aucun texte hors du JSON.`
@@ -17,6 +17,7 @@ const MEMORY_SYSTEM_PROMPT = `Tu es chargée d'extraire UN fait notable d'un éc
 
 // LOT 2.3 — Segmentation des longs messages pour TTS.
 const MAX_SEGMENT_CHARS = 500
+const DIG_PASSAGE_MAX_CHARS = 5000
 
 function splitIntoSegments(text) {
   if (!text) return []
@@ -594,6 +595,27 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
     return sendMessage(buildDoubtPrompt(text), { type: 'doubt' })
   }, [sendMessage])
 
+  const digPassage = useCallback(async (passage) => {
+    const safe = (passage || '').trim()
+    if (!safe) return null
+
+    const capped = safe.length > DIG_PASSAGE_MAX_CHARS
+      ? safe.slice(-DIG_PASSAGE_MAX_CHARS)
+      : safe
+
+    return sendMessage(
+      buildDigPrompt({
+        passage: capped,
+        chapterTitle: currentChapter?.title || '',
+        chapterIntention: currentChapter?.intention || '',
+      }),
+      {
+        type: 'dig',
+        uiMessage: 'Aide-moi à creuser ce passage.',
+      }
+    )
+  }, [sendMessage, currentChapter])
+
   const injectVrac = useCallback(async (idea) => {
     const safeText = (idea?.text || '').trim()
     const shortLabel = safeText
@@ -673,7 +695,7 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
 
   return {
     loading, streaming, voiceOn, toggleVoice, sendMessage,
-    correctText, defineWord, findThread, expressDoubt, injectVrac,
+    correctText, defineWord, findThread, expressDoubt, digPassage, injectVrac,
     getDiscovery, getSynonyms, searchWord,
     startAkinator, startAkinatorSoft, askAkinatorTurn, getPredictiveWords,
     ttsState, ttsPlay, ttsPause, ttsStop, ttsSetSpeed,

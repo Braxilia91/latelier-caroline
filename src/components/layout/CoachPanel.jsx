@@ -1,11 +1,12 @@
 import { useState, useRef, useEffect } from 'react'
-import { Send, Volume2, VolumeX, Trash2, Scissors, BookOpen, AlertCircle, Lightbulb, Play, Pause, Square } from 'lucide-react'
+import { Send, Volume2, VolumeX, Trash2, Scissors, BookOpen, AlertCircle, Lightbulb, Play, Pause, Square, Search } from 'lucide-react'
 import { LEA_COMMANDS } from '../../lib/commands'
 
 export default function CoachPanel({
   coach, hasKey, currentChapter, chatHistory, welcomeMsg, onOpenVrac,
   isOnline = true,
   isMobile, isOpen, onClose: _onClose,
+  selectedPassage,
 }) {
   const [input, setInput] = useState('')
   const bottomRef = useRef(null)
@@ -14,6 +15,7 @@ export default function CoachPanel({
   const {
     loading, streaming, voiceOn, toggleVoice, sendMessage,
     findThread, expressDoubt, removeMessage,
+    digPassage,
     ttsState, ttsPlay, ttsPause, ttsStop, ttsSetSpeed,
   } = coach
 
@@ -31,6 +33,26 @@ export default function CoachPanel({
   const handleFindThread = async () => {
     if (!currentChapter?.content) return
     await findThread(currentChapter.content)
+  }
+
+  const selectedText = (selectedPassage?.text || '').trim()
+  const selectionValid =
+    selectedPassage?.chapterId === currentChapter?.id &&
+    selectedText.length >= 30
+  const digButtonLabel = selectionValid ? 'Creuser ce passage' : 'Creuser mes dernières lignes'
+  const digButtonTitle = selectionValid
+    ? 'Léa pose des questions pour creuser le passage sélectionné'
+    : 'Léa pose des questions pour creuser tes dernières lignes'
+
+  const handleDig = async () => {
+    if (!digPassage || !currentChapter?.content) return
+
+    const fallback = (currentChapter.content || '').slice(-5000).trim()
+    const raw = selectionValid ? selectedText : fallback
+    const passage = raw.slice(-5000).trim()
+    if (!passage) return
+
+    await digPassage(passage)
   }
 
   // L4-1 — Confirmation avant action destructive (effacement du chat)
@@ -188,6 +210,16 @@ export default function CoachPanel({
           <>
             <button className="chat-shortcut" style={styles.shortBtn} onClick={handleFindThread} disabled={loading} title="Léa résume et relance l'écriture">
               <Scissors size={12} /> Retrouver le fil
+            </button>
+            <button
+              className="chat-shortcut"
+              style={styles.shortBtn}
+              onClick={handleDig}
+              disabled={loading}
+              title={digButtonTitle}
+              aria-label={digButtonTitle}
+            >
+              <Search size={12} /> {digButtonLabel}
             </button>
             <button
               className="chat-shortcut"
