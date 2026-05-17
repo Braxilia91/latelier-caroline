@@ -582,6 +582,7 @@ function AppInner() {
             isMobile={isMobile}
             loadTraceBlob={db.loadTraceBlob}
             chapters={db.chapters}
+            apiKey={db.apiKey}
           />
         )}
         {/* T11b — ProgressModal (heatmap régularité) */}

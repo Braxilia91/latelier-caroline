@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import Modal from '../ui/Modal'
-import { X, Edit3, Check, Trash2, Archive, Tag, BookOpen } from 'lucide-react'
+import { X, Edit3, Check, Trash2, Archive, Tag, BookOpen, Sparkles } from 'lucide-react'
 import useClickAway from '../../hooks/useClickAway'
+import { runVisionOCR } from '../../lib/visionOCR'
 
 // T6A.1 — palette saturée (ADN atelier + distinctivité accrue pour les pastilles vignettes)
 const STATUS_LABELS = {
@@ -30,11 +31,12 @@ export default function TraceDetailModal({
   onClose,
   editTrace,
   onDelete,
-  isMobile,
   loadTraceBlob,
   chapters,        // Lot B — tableau de chapitres fourni par App.jsx
+  apiKey = '',     // FEAT-C — mot de passe Léa pour /api/vision-ocr
 }) {
   const [blobUrl, setBlobUrl] = useState(null)
+  const [traceBlob, setTraceBlob] = useState(null)
 
   // T7 — état édition inline
   const [localTrace,   setLocalTrace]   = useState(trace)
@@ -48,6 +50,12 @@ export default function TraceDetailModal({
   const statusContainerRef = useRef(null)
   useClickAway(statusContainerRef, () => setStatusOpen(false))
 
+  // FEAT-C — OCR vision a posteriori sur une trace existante
+  const [visionStatus, setVisionStatus] = useState('idle')
+  const [visionPreviewText, setVisionPreviewText] = useState('')
+  const [visionErr, setVisionErr] = useState(null)
+  const [visionSaving, setVisionSaving] = useState(false)
+
   // Resync localTrace quand on change de trace
   useEffect(() => {
     setLocalTrace(trace)
@@ -55,11 +63,16 @@ export default function TraceDetailModal({
     setDraftValue('')
     setSaving(false)
     setStatusOpen(false)
+    setVisionStatus('idle')
+    setVisionPreviewText('')
+    setVisionErr(null)
+    setVisionSaving(false)
   }, [trace?.id, trace])
 
   useEffect(() => {
     if (!loadTraceBlob || !trace?.id) {
       setBlobUrl(null)
+      setTraceBlob(null)
       return
     }
 
@@ -67,6 +80,7 @@ export default function TraceDetailModal({
     let url = null
 
     setBlobUrl(null)
+    setTraceBlob(null)
 
     loadTraceBlob(trace.id)
       .then((result) => {
@@ -74,10 +88,11 @@ export default function TraceDetailModal({
         if (result?.blob instanceof Blob) {
           url = URL.createObjectURL(result.blob)
           setBlobUrl(url)
+          setTraceBlob(result.blob)
         }
       })
       .catch(() => {
-        if (!cancelled) setBlobUrl(null)
+        if (!cancelled) { setBlobUrl(null); setTraceBlob(null) }
       })
 
     return () => {
@@ -196,15 +211,104 @@ export default function TraceDetailModal({
     }
   }
 
+  // ── FEAT-C — Lancer / relancer l'OCR vision a posteriori ─────
+  const handleVisionOCR = async () => {
+    if (!traceBlob || !apiKey || visionStatus === 'running') return
+    setVisionStatus('running')
+    setVisionErr(null)
+    setVisionPreviewText('')
+    try {
+      const text = await runVisionOCR(traceBlob, apiKey)
+      if (text && text.trim()) {
+        setVisionPreviewText(text.trim())
+        setVisionStatus('preview')
+      } else {
+        setVisionStatus('error')
+        setVisionErr("L'IA n'a pas détecté de texte dans cette image.")
+      }
+    } catch (err) {
+      setVisionStatus('error')
+      setVisionErr(err?.message || 'Erreur lors de la lecture IA.')
+    }
+  }
+
+  // ── FEAT-C — Garder le texte transcrit (persistance explicite) ──
+  const handleKeepText = async () => {
+    if (!canEdit || !visionPreviewText || visionSaving) return
+    setVisionSaving(true)
+    const now = new Date().toISOString()
+    try {
+      await editTrace(localTrace.id, {
+        ocrText: visionPreviewText,
+        ocrRunAt: now,
+      })
+      setLocalTrace(t => ({
+        ...t,
+        ocrText: visionPreviewText,
+        ocrRunAt: now,
+        updatedAt: now,
+      }))
+      setVisionStatus('idle')
+      setVisionPreviewText('')
+      setVisionErr(null)
+    } catch (err) {
+      console.error('[FEAT-C] editTrace ocrText failed', err)
+      setVisionStatus('error')
+      setVisionErr('Impossible de sauvegarder le texte transcrit.')
+    } finally {
+      setVisionSaving(false)
+    }
+  }
+
+  // ── FEAT-C — Ignorer le texte transcrit (aucune persistance) ──
+  const handleDiscardText = () => {
+    if (visionSaving) return
+    setVisionStatus('idle')
+    setVisionPreviewText('')
+    setVisionErr(null)
+  }
+
+  // ── FEAT-C — Effacer un OCR déjà sauvegardé ──────────────────
+  const handleEraseOcr = async () => {
+    if (!canEdit) return
+    const ok = window.confirm("Effacer le texte transcrit par l'IA ? Cette action est irréversible.")
+    if (!ok) return
+    const now = new Date().toISOString()
+    try {
+      await editTrace(localTrace.id, { ocrText: null, ocrRunAt: null })
+      setLocalTrace(t => ({
+        ...t,
+        ocrText: null,
+        ocrRunAt: null,
+        updatedAt: now,
+      }))
+      setVisionStatus('idle')
+      setVisionPreviewText('')
+      setVisionErr(null)
+    } catch (err) {
+      console.error('[FEAT-C] effacement ocrText failed', err)
+    }
+  }
+
   const tryClose = () => {
     if (editingField) {
       const ok = window.confirm('Vraiment fermer sans enregistrer cette réponse ?')
+      if (!ok) return
+    }
+    if (visionStatus === 'preview') {
+      const ok = window.confirm("Le texte transcrit par l'IA n'est pas encore enregistré. Fermer quand même ?")
       if (!ok) return
     }
     if (typeof onClose === 'function') onClose()
   }
 
   const handleDelete = () => { if (typeof onDelete === 'function') onDelete(localTrace) }
+
+  const hasBlob = !!traceBlob
+  const hasOcrSaved = typeof localTrace.ocrText === 'string' && localTrace.ocrText.trim().length > 0
+  const canRunVision = hasBlob && !!apiKey && canEdit
+  const showVisionInitialBtn = canRunVision && !hasOcrSaved && visionStatus === 'idle'
+  const showVisionRerunBtn = canRunVision && hasOcrSaved && visionStatus === 'idle'
 
   return (
     <Modal
@@ -237,6 +341,91 @@ export default function TraceDetailModal({
             <Archive size={36} color="#9C8878" strokeWidth={1.2} />
           )}
         </div>
+
+        {/* FEAT-C — Bloc OCR vision a posteriori */}
+        {(showVisionInitialBtn || showVisionRerunBtn || hasOcrSaved || visionStatus === 'running' || visionStatus === 'preview' || visionStatus === 'error') && (
+          <div style={S.ocrBlock}>
+            {showVisionInitialBtn && (
+              <button
+                type="button"
+                style={S.visionBtn}
+                onClick={handleVisionOCR}
+                aria-label="Lire le texte de l'image avec l'IA"
+              >
+                <Sparkles size={14} /> Lire le texte avec l'IA
+              </button>
+            )}
+
+            {visionStatus === 'running' && (
+              <div style={S.ocrRunning}>
+                <Sparkles size={14} style={{ opacity: 0.6 }} />
+                <span>Lecture en cours… (5 à 10 s)</span>
+              </div>
+            )}
+
+            {visionStatus === 'preview' && (
+              <div style={S.ocrPreview}>
+                <p style={S.ocrPreviewLabel}>Texte transcrit par l'IA — à toi de juger :</p>
+                <p style={S.ocrPreviewText}>{visionPreviewText}</p>
+                <div style={S.ocrPreviewActions}>
+                  <button
+                    type="button"
+                    onClick={handleDiscardText}
+                    style={S.cancelBtn}
+                    disabled={visionSaving}
+                  >
+                    Ignorer
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleKeepText}
+                    style={{ ...S.saveBtn, opacity: visionSaving ? 0.65 : 1 }}
+                    disabled={visionSaving}
+                  >
+                    <Check size={14} /> {visionSaving ? 'Enregistrement…' : 'Garder ce texte'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {visionStatus === 'error' && visionErr && (
+              <div style={S.ocrErrRow}>
+                <p style={S.ocrErrMsg}>{visionErr}</p>
+                {canRunVision && (
+                  <button type="button" onClick={handleVisionOCR} style={S.linkBtn}>
+                    Réessayer
+                  </button>
+                )}
+              </div>
+            )}
+
+            {hasOcrSaved && visionStatus !== 'preview' && (
+              <div style={S.ocrSaved}>
+                <p style={S.ocrSavedLabel}>Texte transcrit par l'IA</p>
+                <p style={S.ocrSavedText}>{localTrace.ocrText}</p>
+                <div style={S.ocrSavedActions}>
+                  <button
+                    type="button"
+                    onClick={handleEraseOcr}
+                    style={S.cancelBtn}
+                    disabled={!canEdit}
+                  >
+                    Effacer
+                  </button>
+                  {showVisionRerunBtn && (
+                    <button
+                      type="button"
+                      onClick={handleVisionOCR}
+                      style={S.visionBtnSecondary}
+                    >
+                      <Sparkles size={14} /> Re-lire
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Statut */}
         <div style={S.statusRow}>
@@ -686,5 +875,146 @@ const S = {
     borderRadius: 10,
     color: '#B0A090',
     cursor: 'pointer',
+  },
+  ocrBlock: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 8,
+  },
+  visionBtn: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+    padding: '8px 14px',
+    background: 'transparent',
+    color: '#7A6555',
+    border: '1.5px solid #D4B896',
+    borderRadius: 10,
+    fontSize: '.82rem',
+    fontWeight: 600,
+    fontFamily: "'Nunito', sans-serif",
+    cursor: 'pointer',
+    alignSelf: 'flex-start',
+  },
+  visionBtnSecondary: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 6,
+    padding: '6px 12px',
+    background: 'transparent',
+    color: '#7A6555',
+    border: '1.5px solid #D4B896',
+    borderRadius: 10,
+    fontSize: '.76rem',
+    fontWeight: 600,
+    fontFamily: "'Nunito', sans-serif",
+    cursor: 'pointer',
+  },
+  ocrRunning: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    padding: '8px 12px',
+    background: '#F5F0E8',
+    border: '1px solid #EDE7DE',
+    borderRadius: 10,
+    fontFamily: "'Lora', serif",
+    fontStyle: 'italic',
+    fontSize: '.82rem',
+    color: '#7A6555',
+  },
+  ocrPreview: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 8,
+    padding: '12px 14px',
+    background: '#F5F0E8',
+    border: '1px solid #D4B896',
+    borderRadius: 12,
+  },
+  ocrPreviewLabel: {
+    margin: 0,
+    fontFamily: "'Nunito', sans-serif",
+    fontSize: '.7rem',
+    fontWeight: 700,
+    textTransform: 'uppercase',
+    letterSpacing: '.05em',
+    color: '#7A6555',
+  },
+  ocrPreviewText: {
+    margin: 0,
+    fontFamily: "'Lora', serif",
+    fontStyle: 'italic',
+    fontSize: '.88rem',
+    color: '#2A1A0E',
+    lineHeight: 1.6,
+    whiteSpace: 'pre-wrap',
+  },
+  ocrPreviewActions: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    justifyContent: 'flex-end',
+  },
+  ocrErrRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 10,
+    padding: '8px 12px',
+    background: '#FEF0F0',
+    border: '1px solid #E8A0A0',
+    borderRadius: 10,
+  },
+  ocrErrMsg: {
+    margin: 0,
+    flex: 1,
+    fontFamily: "'Nunito', sans-serif",
+    fontSize: '.78rem',
+    color: '#8B2020',
+  },
+  linkBtn: {
+    background: 'transparent',
+    border: 'none',
+    color: '#8B6445',
+    fontSize: '.78rem',
+    fontWeight: 700,
+    fontFamily: "'Nunito', sans-serif",
+    cursor: 'pointer',
+    padding: 0,
+    textDecoration: 'underline',
+  },
+  ocrSaved: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 8,
+    padding: '12px 14px',
+    background: '#FAF7F2',
+    border: '1px solid #EDE7DE',
+    borderRadius: 12,
+  },
+  ocrSavedLabel: {
+    margin: 0,
+    fontFamily: "'Nunito', sans-serif",
+    fontSize: '.7rem',
+    fontWeight: 700,
+    textTransform: 'uppercase',
+    letterSpacing: '.05em',
+    color: '#9C8878',
+  },
+  ocrSavedText: {
+    margin: 0,
+    fontFamily: "'Lora', serif",
+    fontStyle: 'italic',
+    fontSize: '.86rem',
+    color: '#2A1A0E',
+    lineHeight: 1.6,
+    whiteSpace: 'pre-wrap',
+  },
+  ocrSavedActions: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    justifyContent: 'flex-end',
   },
 }
