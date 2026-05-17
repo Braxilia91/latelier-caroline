@@ -259,7 +259,7 @@ export function buildWelcomeMessage({ name, leaMemory, currentChapter }) {
   const hour = new Date().getHours()
   const n = name || 'Caroline'
 
-  let timeGreet = ''
+  let timeGreet
   if (hour >= 5 && hour < 12) timeGreet = `Bonjour ${n} ☀️`
   else if (hour >= 12 && hour < 18) timeGreet = `Bonjour ${n} 🌿`
   else if (hour >= 18 && hour < 22) timeGreet = `Bonsoir ${n} 🕯️`
