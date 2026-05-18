@@ -1,7 +1,9 @@
 // src/hooks/useDicoSearch.js
 // Hook React pour la recherche lexicale DicoCaro
+// Accepte { apiKey, openAiKey } (même interface que DicoCaroModal)
 
 import { useState, useCallback, useRef } from 'react'
+import { askClaude } from '../lib/claude'
 import {
   createInitialState,
   transitionTyping,
@@ -13,15 +15,28 @@ import {
 } from '../lib/dicoSearch'
 
 /**
- * @param {Object} opts
- * @param {Function} opts.callLLM — (prompt: string, maxTokens: number) => Promise<string>
+ * @param {Object}   opts
+ * @param {string}   opts.apiKey     — clé Anthropic
+ * @param {string}  [opts.openAiKey] — non utilisé ici (réservé vocal)
  */
-export function useDicoSearch({ callLLM }) {
+export function useDicoSearch({ apiKey, openAiKey }) {
   const [state, setState] = useState(createInitialState)
-  const stateRef = useRef(state)
+  const stateRef   = useRef(state)
   stateRef.current = state
 
   const debounceRef = useRef(null)
+
+  // Wrapper LLM interne — buildé à partir de apiKey
+  const callLLM = useCallback(async (prompt, maxTokens = 600) => {
+    if (!apiKey) throw new Error('Clé API Anthropic manquante.')
+    return askClaude({
+      apiKey,
+      systemPrompt:
+        "Tu es Léa, assistante d'écriture de Caroline. Tu réponds UNIQUEMENT en JSON strict sans texte avant ni après.",
+      messages: [{ role: 'user', content: prompt }],
+      maxTokens,
+    })
+  }, [apiKey])
 
   const setQuery = useCallback((query) => {
     if (debounceRef.current) clearTimeout(debounceRef.current)
