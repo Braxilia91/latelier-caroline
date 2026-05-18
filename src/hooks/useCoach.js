@@ -64,10 +64,14 @@ function ttsNow() {
 }
 
 export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, leaVoice, addMessage, chatHistory, carolineProfile, leaMemory, updateLeaMemory }) {
-  const [loading,    setLoading]    = useState(false)
-  const [streaming,  setStreaming]  = useState('')
-  const [voiceOn,    setVoiceOn]    = useState(true)
-  const [ttsState,   setTtsState]   = useState({ playing: false, paused: false, speed: 1.0, mode: null })
+  const [loading,      setLoading]      = useState(false)
+  // chatLoading : true uniquement pour les appels visibles dans le CoachPanel
+  // (hideAssistantMessage === false). Permet de masquer la bulle «Léa tape…»
+  // pendant les appels DicoCaro qui gèrent leur propre UI.
+  const [chatLoading,  setChatLoading]  = useState(false)
+  const [streaming,    setStreaming]    = useState('')
+  const [voiceOn,      setVoiceOn]      = useState(true)
+  const [ttsState,     setTtsState]     = useState({ playing: false, paused: false, speed: 1.0, mode: null })
 
   const audioRef       = useRef(null)
   const browserUttRef  = useRef(null)
@@ -182,7 +186,10 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
     }
     ttsLog('user_send', { type, userTextLen: (userText || '').length })
 
-    setLoading(true); setStreaming('')
+    setLoading(true)
+    // chatLoading : uniquement pour les appels visibles dans CoachPanel
+    if (!hideAssistantMessage) setChatLoading(true)
+    setStreaming('')
 
     const history = [...chatHistory.map(({ role, content }) => ({ role, content })), { role: 'user', content: userText }]
     if (!hideUserMessage) {
@@ -302,6 +309,7 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
 
       setStreaming('')
       setLoading(false)
+      if (!hideAssistantMessage) setChatLoading(false)
 
       if (updateLeaMemory && full && type === 'chat') {
         updateLeaMemory({
@@ -553,7 +561,9 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
     } catch (err) {
       addMessage({ role: 'assistant', content: mapCoachError(err) })
     } finally {
-      setLoading(false); setStreaming('')
+      setLoading(false)
+      setChatLoading(false)
+      setStreaming('')
     }
     return full
   }, [apiKey, openAiKey, systemPrompt, chatHistory, voiceOn, leaVoice, addMessage, updateLeaMemory, currentChapter, stopAllTts, speakBrowserManaged])
@@ -680,7 +690,7 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
   }, [voiceOn, stopAllTts])
 
   return {
-    loading, streaming, voiceOn, toggleVoice, sendMessage,
+    loading, chatLoading, streaming, voiceOn, toggleVoice, sendMessage,
     correctText, defineWord, findThread, expressDoubt, digPassage, injectVrac,
     getDiscovery, getSynonyms, searchWord,
     startAkinator, startAkinatorSoft, askAkinatorTurn, getPredictiveWords,
