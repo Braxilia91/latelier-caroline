@@ -164,6 +164,10 @@ export default function AddTraceFlow({ onClose, onCreateTrace, initialFile = nul
     && ocrStatus !== 'running'
     && visionOcrStatus !== 'done'
 
+  // FEAT-H — Bandeau apiKey absent : symetrique a TraceDetailModal (commit 3a97952).
+  // Caroline doit voir le meme signal pendant l'import qu'apres.
+  const showNoApiKeyHint = step === 'firstListen' && !apiKey
+
   return (
     <Modal onClose={onClose} ariaLabel="Ajouter au tiroir" overlayStyle={S.overlay} modalStyle={S.modal}>
       <div style={S.hdr}>
@@ -261,6 +265,15 @@ export default function AddTraceFlow({ onClose, onCreateTrace, initialFile = nul
             </div>
           )}
 
+          {/* FEAT-H — Bandeau apiKey absent : signal explicite si Lea n'est pas activee */}
+          {showNoApiKeyHint && (
+            <div style={S.noApiKeyHint}>
+              <p style={S.noApiKeyText}>
+                L'IA n'est pas activée sur cet appareil. Va dans Réglages — Mot de passe Léa pour activer la lecture de texte.
+              </p>
+            </div>
+          )}
+
           {error && <p style={S.errorInline} role="alert">{error}</p>}
           <div style={S.footer}>
             <button
@@ -309,6 +322,9 @@ const S = {
   ocrQuestion: { margin: 0, fontFamily: "'Cormorant Garamond', serif", fontSize: '.95rem', fontWeight: 600, color: '#2A1A0E' },
   visionBtn: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, padding: '7px 16px', background: 'transparent', color: '#7A6555', border: '1.5px solid #D4B896', borderRadius: 10, fontSize: '.8rem', fontWeight: 600, fontFamily: "'Nunito', sans-serif", cursor: 'pointer', alignSelf: 'flex-start' },
   visionErrMsg: { margin: 0, fontSize: '.75rem', color: '#9C8878', fontFamily: "'Lora', serif", fontStyle: 'italic', paddingLeft: 2 },
+  // FEAT-H — Bandeau apiKey absent (coherent avec TraceDetailModal.styles.js)
+  noApiKeyHint: { padding: '10px 14px', background: '#FAF7F2', border: '1px solid #EDE7DE', borderRadius: 12 },
+  noApiKeyText: { margin: 0, fontFamily: "'Lora', serif", fontStyle: 'italic', fontSize: '.82rem', color: '#7A6555', lineHeight: 1.5 },
   errorInline: { margin: 0, padding: '8px 12px', background: '#FEF0F0', border: '1px solid #E8A0A0', borderRadius: 10, color: '#8B2020', fontSize: '.8rem', fontFamily: "'Nunito', sans-serif" },
   footer: { display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 4 },
   skipBtn: { padding: '9px 18px', background: '#FAF7F2', color: '#8B6445', border: '1.5px solid #EDE7DE', borderRadius: 10, fontSize: '.85rem', fontWeight: 700, fontFamily: "'Nunito', sans-serif", cursor: 'pointer' },
