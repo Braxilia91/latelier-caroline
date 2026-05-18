@@ -5,6 +5,7 @@ import {
   getChatHistoryRecent, addChatMessage, clearChatHistory, deleteChatMessage,
   getVrac, addVrac, updateVrac, deleteVrac,
   getTraces, addTrace, updateTrace, deleteTrace, getTraceBlob,
+  saveVoiceMemo, getVoiceMemo, deleteVoiceMemo,
   exportAllData, resetAllData, importSnapshot, buildLocalBackup, getStorageEstimate,
 } from '../lib/db'
 import { pushSnapshot, pullSnapshot, buildSnapshot, whoWins } from '../lib/sync'
@@ -557,6 +558,8 @@ const totalWords     = chapters.reduce(
     leaMemory, updateLeaMemory, resetLeaMemory,
     vracIdeas, unusedVrac, addVracIdea, markVracUsed, removeVracIdea,
     traces, createTrace, editTrace, removeTrace, loadTraceBlob,
+    // Lot C — voice memos (audio attaché a posteriori à une trace)
+    saveVoiceMemo, getVoiceMemo, deleteVoiceMemo,
     syncToken, setSyncToken, syncStatus, syncMessage, lastSyncedAt, syncNow,
     // T8.4b — Signal Drive offline pour blobs en attente
     pendingBlobsMessage, dismissPendingBlobsMessage,
