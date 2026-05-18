@@ -1,6 +1,8 @@
 // ─── IndexedDB wrapper v5 ──────────────────────────────────────
 const DB_NAME    = 'atelier_v3' // nom historique conservé — ne pas renommer, casserait les bases existantes
 const DB_VERSION = 5            // v5 : fix keyPath traceBlobs + deleteTrace cascade atomique
+// Lot C — voice memos cohabitent dans le store 'traceBlobs' v5 sous la clé
+// composée `voicememo_${traceId}` : aucun schema change, pas de bump DB_VERSION.
 
 let _db = null
 
@@ -294,7 +296,8 @@ export async function deleteTrace(id) {
     txn.onerror    = (e) => reject(e.target.error || txn.error)
     txn.onabort    = ()  => reject(txn.error || new Error('deleteTrace transaction aborted'))
     txn.objectStore('traces').delete(id)
-    txn.objectStore('traceBlobs').delete(id)
+    txn.objectStore('traceBlobs').delete(id)                  // photo
+    txn.objectStore('traceBlobs').delete(voiceMemoKey(id))    // Lot C — cascade voicememo (no-op si absent)
   })
   try {
     const { deleteBlobFromDrive } = await import('./driveSync')
@@ -334,6 +337,52 @@ export async function deleteTraceBlob(traceId) {
   await openDB()
   return new Promise((resolve, reject) => {
     const req = tx('traceBlobs', 'readwrite').delete(traceId)
+    req.onsuccess = () => resolve()
+    req.onerror   = (e) => reject(e.target.error)
+  })
+}
+
+// ─── Lot C — Voice memos (audio attaché a posteriori à une trace) ───
+// Stockage : même store que les photos ('traceBlobs' v5, keyPath: 'key')
+//            sous la clé composée `voicememo_${traceId}` → pas de migration.
+// Cascade  : intégrée dans deleteTrace (transaction atomique avec photo).
+// Export   : sérialisé dans buildLocalBackup avec kind='voicememo'.
+// Import   : importSnapshot route via kind vers la bonne clé.
+// Drive    : différé hors MVP (P1 verrouillé) — pas de sync cloud.
+
+function voiceMemoKey(traceId) {
+  return `voicememo_${traceId}`
+}
+
+export async function saveVoiceMemo(traceId, blob, mimeType = 'audio/webm') {
+  if (!traceId || !blob) throw new Error('saveVoiceMemo: traceId et blob requis')
+  await openDB()
+  return new Promise((resolve, reject) => {
+    const req = tx('traceBlobs', 'readwrite').put({
+      key: voiceMemoKey(traceId),
+      blob,
+      mimeType,
+    })
+    req.onsuccess = () => resolve()
+    req.onerror   = (e) => reject(e.target.error)
+  })
+}
+
+export async function getVoiceMemo(traceId) {
+  if (!traceId) return null
+  await openDB()
+  return new Promise((resolve) => {
+    const req = tx('traceBlobs').get(voiceMemoKey(traceId))
+    req.onsuccess = () => resolve(req.result || null)
+    req.onerror   = () => resolve(null)
+  })
+}
+
+export async function deleteVoiceMemo(traceId) {
+  if (!traceId) return
+  await openDB()
+  return new Promise((resolve, reject) => {
+    const req = tx('traceBlobs', 'readwrite').delete(voiceMemoKey(traceId))
     req.onsuccess = () => resolve()
     req.onerror   = (e) => reject(e.target.error)
   })
@@ -397,19 +446,27 @@ export async function importSnapshot(snapshot) {
   // atob est synchrone : on évite de retenir une transaction IDB
   // pendant un décodage potentiellement coûteux sur plusieurs blobs.
   // En cas d'échec de décodage, on logge et on poursuit avec les blobs valides.
+  //
+  // Lot C — chaque entrée a un champ optionnel `kind` :
+  //   - 'voicememo' → clé IDB = voicememo_${traceId} + mimeType audio par défaut
+  //   - 'photo' (ou absent, rétro-compat snapshots v3-v5) → clé IDB = traceId
+  //                                                       + mimeType image par défaut
   const decodedBlobs = []
   if (Array.isArray(snapshot.traceBlobs)) {
     for (const entry of snapshot.traceBlobs) {
       if (!entry?.traceId || !entry?.base64) continue
+      const isVoicememo = entry.kind === 'voicememo'
+      const key         = isVoicememo ? voiceMemoKey(entry.traceId) : entry.traceId
+      const defaultMime = isVoicememo ? 'audio/webm' : 'image/jpeg'
       try {
-        const blob = base64ToBlob(entry.base64, entry.mimeType)
+        const blob = base64ToBlob(entry.base64, entry.mimeType || defaultMime)
         decodedBlobs.push({
-          key:      entry.traceId,
+          key,
           blob,
-          mimeType: entry.mimeType || 'image/jpeg',
+          mimeType: entry.mimeType || defaultMime,
         })
       } catch (e) {
-        console.warn('[Import] base64 decode failed for trace', entry.traceId, e?.message)
+        console.warn('[Import] base64 decode failed for trace', entry.traceId, entry.kind || 'photo', e?.message)
       }
     }
   }
@@ -521,14 +578,20 @@ export async function exportAllData() {
 }
 
 /**
- * T8.4a — Backup local complet v5 : inclut les blobs des traces en base64.
+ * T8.4a — Backup local complet : inclut les blobs des traces en base64.
+ * Lot C — inclut aussi les voice memos (kind: 'voicememo') si présents.
  *
  * @param {object} [opts]
  * @param {boolean} [opts.includeBlobs=true] — si false, retourne v4 metadata only.
  * @returns {Promise<object>} snapshot prêt à sérialiser en JSON.
  *
- * Coût taille : +33 % par image (base64 vs binaire). Pour Caroline (< 100 photos),
- * reste sous les 100 MB pour un export typique — acceptable car export rare.
+ * Format de sortie traceBlobs[] :
+ *   { traceId, base64, mimeType, kind: 'photo' | 'voicememo' }
+ * Rétro-compat lecture : un snapshot v5 sans `kind` est interprété comme 'photo'
+ * par importSnapshot (voir branche isVoicememo).
+ *
+ * Coût taille : +33 % par blob (base64 vs binaire). Pour Caroline (< 100 photos
+ * + voicememos ≤ 2 min chacun), reste sous les 100 MB — acceptable car export rare.
  * Note : pour de très gros volumes futurs, envisager CompressionStream natif.
  */
 export async function buildLocalBackup({ includeBlobs = true } = {}) {
@@ -544,9 +607,10 @@ export async function buildLocalBackup({ includeBlobs = true } = {}) {
     getTraces(),
   ])
 
-  let traceBlobs = []
+  const traceBlobs = []
   if (includeBlobs && Array.isArray(traces) && traces.length > 0) {
     for (const tr of traces) {
+      // — Photo
       try {
         const entry = await getTraceBlob(tr.id)
         if (entry?.blob) {
@@ -555,10 +619,26 @@ export async function buildLocalBackup({ includeBlobs = true } = {}) {
             traceId:  tr.id,
             base64:   b64,
             mimeType: entry.mimeType || 'image/jpeg',
+            kind:     'photo',
           })
         }
       } catch (e) {
-        console.warn('[Backup] blob encoding failed for trace', tr.id, e?.message)
+        console.warn('[Backup] photo encoding failed for trace', tr.id, e?.message)
+      }
+      // — Voice memo (Lot C) — silencieusement vide si la trace n'en a pas
+      try {
+        const memo = await getVoiceMemo(tr.id)
+        if (memo?.blob) {
+          const b64 = await blobToBase64(memo.blob)
+          traceBlobs.push({
+            traceId:  tr.id,
+            base64:   b64,
+            mimeType: memo.mimeType || 'audio/webm',
+            kind:     'voicememo',
+          })
+        }
+      } catch (e) {
+        console.warn('[Backup] voicememo encoding failed for trace', tr.id, e?.message)
       }
     }
   }
@@ -567,7 +647,9 @@ export async function buildLocalBackup({ includeBlobs = true } = {}) {
     name, chapters, streak, sessions, profile, vrac,
     chat, leaMemory, traces, traceBlobs,
     backedUpAt: new Date().toISOString(),
-    version: includeBlobs ? 5 : 4,
+    // v6 : ajout du champ `kind` sur les entrées traceBlobs[].
+    //      Rétro-compat lecture des v3-v5 garantie par importSnapshot.
+    version: includeBlobs ? 6 : 4,
   }
 }
 
