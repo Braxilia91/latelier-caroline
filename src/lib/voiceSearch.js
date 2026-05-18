@@ -1,6 +1,6 @@
 // src/lib/voiceSearch.js
 // VoiceSearchButton — mini enregistrement 10s pour DicoCaro
-// Pas de player, UI pulse, transcription Whisper
+// Pas de player, UI pulse, transcription Whisper intégrée
 
 import { useState, useRef, useCallback } from 'react'
 import { Mic, MicOff, Loader2 } from 'lucide-react'
@@ -11,17 +11,36 @@ const isIOSSafari = () => {
   return /iP(ad|hone|od)/.test(ua) && /Safari/.test(ua) && !/Chrome/.test(ua)
 }
 
+async function transcribeWithWhisper(blob, openAiKey) {
+  const formData = new FormData()
+  formData.append('file', blob, isIOSSafari() ? 'audio.mp4' : 'audio.webm')
+  formData.append('model', 'whisper-1')
+  formData.append('language', 'fr')
+
+  const res = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${openAiKey}` },
+    body: formData,
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err?.error?.message || `Whisper ${res.status}`)
+  }
+  const data = await res.json()
+  return data.text || ''
+}
+
 /**
- * @param {Object} props
- * @param {(text: string) => void} props.onTranscript
- * @param {Function} props.transcribeAudio — fn (blob) => Promise<string>
- * @param {number} [props.maxDuration=10000]
+ * @param {Object}   props
+ * @param {Function} props.onTranscript   — (text: string) => void
+ * @param {string}  [props.openAiKey]     — clé OpenAI pour Whisper (optionnel)
+ * @param {number}  [props.maxDuration=10000]
  * @param {boolean} [props.disabled=false]
  */
-export function VoiceSearchButton({ onTranscript, transcribeAudio, maxDuration = 10000, disabled = false }) {
-  const [phase, setPhase] = useState('idle') // 'idle' | 'recording' | 'transcribing'
+export function VoiceSearchButton({ onTranscript, openAiKey, maxDuration = 10000, disabled = false }) {
+  const [phase, setPhase]           = useState('idle') // 'idle' | 'recording' | 'transcribing'
   const [secondsLeft, setSecondsLeft] = useState(Math.ceil(maxDuration / 1000))
-  const [error, setError] = useState(null)
+  const [error, setError]           = useState(null)
 
   const recorderRef = useRef(null)
   const chunksRef   = useRef([])
@@ -48,11 +67,22 @@ export function VoiceSearchButton({ onTranscript, transcribeAudio, maxDuration =
       return
     }
 
-    const blob = new Blob(chunks, { type: isIOSSafari() ? 'audio/mp4' : 'audio/webm' })
+    const mimeType = isIOSSafari() ? 'audio/mp4' : 'audio/webm'
+    const blob = new Blob(chunks, { type: mimeType })
     setPhase('transcribing')
 
     try {
-      const text = await transcribeAudio(blob)
+      let text = ''
+      if (openAiKey) {
+        text = await transcribeWithWhisper(blob, openAiKey)
+      } else {
+        // Fallback Web Speech API si pas de clé OpenAI
+        setError('Clé OpenAI manquante — transcription impossible')
+        setPhase('idle')
+        setSecondsLeft(Math.ceil(maxDuration / 1000))
+        return
+      }
+
       if (text?.trim()) {
         onTranscript(text.trim())
         setError(null)
@@ -66,7 +96,7 @@ export function VoiceSearchButton({ onTranscript, transcribeAudio, maxDuration =
       setPhase('idle')
       setSecondsLeft(Math.ceil(maxDuration / 1000))
     }
-  }, [onTranscript, transcribeAudio, maxDuration])
+  }, [onTranscript, openAiKey, maxDuration])
 
   const start = useCallback(async () => {
     setError(null)
@@ -115,12 +145,14 @@ export function VoiceSearchButton({ onTranscript, transcribeAudio, maxDuration =
           0%,100% { transform: scale(1); opacity: .25; }
           50%      { transform: scale(1.4); opacity: .08; }
         }
+        .dico-spin { animation: spin .8s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
       `}</style>
 
       {isRecording && (
         <div style={{
           position: 'absolute', width: 44, height: 44, borderRadius: '50%',
-          background: 'var(--brown)', pointerEvents: 'none',
+          background: '#C4956A', pointerEvents: 'none',
           animation: 'dicoVoicePulse 1.4s ease-in-out infinite',
         }} />
       )}
@@ -129,26 +161,28 @@ export function VoiceSearchButton({ onTranscript, transcribeAudio, maxDuration =
         onClick={handleClick}
         disabled={disabled || phase === 'transcribing'}
         title={isRecording ? 'Arrêter' : phase === 'transcribing' ? 'Transcription…' : 'Recherche vocale (10s)'}
-        aria-label={isRecording ? "Arrêter l'enregistrement" : 'Recherche vocale'}
+        aria-label={isRecording ? "Arrêter l'enregistrement" : 'Recherche vocale 10s'}
         style={{
           width: 36, height: 36, borderRadius: 10,
           display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-          border: '1.5px solid var(--border-l)',
-          background: isRecording ? 'var(--brown)' : 'var(--cream)',
-          color: isRecording ? '#fff' : 'var(--ink-ll)',
+          border: '1.5px solid #D4C4A8',
+          background: isRecording ? '#C4956A' : '#FFFDF9',
+          color: isRecording ? '#fff' : '#8B7355',
           cursor: disabled || phase === 'transcribing' ? 'not-allowed' : 'pointer',
           opacity: disabled || phase === 'transcribing' ? .5 : 1,
           transition: 'all .15s', position: 'relative', flexShrink: 0,
         }}
       >
-        {phase === 'transcribing' ? <Loader2 size={16} className="spin" />
-         : isRecording           ? <MicOff  size={16} />
-         :                         <Mic     size={16} />}
+        {phase === 'transcribing'
+          ? <Loader2 size={16} className="dico-spin" />
+          : isRecording
+          ? <MicOff size={16} />
+          : <Mic size={16} />}
       </button>
 
       {isRecording && (
         <span style={{
-          fontSize: '.62rem', color: 'var(--brown)', marginTop: 2,
+          fontSize: '.62rem', color: '#C4956A', marginTop: 2,
           fontFamily: "'Nunito', sans-serif", lineHeight: 1,
         }}>
           {secondsLeft}s
