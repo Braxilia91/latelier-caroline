@@ -543,4 +543,69 @@ export const S = {
     justifyContent: 'flex-end',
     flexWrap: 'wrap',
   },
+
+  // ─── Lot C — Voice memo audio block ───────────────────────────
+  // Zone d'enregistrement + lecture + transcription du mémo vocal
+  // attaché a posteriori à une trace. Calqué visuellement sur les styles
+  // inspire* pour cohérence avec le reste de la modale.
+  audioBlock: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 10,
+    padding: '12px 14px',
+    background: '#FFFEFB',
+    border: '1.5px solid #E7D6BF',
+    borderRadius: 14,
+  },
+  audioHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    margin: 0,
+    fontFamily: "'Cormorant Garamond', serif",
+    fontSize: '1rem',
+    fontWeight: 700,
+    color: '#6E3A1E',
+  },
+  audioControls: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  audioBtn: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    padding: '8px 12px',
+    background: '#F5F0E8',
+    color: '#6E3A1E',
+    border: '1.5px solid #D4B896',
+    borderRadius: 10,
+    fontSize: '.82rem',
+    fontWeight: 700,
+    fontFamily: "'Nunito', sans-serif",
+    cursor: 'pointer',
+  },
+  audioBtnRec: {
+    // Variant rouge — état "enregistrement en cours" (bouton stop, attire l'œil).
+    // À merger via spread : { ...S.audioBtn, ...(recording && S.audioBtnRec) }
+    background: '#F5E0DA',
+    color: '#A4361A',
+    border: '1.5px solid #C97A66',
+  },
+  audioPreview: {
+    // Zone preview après enregistrement : <audio controls> + durée + transcription si présente
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 6,
+    padding: '8px 10px',
+    background: '#F8F4ED',
+    borderRadius: 10,
+    fontFamily: "'Nunito', sans-serif",
+    fontSize: '.78rem',
+    color: '#7A6555',
+  },
 }
