@@ -624,6 +624,10 @@ function AppInner() {
             chapters={db.chapters}
             currentChapter={db.currentChapter}
             apiKey={db.apiKey}
+            openAiKey={db.openAiKey}
+            saveVoiceMemo={db.saveVoiceMemo}
+            getVoiceMemo={db.getVoiceMemo}
+            deleteVoiceMemo={db.deleteVoiceMemo}
             onContinueWithLea={(briefText, uiMessage) => {
               // Fire-and-forget : on ne wait pas la réponse de Léa pour fermer la modale.
               // Sinon Caroline voit la modale rester ouverte pendant que Léa streame sa
