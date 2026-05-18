@@ -361,7 +361,7 @@ export default function SettingsModal({
       setExportDone(true)
       exportDoneTimerRef.current = setTimeout(() => setExportDone(false), 3000)
     } catch (err) {
-      alert('Échec de l\'export : ' + (err.message || 'erreur inconnue'))
+      alert('\u00c9chec de l\'export : ' + (err.message || 'erreur inconnue'))
     }
   }
 
@@ -376,7 +376,7 @@ export default function SettingsModal({
         alert('✓ Sauvegarde restaurée avec succès.\n\nL\'application va redémarrer pour rafraîchir.')
         window.location.reload()
       } else {
-        toast(result?.message || 'Échec de l\'import', 'error')
+        toast(result?.message || '\u00c9chec de l\'import', 'error')
       }
     } finally {
       setImporting(false)
@@ -762,15 +762,29 @@ export default function SettingsModal({
                 {importing ? 'Import…' : 'Importer'}
               </button>
             </div>
-            {pendingFile && (
-              <div style={S.warnBox}>
-                ⚠️ Cela va remplacer tes données actuelles par celles du fichier <strong>{pendingFile.name}</strong>. Irréversible.
-                <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                  <button type="button" style={S.actionBtn} onClick={() => setPendingFile(null)}>Annuler</button>
-                  <button type="button" style={{ ...S.syncBtn, flex: 1 }} onClick={handleConfirmImport}>Confirmer l'import</button>
+            {pendingFile && (() => {
+              // FEAT-I — Warning gradué : alerte renforcée si des données locales existent.
+              // chapters.length > 0 = Caroline a deja ecrit quelque chose qui sera ecrase.
+              // chapters vide = restauration sur appareil vierge, friction inutile.
+              const hasLocalData = Array.isArray(chapters) && chapters.length > 0
+              return (
+                <div style={S.warnBox}>
+                  {hasLocalData ? (
+                    <>
+                      ⚠️ <strong>Attention</strong> : tes données actuelles ({chapters.length} chapitre{chapters.length > 1 ? 's' : ''}) seront <strong>remplacées</strong> par celles du fichier <strong>{pendingFile.name}</strong>. Cette action est irréversible. Si tu veux garder tes données actuelles, exporte-les d'abord avant de continuer.
+                    </>
+                  ) : (
+                    <>Cela va charger les données du fichier <strong>{pendingFile.name}</strong> dans cette session.</>
+                  )}
+                  <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                    <button type="button" style={S.actionBtn} onClick={() => setPendingFile(null)}>Annuler</button>
+                    <button type="button" style={{ ...S.syncBtn, flex: 1 }} onClick={handleConfirmImport}>
+                      {hasLocalData ? 'Remplacer mes données' : "Confirmer l'import"}
+                    </button>
+                  </div>
                 </div>
-              </div>
-            )}
+              )
+            })()}
             <input
               ref={fileInputRef}
               type="file"
