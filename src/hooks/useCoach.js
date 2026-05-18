@@ -13,7 +13,7 @@ import {
 
 const AKINATOR_SYSTEM_PROMPT = `Tu joues à un jeu de devinette lexicale en français pour aider Caroline à trouver un mot. Tu poses des questions courtes et pertinentes, ou tu proposes des candidats finaux. Tu réponds UNIQUEMENT au format JSON demandé. Aucun markdown, aucun préambule, aucun texte hors du JSON.`
 
-const MEMORY_SYSTEM_PROMPT = `Tu es chargée d'extraire UN fait notable d'un échange entre Caroline et Léa, pour la mémoire long-terme de Léa. Tu réponds par 1 phrase courte (max 18 mots) qui résume un fait personnel concret, une émotion partagée, un souvenir évoqué, ou une décision narrative — PAS un compliment générique ni une métaphore. Si rien de notable, réponds exactement "RIEN".`
+const MEMORY_SYSTEM_PROMPT = `Tu es chargée d'extraire UN fait notable d'un échange entre Caroline et Léa, pour la mémoire long-terme de Léa. Tu réponds par 1 phrase courte (max 18 mots) qui résume un fait personnel concret, une émotion partagée, un souvenir évoqué, ou une décision narrative — PAS un compliment générique ni une métaphore. Si rien de notable, réponds exactement \"RIEN\".`
 
 // LOT 2.3 — Segmentation des longs messages pour TTS.
 const MAX_SEGMENT_CHARS = 500
@@ -633,33 +633,42 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
 
   const getDiscovery = useCallback(async () => {
     const recentText = currentChapter?.content || ''
-    return sendMessage(buildDiscoveryPrompt(recentText), { type: 'discovery' })
+    return sendMessage(buildDiscoveryPrompt(recentText), {
+      type: 'discovery',
+      hideUserMessage: true,
+    })
   }, [sendMessage, currentChapter])
 
   const getSynonyms = useCallback(async ({ word, sentence, level }) => {
     if (!word?.trim()) return null
     return sendMessage(
       buildSynonymPrompt({ word: word.trim(), sentence: sentence?.trim() || '', level: level || 'mixte' }),
-      { type: 'synonyms' }
+      {
+        type: 'synonyms',
+        hideUserMessage: true,
+      }
     )
   }, [sendMessage])
 
   const searchWord = useCallback(async (description) => {
     if (!description?.trim()) return null
-    return sendMessage(buildWordSearchPrompt(description.trim()), { type: 'wordSearch' })
+    return sendMessage(buildWordSearchPrompt(description.trim()), {
+      type: 'wordSearch',
+      hideUserMessage: true,
+    })
   }, [sendMessage])
 
   const startAkinator = useCallback(async () => {
     return sendMessage(
       "Je cherche un mot précis mais je n'arrive pas à le formuler. Aide-moi à le trouver en me posant des questions une à une — sur l'émotion, la sensation, le contexte ou la nuance que je veux exprimer. Commence par ta première question.",
-      { type: 'akinator' }
+      { type: 'akinator', hideUserMessage: true }
     )
   }, [sendMessage])
 
   const startAkinatorSoft = useCallback(async (answers) => {
     return sendMessage(
       buildAkinatorSoftPrompt(answers),
-      { type: 'akinatorSoft' }
+      { type: 'akinatorSoft', hideUserMessage: true }
     )
   }, [sendMessage])
 
@@ -683,7 +692,10 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
   const getPredictiveWords = useCallback(async () => {
     const content = currentChapter?.content || ''
     if (!content.trim()) return null
-    return sendMessage(buildPredictivePrompt(content), { type: 'predictive' })
+    return sendMessage(buildPredictivePrompt(content), {
+      type: 'predictive',
+      hideUserMessage: true,
+    })
   }, [sendMessage, currentChapter])
 
   const toggleVoice = useCallback(() => {
