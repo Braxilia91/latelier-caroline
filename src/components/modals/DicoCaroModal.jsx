@@ -22,6 +22,9 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
   const [canScrollLeft,  setCanScrollLeft]  = useState(false)
   const [canScrollRight, setCanScrollRight] = useState(false)
 
+  // ─ résultat Lea affiché dans la modale (ne plus fermer avant la réponse)
+  const [result, setResult] = useState(null)   // string | null
+
   const updateScrollState = () => {
     const el = tabsRef.current
     if (!el) return
@@ -46,6 +49,9 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
     const t = setTimeout(updateScrollState, 350)
     return () => clearTimeout(t)
   }, [tab])
+
+  // Quand on change d'onglet, on réinitialise le résultat
+  const switchTab = (id) => { setTab(id); setResult(null) }
 
   const [word,        setWord]        = useState('')
   const [sentence,    setSentence]    = useState('')
@@ -75,8 +81,6 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
   const wikiUrl = wikiResult && wikiResult.content_urls && wikiResult.content_urls.desktop && wikiResult.content_urls.desktop.page
 
   const handleWikiSearch = async (overrideTerm) => {
-    // Guard : si appelé via onClick={handleWikiSearch}, overrideTerm est un Event React.
-    // Seules les strings sont des termes de recherche valides.
     const isStringTerm = typeof overrideTerm === 'string'
     const term = (isStringTerm ? overrideTerm : wikiQuery).trim()
     if (!term) return
@@ -93,7 +97,6 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
       const data = await res.json()
       setWikiResult(data)
     } catch {
-      // Fallback opensearch — suggestions d'orthographe alternatives
       try {
         const sugRes = await fetch(
           `https://fr.wikipedia.org/w/api.php?action=opensearch&search=${encodeURIComponent(term)}&limit=6&namespace=0&format=json&origin=*`
@@ -196,29 +199,39 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
     onClose()
   }
 
+  // ─ handleSend : attend la réponse et l'affiche dans la modale
   const handleSend = async () => {
     if (loading) return
+    setResult(null)
+    let text = null
+
     if (tab === 'synonymes') {
       if (!word.trim()) return
-      await getSynonyms({ word, sentence, level })
-      onClose()
+      text = await getSynonyms({ word, sentence, level })
     } else if (tab === 'cherche') {
       if (!description.trim()) return
-      await searchWord(description)
-      onClose()
+      text = await searchWord(description)
     } else if (tab === 'predictif') {
       if (!hasChapterContent) return
-      await getPredictiveWords()
-      onClose()
+      text = await getPredictiveWords()
     } else if (tab === 'conseil') {
-      await getDiscovery()
+      text = await getDiscovery()
       localStorage.setItem('dicoCaroConseil', TODAY)
       setCouncilDone(true)
+    }
+
+    if (text) {
+      // On garde la modale ouverte et on affiche le résultat directement
+      setResult(text)
+    } else {
+      // Fallback : si pas de réponse (erreur réseau, etc.) on ferme
       onClose()
     }
   }
 
-  const canSend = hasKey && !loading && (
+  const resetForm = () => setResult(null)
+
+  const canSend = hasKey && !loading && !result && (
     (tab === 'synonymes' && word.trim().length > 0)        ||
     (tab === 'cherche'   && description.trim().length > 0) ||
     (tab === 'predictif' && hasChapterContent)             ||
@@ -228,7 +241,7 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
   const showFooter = hasKey
     && tab !== 'wiki'
     && tab !== 'akinator'
-    && !(tab === 'conseil' && councilDone)
+    && !(tab === 'conseil' && councilDone && !result)
 
   return (
     <Modal
@@ -260,7 +273,7 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
                 key={t.id}
                 ref={el => (tabRefs.current[t.id] = el)}
                 style={{ ...S.tab, ...(tab === t.id ? S.tabActive : {}) }}
-                onClick={() => setTab(t.id)}
+                onClick={() => switchTab(t.id)}
               >
                 {t.icon} {t.label}
               </button>
@@ -272,7 +285,18 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
 
         <div style={S.body}>
 
-          {tab === 'synonymes' && (
+          {/* ─ Bloc résultat Léa — affiché à la place du form tant que result est non null */}
+          {result && (
+            <div style={S.resultWrap}>
+              <div style={S.resultHdr}>
+                <span style={S.resultLea}>🌿 Léa</span>
+                <button style={S.resultNew} onClick={resetForm}>Nouvelle recherche</button>
+              </div>
+              <div style={S.resultText}>{result}</div>
+            </div>
+          )}
+
+          {!result && tab === 'synonymes' && (
             <div style={S.form}>
               <label style={S.label}>Le mot dont tu cherches des alternatives</label>
               <input
@@ -303,7 +327,7 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
             </div>
           )}
 
-          {tab === 'cherche' && (
+          {!result && tab === 'cherche' && (
             <div style={S.form}>
               <label style={S.label}>Décris ce que tu veux dire — Léa trouve le mot</label>
               <div style={S.hint}>
@@ -377,7 +401,7 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
               {akinPhase === 'candidates' && (
                 <>
                   <div style={S.hint}>
-                    Voici les mots que Léa propose — clique « Copier » pour récupérer le mot, « Explique-moi » pour creuser dans le chat.
+                    Voici les mots que Léa propose — clique « Copier » pour récupérer le mot, « Explique-moi » pour creuser dans le chat.
                   </div>
                   {akinCandidates.map((cand, i) => (
                     <div key={`${cand.word}-${i}`} style={S.akinCandidate}>
@@ -452,7 +476,7 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
 
               {wikiSuggestions.length > 0 && !wikiResult && (
                 <div style={S.wikiSugWrap}>
-                  <div style={S.wikiSugLabel}>Voulais-tu dire ?</div>
+                  <div style={S.wikiSugLabel}>Voulais-tu dire ?</div>
                   <div style={S.wikiSugList}>
                     {wikiSuggestions.map(s => (
                       <button
@@ -493,7 +517,7 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
             </div>
           )}
 
-          {tab === 'predictif' && (
+          {!result && tab === 'predictif' && (
             <div style={S.form}>
               <div style={S.akinatorCard}>
                 <div style={S.akinatorIcon}>🔮</div>
@@ -519,7 +543,7 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
             </div>
           )}
 
-          {tab === 'conseil' && (
+          {!result && tab === 'conseil' && (
             <div style={S.form}>
               <div style={S.akinatorCard}>
                 <div style={S.akinatorIcon}>💡</div>
@@ -530,7 +554,7 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
                   Léa choisit un mot rare, une tournure stylistique ou une figure
                   de style que tu pourrais intégrer dans ton écriture autobiographique.
                 </p>
-                {councilDone && (
+                {councilDone && !result && (
                   <p style={{ ...S.akinatorSub, color: '#6B8F71', fontStyle: 'italic' }}>
                     Tu as déjà reçu ton conseil du jour — reviens demain pour un nouveau mot ✨
                   </p>
@@ -546,7 +570,10 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
             {!hasKey && (
               <p style={S.noKey}>Configure ta clé API Anthropic dans les réglages pour activer Léa.</p>
             )}
-            {hasKey && (
+            {hasKey && result && (
+              <button style={S.sendBtn} onClick={onClose}>Fermer</button>
+            )}
+            {hasKey && !result && (
               <button
                 style={{ ...S.sendBtn, opacity: canSend ? 1 : .45, cursor: canSend ? 'pointer' : 'not-allowed' }}
                 onClick={handleSend}
@@ -591,7 +618,7 @@ const S = {
   },
   tabs: {
     display: 'flex', gap: 4, padding: '10px 16px 0',
-    flexWrap: 'wrap',  // NEW-01 : wrap pour éviter le débordement du 6e onglet
+    flexWrap: 'wrap',
   },
   tab: {
     display: 'flex', alignItems: 'center', gap: 5,
@@ -663,6 +690,28 @@ const S = {
     fontFamily: "'Nunito', sans-serif", cursor: 'pointer',
     marginTop: 4,
   },
+  // ─ Résultat Lea dans la modale
+  resultWrap: {
+    display: 'flex', flexDirection: 'column', gap: 12,
+  },
+  resultHdr: {
+    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+  },
+  resultLea: {
+    fontSize: '.8rem', fontWeight: 700, color: '#6B8F71',
+    fontFamily: "'Nunito', sans-serif",
+  },
+  resultNew: {
+    background: 'none', border: 'none', cursor: 'pointer',
+    fontSize: '.74rem', color: '#8B7355', fontWeight: 600,
+    fontFamily: "'Nunito', sans-serif", textDecoration: 'underline', padding: 0,
+  },
+  resultText: {
+    background: '#F5F0E8', borderRadius: 10, padding: '14px 16px',
+    fontSize: '.84rem', color: '#2D261E', lineHeight: 1.65,
+    fontFamily: "'Nunito', sans-serif", whiteSpace: 'pre-wrap',
+  },
+  // ─ Akinator
   akinatorCard: {
     background: '#F5F0E8', borderRadius: 12, padding: '20px',
     textAlign: 'center', display: 'flex', flexDirection: 'column',
