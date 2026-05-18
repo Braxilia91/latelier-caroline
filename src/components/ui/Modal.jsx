@@ -22,7 +22,10 @@ import { useEffect, useRef } from 'react'
 export default function Modal({
   onClose,
   ariaLabel,
-  closeOnOverlay = true,
+  // Default false : évite la fermeture accidentelle au click outside / Alt+Tab.
+  // L'utilisateur ferme via le bouton X ou la touche Échap (déjà câblés).
+  // Une modale peut opt-in explicitement avec closeOnOverlay={true} si besoin.
+  closeOnOverlay = false,
   overlayStyle,
   overlayClassName,
   modalStyle,
