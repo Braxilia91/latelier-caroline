@@ -286,7 +286,8 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
         messages: history,
         maxTokens: type === 'chat' ? 900 : 600,
         onChunk: (text) => {
-          setStreaming(text)
+          // Ne pas streamer dans le CoachPanel si la réponse est gérée localement (ex: DicoCaroModal)
+          if (!hideAssistantMessage) setStreaming(text)
           if (!firstChunkLogged) {
             firstChunkLogged = true
             ttsLog('text_first_chunk', { partialLen: text.length })
@@ -295,8 +296,6 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
       })
       ttsLog('text_done', { textLen: full.length })
 
-      // N'ajoute la réponse dans le chat que si la modale ne gère pas
-      // elle-même l'affichage (ex: DicoCaroModal affiche localement).
       if (!hideAssistantMessage) {
         addMessage({ role: 'assistant', content: full })
       }
