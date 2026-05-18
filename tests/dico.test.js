@@ -2,11 +2,12 @@
  * tests/dico.test.js — Vitest
  *
  * Tests unitaires sur les fonctions DicoCaro :
- *   - buildSynonymPrompt     → getSynonyms
- *   - buildWordSearchPrompt  → searchWord
- *   - buildAkinatorSoftPrompt → startAkinatorSoft
- *   - buildPredictivePrompt  → getPredictiveWords
- *   - buildDiscoveryPrompt   → getDiscovery
+ *   - buildSynonymPrompt      → getSynonyms
+ *   - buildWordSearchPrompt   → searchWord
+ *   - buildDicoGuessPrompt    → devinage lexical (remplace Akinator)
+ *   - buildDicoExplainPrompt  → explication du mot trouvé
+ *   - buildPredictivePrompt   → getPredictiveWords
+ *   - buildDiscoveryPrompt    → getDiscovery
  *
  * Stratégie : tester les fonctions de construction de prompt directement
  * (pures, sans effets de bord). Les hooks useCoach wrappent ces fonctions
@@ -16,7 +17,8 @@ import { describe, it, expect } from 'vitest'
 import {
   buildSynonymPrompt,
   buildWordSearchPrompt,
-  buildAkinatorSoftPrompt,
+  buildDicoGuessPrompt,
+  buildDicoExplainPrompt,
   buildPredictivePrompt,
   buildDiscoveryPrompt,
 } from '../src/lib/prompts'
@@ -77,58 +79,86 @@ describe('buildWordSearchPrompt', () => {
 })
 
 // ──────────────────────────────────────────────────────────────────
-// buildAkinatorSoftPrompt
+// buildDicoGuessPrompt  (remplace buildAkinatorSoftPrompt)
 // ──────────────────────────────────────────────────────────────────
-describe('buildAkinatorSoftPrompt', () => {
-  const ANSWERS_FULL = {
-    nature:    'émotion',
-    mouvement: 'oui',
-    registre:  'soutenu',
-    contexte:  'Quand elle est partie sans se retourner.',
+describe('buildDicoGuessPrompt', () => {
+  const QUERY_FULL = {
+    query: 'un violon ancien fabriqué par un grand luthier italien',
+    rejectedWords: [],
   }
 
-  it('contient la nature', () => {
-    const prompt = buildAkinatorSoftPrompt(ANSWERS_FULL)
-    expect(prompt).toContain('émotion')
+  it('contient la description query', () => {
+    const prompt = buildDicoGuessPrompt(QUERY_FULL)
+    expect(prompt).toContain('violon ancien')
   })
 
-  it('contient le mouvement', () => {
-    const prompt = buildAkinatorSoftPrompt(ANSWERS_FULL)
-    expect(prompt).toContain('oui')
+  it('mentionne le format JSON attendu', () => {
+    const prompt = buildDicoGuessPrompt(QUERY_FULL)
+    expect(prompt).toContain('"guesses"')
   })
 
-  it('contient le registre', () => {
-    const prompt = buildAkinatorSoftPrompt(ANSWERS_FULL)
-    expect(prompt).toContain('soutenu')
+  it('contient la mention confidence', () => {
+    const prompt = buildDicoGuessPrompt(QUERY_FULL)
+    expect(prompt).toContain('confidence')
   })
 
-  it('contient le contexte', () => {
-    const prompt = buildAkinatorSoftPrompt(ANSWERS_FULL)
-    expect(prompt).toContain('Quand elle est partie sans se retourner.')
+  it('contient les mots rejetés quand fournis', () => {
+    const prompt = buildDicoGuessPrompt({
+      query: 'sentiment mélangé de tristesse et joie',
+      rejectedWords: ['nostalgie', 'spleen'],
+    })
+    expect(prompt).toContain('nostalgie')
+    expect(prompt).toContain('spleen')
   })
 
-  it('fonctionne sans mouvement (optionnel)', () => {
-    const prompt = buildAkinatorSoftPrompt({ nature: 'sensation', registre: 'courant', contexte: '' })
-    expect(typeof prompt).toBe('string')
-    expect(prompt.length).toBeGreaterThan(20)
-    // Le prompt doit mettre "non précisé" pour les champs manquants
-    expect(prompt).toContain('non précisé')
-  })
-
-  it('fonctionne sans contexte (optionnel)', () => {
-    const prompt = buildAkinatorSoftPrompt({ nature: 'état', mouvement: 'non', registre: 'mixte', contexte: '' })
+  it('fonctionne sans rejectedWords', () => {
+    const prompt = buildDicoGuessPrompt({ query: 'une chose douce' })
     expect(typeof prompt).toBe('string')
     expect(prompt.length).toBeGreaterThan(20)
   })
 
-  it('fonctionne avec contexte undefined', () => {
-    expect(() => buildAkinatorSoftPrompt({ nature: 'idée', mouvement: undefined, registre: undefined, contexte: undefined })).not.toThrow()
+  it('fonctionne avec rejectedWords vide', () => {
+    expect(() => buildDicoGuessPrompt({ query: 'idée floue', rejectedWords: [] })).not.toThrow()
+  })
+
+  it('fonctionne avec query vide', () => {
+    expect(() => buildDicoGuessPrompt({ query: '' })).not.toThrow()
   })
 
   it('est une string non-vide', () => {
-    const prompt = buildAkinatorSoftPrompt(ANSWERS_FULL)
+    const prompt = buildDicoGuessPrompt(QUERY_FULL)
     expect(typeof prompt).toBe('string')
     expect(prompt.length).toBeGreaterThan(30)
+  })
+})
+
+// ──────────────────────────────────────────────────────────────────
+// buildDicoExplainPrompt
+// ──────────────────────────────────────────────────────────────────
+describe('buildDicoExplainPrompt', () => {
+  it('contient le mot à expliquer', () => {
+    const prompt = buildDicoExplainPrompt('nostalgie')
+    expect(prompt).toContain('nostalgie')
+  })
+
+  it('mentionne le format JSON attendu', () => {
+    const prompt = buildDicoExplainPrompt('spleen')
+    expect(prompt).toContain('"definition"')
+    expect(prompt).toContain('"trivia"')
+  })
+
+  it('est une string non-vide', () => {
+    const prompt = buildDicoExplainPrompt('mélancolie')
+    expect(typeof prompt).toBe('string')
+    expect(prompt.length).toBeGreaterThan(20)
+  })
+
+  it('ne plante pas avec un mot vide', () => {
+    expect(() => buildDicoExplainPrompt('')).not.toThrow()
+  })
+
+  it('ne plante pas avec undefined', () => {
+    expect(() => buildDicoExplainPrompt(undefined)).not.toThrow()
   })
 })
 
@@ -137,19 +167,15 @@ describe('buildAkinatorSoftPrompt', () => {
 // ──────────────────────────────────────────────────────────────────
 describe('buildPredictivePrompt', () => {
   it('contient (une partie du) texte du chapitre', () => {
-    const content = 'Je me souviens d\u2019un été brûlant dans la cour de la maison.'
+    const content = 'Je me souviens d’un été brûlant dans la cour de la maison.'
     const prompt = buildPredictivePrompt(content)
-    // Le prompt tronque à 1000 chars — notre texte court doit y être intégralement
     expect(prompt).toContain('été brûlant')
   })
 
   it('tronque les chapitres très longs — contenu limité à 1000 chars', () => {
     const long = 'A'.repeat(2000)
     const prompt = buildPredictivePrompt(long)
-    // Le prompt inclut 1000 chars de contenu + ~614 chars de texte statique = ~1614
-    // On vérifie que le contenu n'est PAS passé intégralement (2000 A)
     expect(prompt).not.toContain('A'.repeat(1001))
-    // Et que la taille totale reste raisonnable (< 1800 avec marge)
     expect(prompt.length).toBeLessThan(1800)
   })
 
@@ -189,9 +215,8 @@ describe('buildDiscoveryPrompt', () => {
     expect(() => buildDiscoveryPrompt(undefined)).not.toThrow()
   })
 
-  it('contient une référence à l\u2019autobiographie ou au contexte', () => {
+  it('contient une référence à l’autobiographie ou au contexte', () => {
     const prompt = buildDiscoveryPrompt('Elle avait les yeux clairs.')
-    // Le prompt doit mentionner Caroline ou l'autobiographie — vérifier un mot clé métier
     const lower = prompt.toLowerCase()
     const hasMention = lower.includes('caroline') || lower.includes('autobio') || lower.includes('mot') || lower.includes('écriture')
     expect(hasMention).toBe(true)
