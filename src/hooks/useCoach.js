@@ -6,12 +6,10 @@ import {
   buildVocabPrompt, buildThreadPrompt,
   buildDoubtPrompt, buildVracInjectPrompt,
   buildDiscoveryPrompt, buildSynonymPrompt,
-  buildWordSearchPrompt, buildAkinatorSoftPrompt,
-  buildPredictivePrompt, buildAkinatorTurnPrompt,
+  buildWordSearchPrompt,
+  buildPredictivePrompt,
   buildMemoryExtractPrompt, buildDigPrompt,
 } from '../lib/prompts'
-
-const AKINATOR_SYSTEM_PROMPT = `Tu joues à un jeu de devinette lexicale en français pour aider Caroline à trouver un mot. Tu poses des questions courtes et pertinentes, ou tu proposes des candidats finaux. Tu réponds UNIQUEMENT au format JSON demandé. Aucun markdown, aucun préambule, aucun texte hors du JSON.`
 
 const MEMORY_SYSTEM_PROMPT = `Tu es chargée d'extraire UN fait notable d'un échange entre Caroline et Léa, pour la mémoire long-terme de Léa. Tu réponds par 1 phrase courte (max 18 mots) qui résume un fait personnel concret, une émotion partagée, un souvenir évoqué, ou une décision narrative — PAS un compliment générique ni une métaphore. Si rien de notable, réponds exactement "RIEN".`
 
@@ -65,9 +63,6 @@ function ttsNow() {
 
 export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, leaVoice, addMessage, chatHistory, carolineProfile, leaMemory, updateLeaMemory }) {
   const [loading,      setLoading]      = useState(false)
-  // chatLoading : true uniquement pour les appels visibles dans le CoachPanel
-  // (hideAssistantMessage === false). Permet de masquer la bulle «Léa tape…»
-  // pendant les appels DicoCaro qui gèrent leur propre UI.
   const [chatLoading,  setChatLoading]  = useState(false)
   const [streaming,    setStreaming]    = useState('')
   const [voiceOn,      setVoiceOn]      = useState(true)
@@ -78,7 +73,6 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
   const speedRef       = useRef(1.0)
   const voiceOnRef     = useRef(true)
   const ttsChainRef    = useRef(null)
-  // TTS/Amorce — identifiant de tour pour invalider les tours précédents
   const turnIdRef      = useRef(null)
 
   useEffect(() => {
@@ -171,23 +165,16 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
   ) => {
     if (!apiKey) return null
 
-    // TTS/Phase 0 — Instrumentation latence
     const ttsRunId = 'lat_' + Math.random().toString(36).slice(2, 9)
     const ttsT0 = ttsNow()
     const ttsLog = (event, extras = {}) => {
       try {
-        console.info('[TTS/lat]', {
-          runId: ttsRunId,
-          event,
-          elapsedMs: Math.round(ttsNow() - ttsT0),
-          ...extras,
-        })
-      } catch (_) { /* tolérant */ }
+        console.info('[TTS/lat]', { runId: ttsRunId, event, elapsedMs: Math.round(ttsNow() - ttsT0), ...extras })
+      } catch (_) {}
     }
     ttsLog('user_send', { type, userTextLen: (userText || '').length })
 
     setLoading(true)
-    // chatLoading : uniquement pour les appels visibles dans CoachPanel
     if (!hideAssistantMessage) setChatLoading(true)
     setStreaming('')
 
@@ -196,10 +183,8 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
       addMessage({ role: 'user', content: uiMessage })
     }
 
-    // ── TTS/Amorce — setup ───────────────────────────────────────
     const shouldPlayAmorce = type === 'chat' && voiceOn && !!openAiKey
 
-    // turnId : invalide les tours précédents dès l'entrée dans sendMessage
     const turnId = Symbol('turn')
     turnIdRef.current = turnId
 
@@ -207,7 +192,6 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
     const amorceFinished = new Promise(r => { amorceFinishedResolve = r })
     let amorceEndTime = null
 
-    // TTS/Patience — prefetch en parallèle du fetch main dès text_done.
     let patienceData
     let patienceAudioPromise = null
 
@@ -216,22 +200,16 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
 
       const amorce = pickAmorce(userText)
       ttsLog('tts_request', {
-        isAmorce: true,
-        ttsRole: 'amorce',
-        family: amorce.family,
-        templateKey: amorce.templateKey,
-        oraliteUsed: amorce.oraliteUsed,
-        amorceTextLen: amorce.text.length,
+        isAmorce: true, ttsRole: 'amorce',
+        family: amorce.family, templateKey: amorce.templateKey,
+        oraliteUsed: amorce.oraliteUsed, amorceTextLen: amorce.text.length,
       })
 
       ;(async () => {
         try {
           const audio = await speakWithOpenAI({
-            openAiKey,
-            text: amorce.text,
-            voice: leaVoice,
-            speed: speedRef.current,
-            autoPlay: false,
+            openAiKey, text: amorce.text, voice: leaVoice,
+            speed: speedRef.current, autoPlay: false,
             onLatencyLog: (event, extras) => ttsLog(event, { isAmorce: true, ttsRole: 'amorce', ...extras }),
           })
 
@@ -246,17 +224,12 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
 
           await new Promise(resolve => {
             let playStarted = false
-
             const done = () => {
               if (!amorceEndTime) amorceEndTime = ttsNow()
               try { audio.removeEventListener('pause', onPause) } catch (_) {}
               resolve()
             }
-
-            const onPause = () => {
-              if (playStarted) done()
-            }
-
+            const onPause = () => { if (playStarted) done() }
             audio.addEventListener('ended', done, { once: true })
             audio.addEventListener('error', done, { once: true })
             audio.addEventListener('pause', onPause)
@@ -265,7 +238,6 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
               ttsLog('audio_play_start', { isAmorce: true, ttsRole: 'amorce', family: amorce.family })
               setTtsState({ playing: true, paused: false, speed: speedRef.current, mode: 'openai' })
             }, { once: true })
-
             audio.play().catch(done)
           })
 
@@ -282,7 +254,6 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
       amorceFinishedResolve()
     }
 
-    // ── Appel Claude (en parallèle de l'amorce) ──────────────────
     let full = ''
     let firstChunkLogged = false
 
@@ -293,7 +264,6 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
         messages: history,
         maxTokens: type === 'chat' ? 900 : 600,
         onChunk: (text) => {
-          // Ne pas streamer dans le CoachPanel si la réponse est gérée localement (ex: DicoCaroModal)
           if (!hideAssistantMessage) setStreaming(text)
           if (!firstChunkLogged) {
             firstChunkLogged = true
@@ -316,12 +286,7 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
           lastSession: new Date().toISOString(),
           lastChapter: currentChapter?.title || null,
         })
-        extractKeyPointInBackground({
-          apiKey,
-          userText,
-          assistantText: full,
-          updateLeaMemory,
-        })
+        extractKeyPointInBackground({ apiKey, userText, assistantText: full, updateLeaMemory })
       }
 
       if (voiceOn && full) {
@@ -332,36 +297,19 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
 
           if (shouldPlayAmorce) {
             patienceData = pickPatience()
-            ttsLog('tts_request', {
-              isPatience: true,
-              ttsRole: 'patience',
-              patienceIdx: patienceData.patienceIdx,
-              note: 'prefetch_parallel',
-            })
+            ttsLog('tts_request', { isPatience: true, ttsRole: 'patience', patienceIdx: patienceData.patienceIdx, note: 'prefetch_parallel' })
             patienceAudioPromise = speakWithOpenAI({
-              openAiKey,
-              text: patienceData.text,
-              voice: leaVoice,
-              speed: speedRef.current,
-              autoPlay: false,
+              openAiKey, text: patienceData.text, voice: leaVoice,
+              speed: speedRef.current, autoPlay: false,
               onLatencyLog: (event, extras) => ttsLog(event, { isPatience: true, ttsRole: 'patience', ...extras }),
             }).catch(() => null)
           }
 
           if (segments.length <= 1) {
-            ttsLog('tts_request', {
-              isAmorce: false,
-              ttsRole: 'main',
-              segmentIdx: 0,
-              segmentsTotal: 1,
-              segmentLen: (segments[0] || full).length,
-            })
+            ttsLog('tts_request', { isAmorce: false, ttsRole: 'main', segmentIdx: 0, segmentsTotal: 1, segmentLen: (segments[0] || full).length })
             const mainAudioPromise = speakWithOpenAI({
-              openAiKey,
-              text: segments[0] || full,
-              voice: leaVoice,
-              speed: speedRef.current,
-              autoPlay: false,
+              openAiKey, text: segments[0] || full, voice: leaVoice,
+              speed: speedRef.current, autoPlay: false,
               onLatencyLog: (event, extras) => ttsLog(event, { isAmorce: false, ttsRole: 'main', segmentIdx: 0, ...extras }),
             })
 
@@ -403,7 +351,7 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
               const ac = new AbortController()
               mainAudio.__ttsAbort = ac
               const opts = { signal: ac.signal }
-              mainAudio.addEventListener('play',  () => { ttsLog('audio_play_start', { isAmorce: false, ttsRole: 'main', segmentIdx: 0 }); setTtsState({ playing: true,  paused: false, speed: speedRef.current, mode: 'openai' }) }, opts)
+              mainAudio.addEventListener('play',  () => { ttsLog('audio_play_start', { isAmorce: false, ttsRole: 'main', segmentIdx: 0 }); setTtsState({ playing: true, paused: false, speed: speedRef.current, mode: 'openai' }) }, opts)
               mainAudio.addEventListener('pause', () => setTtsState(s => ({ ...s, playing: false, paused: true })), opts)
               mainAudio.addEventListener('ended', () => setTtsState({ playing: false, paused: false, speed: speedRef.current, mode: null }), opts)
               mainAudio.addEventListener('error', () => setTtsState({ playing: false, paused: false, speed: speedRef.current, mode: null }), opts)
@@ -411,29 +359,16 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
               mainAudio.play().catch(() => {})
 
             } catch (ttsErr) {
-              console.warn('[TTS] OpenAI échec, fallback navigateur', {
-                status: ttsErr?.status ?? null,
-                message: ttsErr?.message || String(ttsErr),
-                body: ttsErr?.body || null,
-              })
+              console.warn('[TTS] OpenAI échec, fallback navigateur', { status: ttsErr?.status ?? null, message: ttsErr?.message || String(ttsErr), body: ttsErr?.body || null })
               await amorceFinished
               if (turnIdRef.current === turnId) speakBrowserManaged(full)
             }
 
           } else {
-            ttsLog('tts_request', {
-              isAmorce: false,
-              ttsRole: 'main',
-              segmentIdx: 0,
-              segmentsTotal: segments.length,
-              segmentLen: segments[0].length,
-            })
+            ttsLog('tts_request', { isAmorce: false, ttsRole: 'main', segmentIdx: 0, segmentsTotal: segments.length, segmentLen: segments[0].length })
             const firstSegmentPromise = speakWithOpenAI({
-              openAiKey,
-              text: segments[0],
-              voice: leaVoice,
-              speed: speedRef.current,
-              autoPlay: false,
+              openAiKey, text: segments[0], voice: leaVoice,
+              speed: speedRef.current, autoPlay: false,
               onLatencyLog: (event, extras) => ttsLog(event, { isAmorce: false, ttsRole: 'main', segmentIdx: 0, ...extras }),
             })
 
@@ -443,28 +378,17 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
             const playNext = (audio, segmentIdx) => {
               if (ttsChainRef.current !== chainId || !voiceOnRef.current) {
                 try { audio?.pause() } catch (_) {}
-                setTtsState(s => s.mode === 'openai'
-                  ? { playing: false, paused: false, speed: s.speed, mode: null }
-                  : s)
+                setTtsState(s => s.mode === 'openai' ? { playing: false, paused: false, speed: s.speed, mode: null } : s)
                 return
               }
 
               const nextIdx = segmentIdx + 1
               let nextPromise = null
               if (nextIdx < segments.length) {
-                ttsLog('tts_request', {
-                  isAmorce: false,
-                  ttsRole: 'main',
-                  segmentIdx: nextIdx,
-                  segmentsTotal: segments.length,
-                  segmentLen: segments[nextIdx].length,
-                })
+                ttsLog('tts_request', { isAmorce: false, ttsRole: 'main', segmentIdx: nextIdx, segmentsTotal: segments.length, segmentLen: segments[nextIdx].length })
                 nextPromise = speakWithOpenAI({
-                  openAiKey,
-                  text: segments[nextIdx],
-                  voice: leaVoice,
-                  speed: speedRef.current,
-                  autoPlay: false,
+                  openAiKey, text: segments[nextIdx], voice: leaVoice,
+                  speed: speedRef.current, autoPlay: false,
                   onLatencyLog: (event, extras) => ttsLog(event, { isAmorce: false, ttsRole: 'main', segmentIdx: nextIdx, ...extras }),
                 })
               }
@@ -514,10 +438,7 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
                 ttsLog('tts_blob_ready', { isAmorce: false, ttsRole: 'main', segmentIdx: 0 })
               } catch (ttsErr) {
                 if (ttsChainRef.current !== chainId) return
-                console.warn('[TTS] segment 0 OpenAI échec, fallback navigateur', {
-                  status: ttsErr?.status ?? null,
-                  message: ttsErr?.message || String(ttsErr),
-                })
+                console.warn('[TTS] segment 0 OpenAI échec, fallback navigateur', { status: ttsErr?.status ?? null, message: ttsErr?.message || String(ttsErr) })
                 speakBrowserManaged(segments[0])
                 ttsChainRef.current = null
                 return
@@ -625,11 +546,7 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
     if (!word?.trim()) return null
     return sendMessage(
       buildSynonymPrompt({ word: word.trim(), sentence: sentence?.trim() || '', level: level || 'mixte' }),
-      {
-        type: 'synonyms',
-        hideUserMessage: true,
-        hideAssistantMessage: true,
-      }
+      { type: 'synonyms', hideUserMessage: true, hideAssistantMessage: true }
     )
   }, [sendMessage])
 
@@ -652,38 +569,6 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
     })
   }, [sendMessage, currentChapter])
 
-  // ── Akinator — les réponses restent dans le CoachPanel ─────────
-  const startAkinator = useCallback(async () => {
-    return sendMessage(
-      "Je cherche un mot précis mais je n'arrive pas à le formuler. Aide-moi à le trouver en me posant des questions une à une — sur l'émotion, la sensation, le contexte ou la nuance que je veux exprimer. Commence par ta première question.",
-      { type: 'akinator', hideUserMessage: true }
-    )
-  }, [sendMessage])
-
-  const startAkinatorSoft = useCallback(async (answers) => {
-    return sendMessage(
-      buildAkinatorSoftPrompt(answers),
-      { type: 'akinatorSoft', hideUserMessage: true }
-    )
-  }, [sendMessage])
-
-  const askAkinatorTurn = useCallback(async (history) => {
-    if (!apiKey) {
-      return { type: 'error', message: 'Mot de passe Léa manquant — configure-le dans les réglages.' }
-    }
-    try {
-      const raw = await askClaude({
-        apiKey,
-        systemPrompt: AKINATOR_SYSTEM_PROMPT,
-        messages: [{ role: 'user', content: buildAkinatorTurnPrompt({ history: history || [] }) }],
-        maxTokens: 800,
-      })
-      return parseAkinatorResponse(raw)
-    } catch (err) {
-      return { type: 'error', message: mapCoachError(err) }
-    }
-  }, [apiKey])
-
   const toggleVoice = useCallback(() => {
     if (voiceOn) stopAllTts()
     setVoiceOn(v => !v)
@@ -692,8 +577,7 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
   return {
     loading, chatLoading, streaming, voiceOn, toggleVoice, sendMessage,
     correctText, defineWord, findThread, expressDoubt, digPassage, injectVrac,
-    getDiscovery, getSynonyms, searchWord,
-    startAkinator, startAkinatorSoft, askAkinatorTurn, getPredictiveWords,
+    getDiscovery, getSynonyms, searchWord, getPredictiveWords,
     ttsState, ttsPlay, ttsPause, ttsStop, ttsSetSpeed,
   }
 }
@@ -705,10 +589,7 @@ async function extractKeyPointInBackground({ apiKey, userText, assistantText, up
     const summary = await askClaude({
       apiKey,
       systemPrompt: MEMORY_SYSTEM_PROMPT,
-      messages: [{
-        role: 'user',
-        content: buildMemoryExtractPrompt({ userText, assistantText }),
-      }],
+      messages: [{ role: 'user', content: buildMemoryExtractPrompt({ userText, assistantText }) }],
       maxTokens: 80,
     })
     const point = (summary || '').trim()
@@ -717,51 +598,7 @@ async function extractKeyPointInBackground({ apiKey, userText, assistantText, up
       const existing = (prev?.keyPoints || []).filter(p => p !== point)
       return { keyPoints: [...existing, point].slice(-10) }
     })
-  } catch (_) { /* silencieux */ }
-}
-
-function parseAkinatorResponse(raw) {
-  if (!raw || typeof raw !== 'string') {
-    return { type: 'error', message: "Léa n'a rien renvoyé — réessaie." }
-  }
-  let cleaned = raw.trim()
-    .replace(/^```(?:json)?\s*/i, '')
-    .replace(/\s*```\s*$/, '')
-    .trim()
-  const tryParse = (txt) => {
-    try {
-      const obj = JSON.parse(txt)
-      if (obj?.type === 'question' && typeof obj.question === 'string' && Array.isArray(obj.choices) && obj.choices.length > 0) {
-        return {
-          type: 'question',
-          question: obj.question.trim(),
-          choices: obj.choices.map(c => String(c).trim()).filter(Boolean).slice(0, 6),
-        }
-      }
-      if (obj?.type === 'candidates' && Array.isArray(obj.candidates) && obj.candidates.length > 0) {
-        return {
-          type: 'candidates',
-          candidates: obj.candidates
-            .filter(c => c && typeof c.word === 'string')
-            .map(c => ({
-              word:      String(c.word).trim(),
-              rationale: typeof c.rationale === 'string' ? c.rationale.trim() : '',
-              example:   typeof c.example   === 'string' ? c.example.trim()   : '',
-            }))
-            .slice(0, 6),
-        }
-      }
-    } catch (_) { /* fall through */ }
-    return null
-  }
-  const direct = tryParse(cleaned)
-  if (direct) return direct
-  const match = cleaned.match(/\{[\s\S]*\}/)
-  if (match) {
-    const fallback = tryParse(match[0])
-    if (fallback) return fallback
-  }
-  return { type: 'error', message: "Léa a répondu dans un format inattendu — réessaie." }
+  } catch (_) {}
 }
 
 function mapCoachError(err) {
