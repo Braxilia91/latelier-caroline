@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef } from 'react'
 import Modal from '../ui/Modal'
-import { X, Edit3, Check, Trash2, Archive, Tag, BookOpen, Sparkles } from 'lucide-react'
+import { X, Edit3, Check, Trash2, Archive, Tag, BookOpen, Sparkles, Mic, Square, FileText } from 'lucide-react'
 import useClickAway from '../../hooks/useClickAway'
 import { runVisionOCR } from '../../lib/visionOCR'
 import { runVisionInspire } from '../../lib/visionInspire'
 import { buildTraceContinuationPrompt } from '../../lib/prompts'
+import { transcribeAudio } from '../../lib/claude'
 import { S } from './TraceDetailModal.styles'
 
 // T6A.1 — palette saturée (ADN atelier + distinctivité accrue pour les pastilles vignettes)
@@ -39,6 +40,10 @@ export default function TraceDetailModal({
   currentChapter,  // FEAT-E — chapitre courant, utilisé pour le contexte du brief "Continuer avec Léa"
   apiKey = '',     // FEAT-C — mot de passe Léa pour /api/vision-ocr
   onContinueWithLea, // FEAT-E — callback (briefText, uiMessage) => Promise<void>, ouvre le Coach avec contexte
+  openAiKey = '',           // Lot C — clé OpenAI pour transcribeAudio (Whisper)
+  saveVoiceMemo,            // Lot C — async (traceId, blob, mimeType) => void
+  getVoiceMemo,             // Lot C — async (traceId) => { blob, mimeType } | null
+  deleteVoiceMemo,          // Lot C — async (traceId) => void
 }) {
   const [blobUrl, setBlobUrl] = useState(null)
   const [traceBlob, setTraceBlob] = useState(null)
@@ -66,6 +71,26 @@ export default function TraceDetailModal({
   const [inspireText, setInspireText] = useState('')
   const [inspireErr, setInspireErr] = useState(null)
   const [inspireCopied, setInspireCopied] = useState(false)
+
+  // ─── Lot C — Mémo vocal (Android + PC Chrome, 120s max) ───
+  // Support détecté par feature-detection MediaRecorder (Safari iOS = pas supporté).
+  // Voir P3 décisions produit : pas d'iOS Safari.
+  const VOICE_MEMO_MAX_SEC = 120
+  const voiceMemoSupported = typeof window !== 'undefined' && typeof window.MediaRecorder !== 'undefined'
+  const [voiceMemoBlob,    setVoiceMemoBlob]    = useState(null)   // Blob | null
+  const [voiceMemoUrl,     setVoiceMemoUrl]     = useState(null)   // string | null (objectURL pour <audio>)
+  const [voiceMemoMime,    setVoiceMemoMime]    = useState(null)   // string | null
+  const [recording,        setRecording]        = useState(false)
+  const [recordingElapsed, setRecordingElapsed] = useState(0)      // secondes
+  const [recordError,      setRecordError]      = useState(null)   // string | null (permission refusée, etc.)
+  const [transcribing,     setTranscribing]     = useState(false)
+  const [transcript,       setTranscript]       = useState('')
+  const [transcribeErr,    setTranscribeErr]    = useState(null)
+  const mediaRecorderRef = useRef(null)
+  const mediaStreamRef   = useRef(null)
+  const audioChunksRef   = useRef([])
+  const recordTimerRef   = useRef(null)
+  const recordAutoStopRef = useRef(null)
   const [continuing, setContinuing] = useState(false)
 
   // Resync localTrace quand on change de trace
@@ -83,6 +108,10 @@ export default function TraceDetailModal({
     setInspireText('')
     setInspireErr(null)
     setInspireCopied(false)
+    // Lot C — reset également les états voicememo quand la trace change
+    setTranscript('')
+    setTranscribeErr(null)
+    setRecordError(null)
     setContinuing(false)
   }, [trace?.id, trace])
 
@@ -308,6 +337,155 @@ export default function TraceDetailModal({
   }
 
   // ── FEAT-D — Faire parler l'image pour ouvrir des pistes d'écriture ──
+  // ─── Lot C — Mémo vocal : load au mount + cleanup au unmount ───
+  useEffect(() => {
+    if (!trace?.id || typeof getVoiceMemo !== 'function') return
+    let cancelled = false
+    let createdUrl = null
+    ;(async () => {
+      try {
+        const memo = await getVoiceMemo(trace.id)
+        if (cancelled) return
+        if (memo?.blob) {
+          createdUrl = URL.createObjectURL(memo.blob)
+          setVoiceMemoBlob(memo.blob)
+          setVoiceMemoUrl(createdUrl)
+          setVoiceMemoMime(memo.mimeType || 'audio/webm')
+        } else {
+          setVoiceMemoBlob(null)
+          setVoiceMemoUrl(null)
+          setVoiceMemoMime(null)
+        }
+      } catch (e) {
+        console.warn('[VoiceMemo] load failed', trace.id, e?.message)
+      }
+    })()
+    return () => {
+      cancelled = true
+      if (createdUrl) URL.revokeObjectURL(createdUrl)
+    }
+  }, [trace?.id, getVoiceMemo])
+
+  // Cleanup global au unmount du composant : stop recording si en cours,
+  // libérer le stream micro, clear les timers.
+  useEffect(() => {
+    return () => {
+      if (recordTimerRef.current) { clearInterval(recordTimerRef.current); recordTimerRef.current = null }
+      if (recordAutoStopRef.current) { clearTimeout(recordAutoStopRef.current); recordAutoStopRef.current = null }
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        try { mediaRecorderRef.current.stop() } catch {}
+      }
+      if (mediaStreamRef.current) {
+        try { mediaStreamRef.current.getTracks().forEach(t => t.stop()) } catch {}
+        mediaStreamRef.current = null
+      }
+    }
+  }, [])
+
+  const formatDuration = (sec) => {
+    const s = Math.max(0, Math.floor(sec || 0))
+    const m = Math.floor(s / 60)
+    const r = s % 60
+    return `${m}:${String(r).padStart(2, '0')}`
+  }
+
+  const startRecording = async () => {
+    if (recording || !voiceMemoSupported || !trace?.id) return
+    setRecordError(null)
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      mediaStreamRef.current = stream
+      const recorder = new MediaRecorder(stream)
+      mediaRecorderRef.current = recorder
+      audioChunksRef.current = []
+      recorder.ondataavailable = (e) => { if (e.data && e.data.size > 0) audioChunksRef.current.push(e.data) }
+      recorder.onstop = async () => {
+        // Assemblage + persistance — onstop est appelé en interne par stop() ou par auto-stop 120s.
+        const mime = recorder.mimeType || 'audio/webm'
+        const blob = new Blob(audioChunksRef.current, { type: mime })
+        audioChunksRef.current = []
+        // Libère le micro immédiatement
+        if (mediaStreamRef.current) {
+          try { mediaStreamRef.current.getTracks().forEach(t => t.stop()) } catch {}
+          mediaStreamRef.current = null
+        }
+        // Persist + update UI
+        try {
+          if (typeof saveVoiceMemo === 'function') await saveVoiceMemo(trace.id, blob, mime)
+          // Révoque ancienne URL si existante (évite fuite mémoire)
+          if (voiceMemoUrl) { try { URL.revokeObjectURL(voiceMemoUrl) } catch {} }
+          const url = URL.createObjectURL(blob)
+          setVoiceMemoBlob(blob)
+          setVoiceMemoUrl(url)
+          setVoiceMemoMime(mime)
+        } catch (e) {
+          console.warn('[VoiceMemo] save failed', trace.id, e?.message)
+          setRecordError("Impossible d'enregistrer le mémo.")
+        }
+      }
+      recorder.start()
+      setRecording(true)
+      setRecordingElapsed(0)
+      recordTimerRef.current = setInterval(() => {
+        setRecordingElapsed(prev => prev + 1)
+      }, 1000)
+      recordAutoStopRef.current = setTimeout(() => {
+        stopRecording()
+      }, VOICE_MEMO_MAX_SEC * 1000)
+    } catch (e) {
+      setRecordError(
+        e?.name === 'NotAllowedError'
+          ? 'Permission micro refusée. Autorise le micro dans les réglages du navigateur.'
+          : 'Micro indisponible.'
+      )
+      console.warn('[VoiceMemo] getUserMedia failed', e?.message)
+    }
+  }
+
+  const stopRecording = () => {
+    if (recordTimerRef.current) { clearInterval(recordTimerRef.current); recordTimerRef.current = null }
+    if (recordAutoStopRef.current) { clearTimeout(recordAutoStopRef.current); recordAutoStopRef.current = null }
+    const recorder = mediaRecorderRef.current
+    if (recorder && recorder.state !== 'inactive') {
+      try { recorder.stop() } catch {}
+    }
+    setRecording(false)
+    // recordingElapsed laissé tel quel pour info brève — sera reset au prochain record
+  }
+
+  const deleteVoiceMemoLocal = async () => {
+    if (recording) return
+    if (!window.confirm('Supprimer ce mémo vocal ?')) return
+    try {
+      if (typeof deleteVoiceMemo === 'function' && trace?.id) {
+        await deleteVoiceMemo(trace.id)
+      }
+      if (voiceMemoUrl) { try { URL.revokeObjectURL(voiceMemoUrl) } catch {} }
+      setVoiceMemoBlob(null)
+      setVoiceMemoUrl(null)
+      setVoiceMemoMime(null)
+      setTranscript('')
+      setTranscribeErr(null)
+    } catch (e) {
+      console.warn('[VoiceMemo] delete failed', trace?.id, e?.message)
+    }
+  }
+
+  const runTranscription = async () => {
+    if (transcribing || !voiceMemoBlob || !openAiKey) return
+    setTranscribing(true)
+    setTranscribeErr(null)
+    try {
+      const text = await transcribeAudio({ openAiKey, audioBlob: voiceMemoBlob })
+      setTranscript(typeof text === 'string' ? text.trim() : String(text || '').trim())
+    } catch (e) {
+      setTranscribeErr(e?.message || 'Transcription impossible.')
+      console.warn('[VoiceMemo] transcribe failed', e?.message)
+    } finally {
+      setTranscribing(false)
+    }
+  }
+
   const handleVisionInspire = async () => {
     if (!traceBlob || !apiKey || inspireStatus === 'running') return
     setInspireStatus('running')
@@ -579,6 +757,74 @@ export default function TraceDetailModal({
                   <button type="button" onClick={handleVisionInspire} style={S.linkBtn}>
                     Réessayer
                   </button>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Lot C — Mémo vocal (Android + PC Chrome, 2 min max) */}
+        {voiceMemoSupported && (
+          <div style={S.audioBlock}>
+            <div style={S.audioHeader}>
+              <span>Mémo vocal</span>
+              {recording && (
+                <span style={{ fontSize: '.78rem', fontWeight: 600, color: '#A4361A', fontFamily: "'Nunito', sans-serif" }}>
+                  ● {formatDuration(recordingElapsed)} / {formatDuration(VOICE_MEMO_MAX_SEC)}
+                </span>
+              )}
+            </div>
+
+            <div style={S.audioControls}>
+              {!recording && !voiceMemoBlob && (
+                <button type="button" style={S.audioBtn} onClick={startRecording} aria-label="Enregistrer un mémo vocal">
+                  <Mic size={14} /> Enregistrer
+                </button>
+              )}
+              {recording && (
+                <button
+                  type="button"
+                  style={{ ...S.audioBtn, ...S.audioBtnRec }}
+                  onClick={stopRecording}
+                  aria-label="Arrêter l'enregistrement"
+                >
+                  <Square size={14} /> Arrêter
+                </button>
+              )}
+              {!recording && voiceMemoBlob && openAiKey && !transcript && (
+                <button type="button" style={S.audioBtn} onClick={runTranscription} disabled={transcribing}>
+                  <FileText size={14} /> {transcribing ? 'Transcription…' : 'Transcrire'}
+                </button>
+              )}
+              {!recording && voiceMemoBlob && (
+                <button type="button" style={S.audioBtn} onClick={deleteVoiceMemoLocal} aria-label="Supprimer le mémo vocal">
+                  <Trash2 size={14} /> Supprimer
+                </button>
+              )}
+            </div>
+
+            {recordError && (
+              <p style={{ margin: 0, fontSize: '.78rem', color: '#A4361A', fontFamily: "'Nunito', sans-serif" }}>
+                {recordError}
+              </p>
+            )}
+
+            {!recording && voiceMemoUrl && (
+              <div style={S.audioPreview}>
+                <audio src={voiceMemoUrl} controls preload="metadata" style={{ width: '100%' }} />
+                {!openAiKey && !transcript && (
+                  <p style={{ margin: 0, fontStyle: 'italic', color: '#7A6555' }}>
+                    Configure ta clé OpenAI dans Réglages pour transcrire ce mémo.
+                  </p>
+                )}
+                {transcribeErr && (
+                  <p style={{ margin: 0, color: '#A4361A' }}>{transcribeErr}</p>
+                )}
+                {transcript && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <p style={S.inspireResultLabel}>Transcription</p>
+                    <p style={{ ...S.inspireResultText, fontSize: '.82rem' }}>{transcript}</p>
+                  </div>
                 )}
               </div>
             )}
