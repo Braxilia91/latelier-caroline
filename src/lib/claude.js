@@ -107,7 +107,7 @@ export function normalizeForNarrationFR(text) {
   return applyFrLexicon(cleanForTTS(text))
 }
 
-export async function askClaude({ apiKey, systemPrompt, messages, maxTokens = 600, onChunk }) {
+export async function askClaude({ apiKey, systemPrompt, messages, maxTokens = 600, onChunk, model: modelOverride }) {
   if (!apiKey) throw new Error('Mot de passe Léa manquant')
 
   const response = await fetch(CLAUDE_PROXY, {
@@ -117,7 +117,7 @@ export async function askClaude({ apiKey, systemPrompt, messages, maxTokens = 60
       'X-Lea-Pass': apiKey,
     },
     body: JSON.stringify({
-      model: MODEL,
+      model: modelOverride || MODEL,
       max_tokens: maxTokens,
       system: systemPrompt,
       messages,
