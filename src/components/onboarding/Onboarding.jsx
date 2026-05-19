@@ -1,5 +1,10 @@
 import { useRef, useState } from 'react'
-import { ArrowRight, Feather, Key, Upload } from 'lucide-react'
+import {
+  ArrowRight,
+  Feather,
+  Key,
+  UploadSimple as Upload,
+} from '@phosphor-icons/react'
 
 const LEA_REACTIONS = {
   topic: {
