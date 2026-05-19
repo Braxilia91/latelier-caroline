@@ -1,6 +1,8 @@
 import { useRef, useCallback } from 'react'
 import { useAutoSave } from '../../hooks/useAutoSave'
-import { Save } from 'lucide-react'
+import {
+  FloppyDisk as Save,
+} from '@phosphor-icons/react'
 
 // ── Thèmes visuels ───────────────────────────────────────────────────────────────
 const THEMES = {
@@ -107,7 +109,16 @@ export default function WritingArea({
         {/* Zone d'écriture */}
         <textarea
           ref={taRef}
-          style={{ ...styles.ta, background: theme.areaBg, color: theme.text, caretColor: theme.caret, fontSize: fSize }}
+          style={{
+            ...styles.ta,
+            background: theme.areaBg,
+            color: theme.text,
+            caretColor: theme.caret,
+            fontSize: fSize,
+            // Curseur plume custom au survol de la zone d'ecriture.
+            // Hotspot 3 24 = pointe de la plume en bas-gauche.
+            cursor: 'url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyOCIgaGVpZ2h0PSIyOCIgdmlld0JveD0iMCAwIDI4IDI4Ij4KICA8cGF0aCBkPSJNMjIgMyBDIDE4IDUgMTQgOCAxMiAxMiBMIDQgMjIgTCA5IDIyIEwgMTUgMTYgQyAxOCAxNCAyMSAxMiAyMyAxMCBDIDI1IDggMjUgNCAyMiAzIFoiIGZpbGw9IiNDNDk1NkEiIHN0cm9rZT0iIzZCNEQyRSIgc3Ryb2tlLXdpZHRoPSIwLjciIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz4KICA8bGluZSB4MT0iNCIgeTE9IjIyIiB4Mj0iMTQiIHkyPSIxMyIgc3Ryb2tlPSIjNkI0RDJFIiBzdHJva2Utd2lkdGg9IjEuMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgPHBhdGggZD0iTTE0IDggTCAxNyAxMCBNIDEzIDExIEwgMTYgMTIuNSIgc3Ryb2tlPSIjNkI0RDJFIiBzdHJva2Utd2lkdGg9IjAuNSIgb3BhY2l0eT0iMC42Ii8+Cjwvc3ZnPg==") 3 24, text',
+          }}
           value={chapter.content || ''}
           onChange={e => updateChapter(chapter.id, { content: e.target.value })}
           onSelect={handleSelectionChange}
