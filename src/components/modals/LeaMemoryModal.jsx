@@ -5,7 +5,12 @@
 
 import { useState } from 'react'
 import Modal from '../ui/Modal'
-import { X, Brain, Trash2, AlertTriangle } from 'lucide-react'
+import {
+  X,
+  Brain,
+  Trash as Trash2,
+  Warning as AlertTriangle,
+} from '@phosphor-icons/react'
 
 export default function LeaMemoryModal({ leaMemory, updateLeaMemory, resetLeaMemory, onClose }) {
   const [confirmReset, setConfirmReset] = useState(false)
