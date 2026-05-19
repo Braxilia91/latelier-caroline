@@ -1,5 +1,10 @@
 import { useState } from 'react'
-import { Plus, BookOpen, Trash2, GripVertical } from 'lucide-react'
+import {
+  Plus,
+  BookOpen,
+  Trash as Trash2,
+  DotsSixVertical as GripVertical,
+} from '@phosphor-icons/react'
 
 export default function Sidebar({
   chapters, currentId, setCurrentId,
