@@ -1,7 +1,14 @@
 import { useState } from 'react'
 
 import Modal from '../ui/Modal'
-import { X, Plus, Lightbulb, Send, Trash2, CheckCircle } from 'lucide-react'
+import {
+  X,
+  Plus,
+  Lightbulb,
+  PaperPlaneTilt as Send,
+  Trash as Trash2,
+  CheckCircle,
+} from '@phosphor-icons/react'
 
 const TAGS = ['idée', 'scène', 'souvenir', 'émotion', 'dialogue', 'titre']
 
