@@ -1,7 +1,16 @@
 import { useState } from 'react'
 
 import Modal from '../ui/Modal'
-import { X, BookOpen, ChevronDown, ChevronUp, Check, Lock, Unlock, GripVertical } from 'lucide-react'
+import {
+  X,
+  BookOpen,
+  CaretDown as ChevronDown,
+  CaretUp as ChevronUp,
+  Check,
+  Lock,
+  LockOpen as Unlock,
+  DotsSixVertical as GripVertical,
+} from '@phosphor-icons/react'
 
 export default function PlanModal({ chapters, onClose, updateChapter, reorderChapters }) {
   const [editingId,  setEditingId]  = useState(null)
