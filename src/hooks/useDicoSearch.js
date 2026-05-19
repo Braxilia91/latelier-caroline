@@ -26,15 +26,17 @@ export function useDicoSearch({ apiKey, openAiKey }) {
 
   const debounceRef = useRef(null)
 
-  // Wrapper LLM interne — DicoCaro utilise Haiku 4.5 (claude-haiku-4-5-20251001) :
-  // ~2x plus rapide que Sonnet 4 sur les tâches lexicales (devinage mot + définition courte).
-  // Sonnet reste utilisé pour le chat Léa principal (sendMessage dans useCoach).
-  // Default maxTokens 300 suffit pour 3 guesses courts + why concis.
-  const callLLM = useCallback(async (prompt, maxTokens = 300) => {
+  // Wrapper LLM interne — routing par tâche (modèle passé en 3ème param) :
+  //   * Haiku 4.5 (default) -> phase guessing : JSON strict, instruction-following.
+  //                            Haiku 4.5 surpasse Sonnet 4 sur ces tâches structurées.
+  //   * Sonnet 4 (override)  -> phase explaining : définition littéraire + trivia,
+  //                             qualité d'écriture créative supérieure.
+  // Sonnet reste utilisé pour le chat Léa principal (useCoach.sendMessage).
+  const callLLM = useCallback(async (prompt, maxTokens = 300, model = 'claude-haiku-4-5-20251001') => {
     if (!apiKey) throw new Error('Clé API Anthropic manquante.')
     return askClaude({
       apiKey,
-      model: 'claude-haiku-4-5-20251001',
+      model,
       systemPrompt:
         "Tu es Lea, assistante d'ecriture de Caroline. Tu tolères TOUTE imperfection de saisie (fautes, syntaxe télégraphique, charabia) et déchiffres l'intention. Tu réponds UNIQUEMENT en JSON strict sans texte avant ni après.",
       messages: [{ role: 'user', content: prompt }],
