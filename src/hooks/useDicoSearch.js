@@ -32,7 +32,7 @@ export function useDicoSearch({ apiKey, openAiKey }) {
     return askClaude({
       apiKey,
       systemPrompt:
-        "Tu es Léa, assistante d'écriture de Caroline. Tu réponds UNIQUEMENT en JSON strict sans texte avant ni après.",
+        "Tu es Lea, assistante d'ecriture de Caroline. Tu tolères TOUTE imperfection de saisie (fautes, syntaxe télégraphique, charabia) et déchiffres l'intention. Tu réponds UNIQUEMENT en JSON strict sans texte avant ni après.",
       messages: [{ role: 'user', content: prompt }],
       maxTokens,
     })
