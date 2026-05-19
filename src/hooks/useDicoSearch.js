@@ -50,6 +50,10 @@ export function useDicoSearch({ apiKey, openAiKey }) {
 
     debounceRef.current = setTimeout(async () => {
       const newState = await transitionTyping(stateRef.current, query)
+      // Race-protection : si Caroline a continué de taper pendant l'attente
+      // (debounce + fetch API), on ignore ce résultat pour ne pas écraser
+      // le query courant. Évite le bug "input qui se fige après 3 lettres".
+      if (stateRef.current.query !== query) return
       setState(newState)
     }, 280)
   }, [])
