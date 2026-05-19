@@ -1,7 +1,11 @@
 import { useState, useMemo } from 'react'
 
 import Modal from '../ui/Modal'
-import { X, RefreshCw, ArrowRight } from 'lucide-react'
+import {
+  X,
+  ArrowsClockwise as RefreshCw,
+  ArrowRight,
+} from '@phosphor-icons/react'
 import { INSPIRATION_PROMPTS } from '../../lib/prompts'
 
 const ALL_CATS = ['Toutes', ...Array.from(new Set(INSPIRATION_PROMPTS.map(p => p.cat)))]
