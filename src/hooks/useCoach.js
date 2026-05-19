@@ -494,7 +494,9 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
   }, [sendMessage])
 
   const defineWord = useCallback(async (word) => {
-    return sendMessage(buildVocabPrompt(word), { type: 'vocab' })
+    // hideUserMessage:true → le prompt technique 'Caroline veut comprendre…'
+    // ne pollue plus le chat. Seule la réponse de Léa reste visible.
+    return sendMessage(buildVocabPrompt(word), { type: 'vocab', hideUserMessage: true })
   }, [sendMessage])
 
   const findThread = useCallback(async (chapterText) => {
