@@ -811,7 +811,30 @@ export default function TraceDetailModal({
 
             {!recording && voiceMemoUrl && (
               <div style={S.audioPreview}>
-                <audio src={voiceMemoUrl} controls preload="metadata" style={{ width: '100%' }} />
+                <audio
+                  src={voiceMemoUrl}
+                  controls
+                  preload="metadata"
+                  style={{ width: '100%' }}
+                  onLoadedMetadata={(e) => {
+                    // Bug Chrome/MediaRecorder : la duration est Infinity ou une valeur
+                    // absurde (ex: 71h) car webm/opus genere n'a pas les metadata duration.
+                    // Workaround : seek a +inf force le navigateur a lire le binaire
+                    // jusqu'a la fin -> recalcule la vraie duree -> on remet a 0.
+                    // Voir issue Chromium #642012 (jamais fixe).
+                    const a = e.currentTarget
+                    if (!isFinite(a.duration) || a.duration > 3600) {
+                      const onTimeUpdate = () => {
+                        if (isFinite(a.duration) && a.duration < 3600) {
+                          a.removeEventListener('timeupdate', onTimeUpdate)
+                          a.currentTime = 0
+                        }
+                      }
+                      a.addEventListener('timeupdate', onTimeUpdate)
+                      try { a.currentTime = 1e6 } catch { /* tolérant */ }
+                    }
+                  }}
+                />
                 {!openAiKey && !transcript && (
                   <p style={{ margin: 0, fontStyle: 'italic', color: '#7A6555' }}>
                     Configure ta clé OpenAI dans Réglages pour transcrire ce mémo.
