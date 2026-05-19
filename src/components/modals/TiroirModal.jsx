@@ -3,7 +3,11 @@
 // T6A.1 : pastille de statut en overlay sur chaque vignette
 
 import { useState, useEffect } from 'react'
-import { Archive, X, Plus } from 'lucide-react'
+import {
+  Archive,
+  X,
+  Plus,
+} from '@phosphor-icons/react'
 import Modal from '../ui/Modal'
 
 // T6A.1 — palette dupliquée volontairement (cohérente avec TraceDetailModal).
