@@ -2,7 +2,13 @@ import { useState } from 'react'
 
 import Modal from '../ui/Modal'
 import { useToast } from '../ui/Toast'
-import { X, Download, FileText, BookOpen, FileSignature } from 'lucide-react'
+import {
+  X,
+  DownloadSimple as Download,
+  FileText,
+  BookOpen,
+  Signature as FileSignature,
+} from '@phosphor-icons/react'
 // T8.4c — buildLocalBackup v5 inclut traces metadata + blobs base64.
 import { buildLocalBackup } from '../../lib/db'
 
