@@ -17,6 +17,7 @@ export default function CoachPanel({
     findThread, expressDoubt, removeMessage,
     digPassage,
     ttsState, ttsPlay, ttsPause, ttsStop, ttsSetSpeed,
+    speakMessage,  // UX-Voix : lecture a la demande d'une bulle Lea (independant du voiceOn global)
   } = coach
 
   useEffect(() => {
@@ -133,6 +134,19 @@ export default function CoachPanel({
             >
               {msg.content}
             </div>
+            {/* UX-Voix : bouton ecouter sur bulle Lea (independant du flag voiceOn) */}
+            {msg.role === 'assistant' && typeof speakMessage === 'function' && (
+              <button
+                type="button"
+                onClick={() => speakMessage(msg.content)}
+                style={styles.msgListenBtn}
+                aria-label="Écouter ce message"
+                title="Écouter ce message"
+              >
+                <Volume2 size={11} />
+              </button>
+            )}
+
             {/* LOT 4C.2 — Bouton supprimer (visible si id DB connu, désactivé pendant loading) */}
             {msg.id != null && (
               <button
@@ -361,6 +375,14 @@ const styles = {
     fontSize: 'calc(.83rem * var(--chat-scale, 1))',
     lineHeight: 1.6, color: 'var(--ink)',
     whiteSpace: 'pre-wrap',
+  },
+  // UX-Voix : bouton ecouter discret a cote de la bulle Lea
+  msgListenBtn: {
+    width: 22, height: 22, borderRadius: 6,
+    background: 'transparent', border: 'none',
+    color: 'var(--ink-ll)', cursor: 'pointer',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    opacity: 0.55, marginLeft: 2,
   },
   leaAvatar: {
     width: 26, height: 26,
