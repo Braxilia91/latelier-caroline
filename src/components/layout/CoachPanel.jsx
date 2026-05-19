@@ -1,59 +1,19 @@
 import { useState, useRef, useEffect } from 'react'
-import { Send, Trash2, Scissors, BookOpen, AlertCircle, Lightbulb, Play, Pause, Square, Search } from 'lucide-react'
+import {
+  PaperPlaneTilt as Send,
+  Trash as Trash2,
+  Scissors,
+  BookOpen,
+  WarningCircle as AlertCircle,
+  Lightbulb,
+  Play,
+  Pause,
+  Stop as Square,
+  MagnifyingGlass as Search,
+  SpeakerHigh,
+  SpeakerSlash,
+} from '@phosphor-icons/react'
 import { LEA_COMMANDS } from '../../lib/commands'
-
-// SpeakerIcon — vrai haut-parleur SVG custom (boitier trapezoidal + cone + ondes).
-// Remplace Volume2/VolumeX de lucide-react (jugees trop minimales).
-// Hérite la couleur via currentColor.
-//   on={true}  -> HP avec 2 ondes (son actif)
-//   on={false} -> HP avec croix mute
-const SpeakerIcon = ({ on = true, size = 16 }) => (
-  <svg
-    width={size}
-    height={size}
-    viewBox="0 0 24 24"
-    fill="none"
-    xmlns="http://www.w3.org/2000/svg"
-    aria-hidden="true"
-  >
-    {/* Boitier trapezoidal */}
-    <path
-      d="M3 9.5h3.5L13 4v16l-6.5-5.5H3a1 1 0 0 1-1-1v-4a1 1 0 0 1 1-1Z"
-      fill="currentColor"
-      opacity="0.9"
-    />
-    {/* Membrane / cone */}
-    <ellipse cx="13" cy="12" rx="2" ry="3.5" fill="currentColor" opacity="0.5" />
-    {on ? (
-      <>
-        {/* Onde courte */}
-        <path
-          d="M16.5 8.5a5 5 0 0 1 0 7"
-          stroke="currentColor"
-          strokeWidth="1.6"
-          strokeLinecap="round"
-          fill="none"
-          opacity="0.85"
-        />
-        {/* Onde longue */}
-        <path
-          d="M19 6a8.5 8.5 0 0 1 0 12"
-          stroke="currentColor"
-          strokeWidth="1.6"
-          strokeLinecap="round"
-          fill="none"
-          opacity="0.55"
-        />
-      </>
-    ) : (
-      <>
-        {/* Croix mute */}
-        <line x1="17" y1="9" x2="22" y2="15" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-        <line x1="22" y1="9" x2="17" y2="15" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-      </>
-    )}
-  </svg>
-)
 
 export default function CoachPanel({
   coach, hasKey, currentChapter, chatHistory, welcomeMsg, onOpenVrac,
@@ -157,7 +117,7 @@ export default function CoachPanel({
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
           <button style={styles.iconBtn} onClick={toggleVoice} title={voiceOn ? 'Couper la voix' : 'Activer la voix'} aria-label={voiceOn ? 'Couper la voix de Léa' : 'Activer la voix de Léa'}>
-            <SpeakerIcon on={voiceOn} size={16} />
+            {voiceOn ? <SpeakerHigh size={16} /> : <SpeakerSlash size={16} />}
           </button>
           <button style={styles.iconBtn} onClick={handleClearChat} title="Effacer la conversation" aria-label="Effacer la conversation avec Léa">
             <Trash2 size={15} />
@@ -201,7 +161,7 @@ export default function CoachPanel({
               >
                 {ttsState?.playing
                   ? <Square size={14} fill="currentColor" />
-                  : <SpeakerIcon on={true} size={16} />}
+                  : <SpeakerHigh size={16} />}
               </button>
             )}
 
