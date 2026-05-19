@@ -65,13 +65,16 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
   const [loading,      setLoading]      = useState(false)
   const [chatLoading,  setChatLoading]  = useState(false)
   const [streaming,    setStreaming]    = useState('')
-  const [voiceOn,      setVoiceOn]      = useState(true)
+  // UX-Voix : default OFF. Caroline doit cliquer 🔊 sur une bulle pour ecouter,
+  // ou activer la lecture auto via le toggle voix dans le header CoachPanel.
+  // Evite la consommation tokens TTS OpenAI a chaque message non desire.
+  const [voiceOn,      setVoiceOn]      = useState(false)
   const [ttsState,     setTtsState]     = useState({ playing: false, paused: false, speed: 1.0, mode: null })
 
   const audioRef       = useRef(null)
   const browserUttRef  = useRef(null)
   const speedRef       = useRef(1.0)
-  const voiceOnRef     = useRef(true)
+  const voiceOnRef     = useRef(false)
   const ttsChainRef    = useRef(null)
   const turnIdRef      = useRef(null)
 
@@ -576,11 +579,23 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
     setVoiceOn(v => !v)
   }, [voiceOn, stopAllTts])
 
+  // UX-Voix : speakMessage est l'alias public de speakBrowserManaged.
+  // Permet de declencher la lecture TTS d'un message a la demande (bouton 🔊
+  // par bulle dans CoachPanel) independamment du flag voiceOn global.
+  // Si une lecture est en cours, elle est arretee avant de demarrer la nouvelle.
+  const speakMessage = useCallback((text) => {
+    if (typeof text !== 'string' || !text.trim()) return
+    stopAllTts()
+    speakBrowserManaged(text)
+  }, [speakBrowserManaged, stopAllTts])
+
   return {
     loading, chatLoading, streaming, voiceOn, toggleVoice, sendMessage,
     correctText, defineWord, findThread, expressDoubt, digPassage, injectVrac,
     getDiscovery, getSynonyms, searchWord, getPredictiveWords,
     ttsState, ttsPlay, ttsPause, ttsStop, ttsSetSpeed,
+    // UX-Voix : lecture a la demande d'une bulle Lea (independant de voiceOn).
+    speakMessage,
     // Clés exposées pour DicoCaroModal → useDicoSearch (callLLM) + VoiceSearchButton (Whisper).
     // Le hook les reçoit déjà en params (ligne 64) ; on les rend visibles aux consumers
     // qui n'utilisent pas db directement (ex : DicoCaroModal passe par coach.apiKey).
