@@ -4,6 +4,7 @@
 
 import { useState, useRef, useCallback } from 'react'
 import { Mic, MicOff, Loader2 } from 'lucide-react'
+import { transcribeAudio } from './claude'
 
 const isIOSSafari = () => {
   if (typeof navigator === 'undefined') return false
@@ -11,24 +12,11 @@ const isIOSSafari = () => {
   return /iP(ad|hone|od)/.test(ua) && /Safari/.test(ua) && !/Chrome/.test(ua)
 }
 
-async function transcribeWithWhisper(blob, openAiKey) {
-  const formData = new FormData()
-  formData.append('file', blob, isIOSSafari() ? 'audio.mp4' : 'audio.webm')
-  formData.append('model', 'whisper-1')
-  formData.append('language', 'fr')
-
-  const res = await fetch('https://api.openai.com/v1/audio/transcriptions', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${openAiKey}` },
-    body: formData,
-  })
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    throw new Error(err?.error?.message || `Whisper ${res.status}`)
-  }
-  const data = await res.json()
-  return data.text || ''
-}
+// Note : la transcription Whisper passe par le proxy /api/openai-whisper
+// (cf src/lib/claude.js → transcribeAudio). La clé "openAiKey" ici est en
+// réalité la passphrase Léa (X-Lea-Pass), pas une clé OpenAI native sk-...
+// Faire un appel direct à api.openai.com avec cette passphrase ferait échouer
+// la requête ("Incorrect API key provided"). On réutilise donc l'helper existant.
 
 /**
  * @param {Object}   props
@@ -74,7 +62,7 @@ export function VoiceSearchButton({ onTranscript, openAiKey, maxDuration = 10000
     try {
       let text = ''
       if (openAiKey) {
-        text = await transcribeWithWhisper(blob, openAiKey)
+        text = await transcribeAudio({ openAiKey, audioBlob: blob })
       } else {
         // Fallback Web Speech API si pas de clé OpenAI
         setError('Clé OpenAI manquante — transcription impossible')
