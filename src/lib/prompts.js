@@ -579,7 +579,6 @@ Réponds UNIQUEMENT en JSON strict, sans markdown, sans préambule :
     {"word": "désarroi", "confidence": 0.70, "why": "Registre littéraire — désorientation profonde après une perte"}
   ]
 }`
-}`
 }
 
 // ─── DicoCaro — Explication d'un mot trouvé ─────────────────────
