@@ -15,8 +15,28 @@ const TABS = [
 
 const TODAY = new Date().toDateString()
 
+// ─── Lot UX-Dico-A — persistance des saisies entre fermeture/réouverture ───
+// On ne persiste QUE les inputs courts (pas le state machine guessing/explaining,
+// qui doit toujours repartir à zéro pour cohérence UX).
+const LS_PREFIX = 'dicoCaro:'
+const readLS = (key, fallback = '') => {
+  try {
+    const v = localStorage.getItem(LS_PREFIX + key)
+    return v == null ? fallback : v
+  } catch { return fallback }
+}
+const writeLS = (key, value) => {
+  try {
+    if (value == null || value === '') localStorage.removeItem(LS_PREFIX + key)
+    else localStorage.setItem(LS_PREFIX + key, String(value))
+  } catch { /* quota / privé — silencieux */ }
+}
+
 export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }) {
-  const [tab, setTab] = useState('synonymes')
+  const [tab, setTab] = useState(() => {
+    const saved = readLS('tab', 'synonymes')
+    return ['synonymes', 'cherche', 'wiki', 'predictif', 'conseil'].includes(saved) ? saved : 'synonymes'
+  })
 
   const tabsRef = useRef(null)
   const tabRefs = useRef({})
@@ -24,12 +44,15 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
   const [canScrollRight, setCanScrollRight] = useState(false)
 
   const [result,      setResult]      = useState(null)
-  const [word,        setWord]        = useState('')
-  const [sentence,    setSentence]    = useState('')
-  const [level,       setLevel]       = useState('mixte')
+  const [word,        setWord]        = useState(() => readLS('synWord', ''))
+  const [sentence,    setSentence]    = useState(() => readLS('synSentence', ''))
+  const [level,       setLevel]       = useState(() => {
+    const saved = readLS('synLevel', 'mixte')
+    return ['simple', 'mixte', 'littéraire'].includes(saved) ? saved : 'mixte'
+  })
   const [copiedWord,  setCopiedWord]  = useState(null)
 
-  const [wikiQuery,       setWikiQuery]       = useState('')
+  const [wikiQuery,       setWikiQuery]       = useState(() => readLS('wikiQuery', ''))
   const [wikiResult,      setWikiResult]      = useState(null)
   const [wikiLoading,     setWikiLoading]     = useState(false)
   const [wikiError,       setWikiError]       = useState('')
@@ -40,7 +63,7 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
   )
 
   // ─ Input local DÉCOUPLÉ du state machine — jamais bloqué
-  const [searchInput, setSearchInput] = useState('')
+  const [searchInput, setSearchInput] = useState(() => readLS('cherche', ''))
 
   // ─ Hook recherche lexicale (onglet "Je cherche")
   const dicoSearch = useDicoSearch({ apiKey: coach?.apiKey, openAiKey: coach?.openAiKey })
@@ -69,6 +92,14 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
     const t = setTimeout(updateScrollState, 350)
     return () => clearTimeout(t)
   }, [tab])
+
+  // ─ Persistance localStorage des saisies entre fermeture/réouverture
+  useEffect(() => { writeLS('tab',         tab)         }, [tab])
+  useEffect(() => { writeLS('cherche',     searchInput) }, [searchInput])
+  useEffect(() => { writeLS('synWord',     word)        }, [word])
+  useEffect(() => { writeLS('synSentence', sentence)    }, [sentence])
+  useEffect(() => { writeLS('synLevel',    level)       }, [level])
+  useEffect(() => { writeLS('wikiQuery',   wikiQuery)   }, [wikiQuery])
 
   const switchTab = (id) => { setTab(id); setResult(null) }
 
@@ -228,14 +259,27 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
         {!result && tab === 'synonymes' && (
           <div style={S.form}>
             <label style={S.label}>Le mot dont tu cherches des alternatives</label>
-            <input
-              style={S.input}
-              value={word}
-              onChange={e => setWord(e.target.value)}
-              placeholder="ex : tristesse, marcher, grand…"
-              autoFocus
-              onKeyDown={e => e.key === 'Enter' && canSend && handleSend()}
-            />
+            <div style={S.inputWrap}>
+              <input
+                style={{ ...S.input, paddingRight: word ? 32 : 12, width: '100%' }}
+                value={word}
+                onChange={e => setWord(e.target.value)}
+                placeholder="ex : tristesse, marcher, grand…"
+                autoFocus
+                onKeyDown={e => e.key === 'Enter' && canSend && handleSend()}
+              />
+              {word && (
+                <button
+                  type="button"
+                  style={S.clearBtn}
+                  onClick={() => setWord('')}
+                  aria-label="Effacer le mot"
+                  title="Effacer"
+                >
+                  <X size={14} />
+                </button>
+              )}
+            </div>
             <label style={S.label}>
               La phrase où tu l'utilises
               <span style={S.optional}> (optionnel — aide Léa à trouver le bon registre)</span>
@@ -269,18 +313,31 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
                   Par exemple : <em>"la tristesse douce qu'on ressent devant quelque chose de beau qui va disparaître"</em>
                 </div>
                 <div style={S.searchRow}>
-                  <input
-                    style={{ ...S.input, flex: 1 }}
-                    value={searchInput}
-                    onChange={handleSearchInputChange}
-                    placeholder="Décris l'émotion, l'image, la nuance…"
-                    autoFocus
-                    onKeyDown={e => {
-                      if (e.key === 'Enter' && searchInput.trim().length >= 2) {
-                        dicoSearch.submitQuery()
-                      }
-                    }}
-                  />
+                  <div style={{ ...S.inputWrap, flex: 1 }}>
+                    <input
+                      style={{ ...S.input, paddingRight: searchInput ? 32 : 12, width: '100%' }}
+                      value={searchInput}
+                      onChange={handleSearchInputChange}
+                      placeholder="Décris l'émotion, l'image, la nuance…"
+                      autoFocus
+                      onKeyDown={e => {
+                        if (e.key === 'Enter' && searchInput.trim().length >= 2) {
+                          dicoSearch.submitQuery()
+                        }
+                      }}
+                    />
+                    {searchInput && (
+                      <button
+                        type="button"
+                        style={S.clearBtn}
+                        onClick={handleDicoReset}
+                        aria-label="Effacer la recherche"
+                        title="Effacer"
+                      >
+                        <X size={14} />
+                      </button>
+                    )}
+                  </div>
                   {hasKey && (
                     <VoiceSearchButton
                       onTranscript={text => {
@@ -424,14 +481,27 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
             <label style={S.label}>Recherche une définition dans Wikipedia</label>
             <div style={S.hint}>Sans clé API — résultat instantané depuis l'encyclopédie francophone.</div>
             <div style={{ display: 'flex', gap: 8 }}>
-              <input
-                style={{ ...S.input, flex: 1 }}
-                value={wikiQuery}
-                onChange={e => setWikiQuery(e.target.value)}
-                placeholder="ex : mélancolie, exil, résilience…"
-                autoFocus
-                onKeyDown={e => e.key === 'Enter' && handleWikiSearch()}
-              />
+              <div style={{ ...S.inputWrap, flex: 1 }}>
+                <input
+                  style={{ ...S.input, paddingRight: wikiQuery ? 32 : 12, width: '100%' }}
+                  value={wikiQuery}
+                  onChange={e => setWikiQuery(e.target.value)}
+                  placeholder="ex : mélancolie, exil, résilience…"
+                  autoFocus
+                  onKeyDown={e => e.key === 'Enter' && handleWikiSearch()}
+                />
+                {wikiQuery && (
+                  <button
+                    type="button"
+                    style={S.clearBtn}
+                    onClick={() => { setWikiQuery(''); setWikiResult(null); setWikiError(''); setWikiSuggestions([]) }}
+                    aria-label="Effacer la recherche Wikipedia"
+                    title="Effacer"
+                  >
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
               <button
                 style={{ ...S.sendBtn, opacity: wikiQuery.trim() && !wikiLoading ? 1 : .45, cursor: wikiQuery.trim() && !wikiLoading ? 'pointer' : 'not-allowed', flexShrink: 0 }}
                 onClick={() => handleWikiSearch()}
@@ -591,6 +661,27 @@ const S = {
     padding: '9px 12px', fontSize: '.84rem', color: '#2D261E',
     background: '#FFFDF9', outline: 'none', width: '100%',
     fontFamily: "'Nunito', sans-serif", boxSizing: 'border-box',
+  },
+  // Lot UX-Dico-A — wrapper pour bouton X (effacer) positionné dans l'input
+  inputWrap: {
+    position: 'relative',
+    display: 'flex',
+    alignItems: 'center',
+  },
+  clearBtn: {
+    position: 'absolute',
+    right: 6,
+    top: '50%',
+    transform: 'translateY(-50%)',
+    background: 'none',
+    border: 'none',
+    padding: '4px 6px',
+    cursor: 'pointer',
+    color: '#A09070',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 4,
   },
   textarea: { resize: 'vertical', lineHeight: 1.55 },
   pills:    { display: 'flex', gap: 6, flexWrap: 'wrap' },
