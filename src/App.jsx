@@ -686,7 +686,7 @@ function AppInner() {
 
 export default function App() {
   return (
-    <IconContext.Provider value={{ weight: 'light', size: 16, color: 'currentColor' }}>
+    <IconContext.Provider value={{ weight: 'duotone', size: 16, color: 'currentColor' }}>
       <ToastProvider>
         <AppInner />
       </ToastProvider>
