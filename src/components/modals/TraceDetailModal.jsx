@@ -182,6 +182,51 @@ export default function TraceDetailModal({
     return () => document.removeEventListener('keydown', onKey, true)
   }, [statusOpen])
 
+  // ─── Lot C — Mémo vocal : load au mount + cleanup au unmount ───
+  useEffect(() => {
+    if (!trace?.id || typeof getVoiceMemo !== 'function') return
+    let cancelled = false
+    let createdUrl = null
+    ;(async () => {
+      try {
+        const memo = await getVoiceMemo(trace.id)
+        if (cancelled) return
+        if (memo?.blob) {
+          createdUrl = URL.createObjectURL(memo.blob)
+          setVoiceMemoBlob(memo.blob)
+          setVoiceMemoUrl(createdUrl)
+          setVoiceMemoMime(memo.mimeType || 'audio/webm')
+        } else {
+          setVoiceMemoBlob(null)
+          setVoiceMemoUrl(null)
+          setVoiceMemoMime(null)
+        }
+      } catch (e) {
+        console.warn('[VoiceMemo] load failed', trace.id, e?.message)
+      }
+    })()
+    return () => {
+      cancelled = true
+      if (createdUrl) URL.revokeObjectURL(createdUrl)
+    }
+  }, [trace?.id, getVoiceMemo])
+
+  // Cleanup global au unmount du composant : stop recording si en cours,
+  // libérer le stream micro, clear les timers.
+  useEffect(() => {
+    return () => {
+      if (recordTimerRef.current) { clearInterval(recordTimerRef.current); recordTimerRef.current = null }
+      if (recordAutoStopRef.current) { clearTimeout(recordAutoStopRef.current); recordAutoStopRef.current = null }
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        try { mediaRecorderRef.current.stop() } catch {}
+      }
+      if (mediaStreamRef.current) {
+        try { mediaStreamRef.current.getTracks().forEach(t => t.stop()) } catch {}
+        mediaStreamRef.current = null
+      }
+    }
+  }, [])
+
   if (!localTrace) return null
 
   const canEdit = typeof editTrace === 'function'
@@ -347,52 +392,6 @@ export default function TraceDetailModal({
       console.error('[FEAT-C] effacement ocrText failed', err)
     }
   }
-
-  // ── FEAT-D — Faire parler l'image pour ouvrir des pistes d'écriture ──
-  // ─── Lot C — Mémo vocal : load au mount + cleanup au unmount ───
-  useEffect(() => {
-    if (!trace?.id || typeof getVoiceMemo !== 'function') return
-    let cancelled = false
-    let createdUrl = null
-    ;(async () => {
-      try {
-        const memo = await getVoiceMemo(trace.id)
-        if (cancelled) return
-        if (memo?.blob) {
-          createdUrl = URL.createObjectURL(memo.blob)
-          setVoiceMemoBlob(memo.blob)
-          setVoiceMemoUrl(createdUrl)
-          setVoiceMemoMime(memo.mimeType || 'audio/webm')
-        } else {
-          setVoiceMemoBlob(null)
-          setVoiceMemoUrl(null)
-          setVoiceMemoMime(null)
-        }
-      } catch (e) {
-        console.warn('[VoiceMemo] load failed', trace.id, e?.message)
-      }
-    })()
-    return () => {
-      cancelled = true
-      if (createdUrl) URL.revokeObjectURL(createdUrl)
-    }
-  }, [trace?.id, getVoiceMemo])
-
-  // Cleanup global au unmount du composant : stop recording si en cours,
-  // libérer le stream micro, clear les timers.
-  useEffect(() => {
-    return () => {
-      if (recordTimerRef.current) { clearInterval(recordTimerRef.current); recordTimerRef.current = null }
-      if (recordAutoStopRef.current) { clearTimeout(recordAutoStopRef.current); recordAutoStopRef.current = null }
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-        try { mediaRecorderRef.current.stop() } catch {}
-      }
-      if (mediaStreamRef.current) {
-        try { mediaStreamRef.current.getTracks().forEach(t => t.stop()) } catch {}
-        mediaStreamRef.current = null
-      }
-    }
-  }, [])
 
   const formatDuration = (sec) => {
     const s = Math.max(0, Math.floor(sec || 0))
