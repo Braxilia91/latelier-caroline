@@ -3,7 +3,11 @@
 // Pas de player, UI pulse, transcription Whisper intégrée
 
 import { useState, useRef, useCallback } from 'react'
-import { Mic, MicOff, Loader2 } from 'lucide-react'
+import {
+  Microphone as Mic,
+  MicrophoneSlash as MicOff,
+  CircleNotch as Loader2,
+} from '@phosphor-icons/react'
 import { transcribeAudio } from './claude'
 
 const isIOSSafari = () => {
