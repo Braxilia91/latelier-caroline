@@ -77,6 +77,19 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
   const isLongUnknown = !isPhrase && trimmed.length > 18 && dicoSearch.state.suggestions.length === 0
   const showLeaCta    = (isPhrase || isLongUnknown) && trimmed.length >= 2 && dicoSearch.state.phase !== 'guessing' && dicoSearch.state.phase !== 'confirming' && dicoSearch.state.phase !== 'explaining'
 
+  // D-Spell — détection heuristique correction phonétique :
+  // si aucune suggestion ne commence par le query (mais qu'il y en a),
+  // c'est que Datamuse a switch en mode sounds-like (fallback dans fetchSuggestionsWithFallback).
+  // On affiche un bandeau "Voulais-tu dire X ?" sur le 1er candidat phonétique.
+  const sugs = dicoSearch.state.suggestions
+  const queryLower = trimmed.toLowerCase()
+  const isPhoneticCorrection =
+    !isPhrase
+    && trimmed.length >= 4
+    && sugs.length > 0
+    && !sugs.some(s => s.word?.toLowerCase().startsWith(queryLower))
+  const phoneticGuess = isPhoneticCorrection ? sugs[0]?.word : null
+
   const { loading, getSynonyms, searchWord: legacySearchWord, defineWord, getPredictiveWords, getDiscovery } = coach
   const hasChapterContent = !!(currentChapter?.content?.trim())
   const wikiUrl = wikiResult?.content_urls?.desktop?.page
@@ -358,6 +371,25 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
                     />
                   )}
                 </div>
+
+                {/* D-Spell — Bandeau "Voulais-tu dire ?" si Datamuse a corrigé phonétiquement */}
+                {phoneticGuess && (
+                  <div style={S.spellBandeau}>
+                    <span style={S.spellBandeauIcon} aria-hidden="true">💡</span>
+                    <span style={S.spellBandeauText}>
+                      Voulais-tu dire{' '}
+                      <button
+                        type="button"
+                        style={S.spellBandeauWord}
+                        onClick={() => dicoSearch.selectSuggestion(phoneticGuess)}
+                        title="Voir la définition de ce mot"
+                      >
+                        {phoneticGuess}
+                      </button>
+                      {' '}?
+                    </span>
+                  </div>
+                )}
 
                 {/* D-Detect — Bandeau Léa CTA si phrase ou mot long inconnu */}
                 {showLeaCta && (
@@ -789,6 +821,35 @@ const S = {
     fontWeight: 700,
     fontFamily: "'Nunito', sans-serif",
     cursor: 'pointer',
+  },
+  // D-Spell — bandeau "Voulais-tu dire ?" pour correction phonétique
+  spellBandeau: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    padding: '8px 12px',
+    background: '#FFF8E8',
+    border: '1.5px solid #E8C97A',
+    borderRadius: 8,
+    marginBottom: 4,
+  },
+  spellBandeauIcon: { fontSize: 16, flexShrink: 0 },
+  spellBandeauText: {
+    fontSize: '.82rem',
+    color: '#6B4D2E',
+    fontFamily: "'Nunito', sans-serif",
+    lineHeight: 1.4,
+  },
+  spellBandeauWord: {
+    background: 'none',
+    border: 'none',
+    padding: 0,
+    color: '#C4956A',
+    fontWeight: 800,
+    cursor: 'pointer',
+    textDecoration: 'underline',
+    fontSize: '.86rem',
+    fontFamily: "'Nunito', sans-serif",
   },
   suggestWrap: { display: 'flex', flexDirection: 'column', gap: 8 },
   suggestList: { display: 'flex', flexWrap: 'wrap', gap: 6 },
