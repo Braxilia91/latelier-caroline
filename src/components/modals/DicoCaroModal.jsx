@@ -435,20 +435,27 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
                     {guess.why && <div style={S.guessWhy}>{guess.why}</div>}
                     <div style={S.guessConf}>Confiance : {Math.round((guess.confidence || 0) * 100)} %</div>
                     <div style={S.guessActions}>
-                      <button
-                        style={S.guessReject}
-                        onClick={() => dicoSearch.rejectGuess()}
-                        disabled={dicoSearch.state.isLoading}
-                      >
-                        ❌ C'est pas ça
-                      </button>
-                      <button
-                        style={S.guessConfirm}
-                        onClick={() => dicoSearch.confirmGuess()}
-                        disabled={dicoSearch.state.isLoading}
-                      >
-                        ✅ C'est ça !
-                      </button>
+                      {dicoSearch.state.isLoading ? (
+                        <div style={S.guessThinking}>
+                          <span style={S.guessThinkingIcon}>💭</span>
+                          <span style={S.guessThinkingText}>Léa prépare la définition…</span>
+                        </div>
+                      ) : (
+                        <>
+                          <button
+                            style={S.guessReject}
+                            onClick={() => dicoSearch.rejectGuess()}
+                          >
+                            ❌ C'est pas ça
+                          </button>
+                          <button
+                            style={S.guessConfirm}
+                            onClick={() => dicoSearch.confirmGuess()}
+                          >
+                            ✅ C'est ça !
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
                   {dicoSearch.state.rejectedWords.length > 0 && (
@@ -838,6 +845,25 @@ const S = {
     borderRadius: 8, padding: '8px 18px',
     fontSize: '.82rem', fontWeight: 700,
     fontFamily: "'Nunito', sans-serif", cursor: 'pointer',
+  },
+  // Feedback "Léa réfléchit" pendant l'appel Claude (confirmGuess/rejectGuess avec relance LLM)
+  // Évite l'impression de gel UI 2-3 sec sans feedback visuel.
+  guessThinking: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 10,
+    padding: '10px 18px',
+    background: '#F0E8DC',
+    borderRadius: 8,
+    border: '1.5px dashed #C4956A',
+  },
+  guessThinkingIcon: { fontSize: 18 },
+  guessThinkingText: {
+    fontSize: '.84rem',
+    fontWeight: 600,
+    color: '#6B4D2E',
+    fontFamily: "'Nunito', sans-serif",
+    fontStyle: 'italic',
   },
   explainCard: {
     background: '#F5F0E8', borderRadius: 12, padding: 20,
