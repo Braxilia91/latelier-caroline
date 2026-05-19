@@ -58,9 +58,10 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
   const [wikiError,       setWikiError]       = useState('')
   const [wikiSuggestions, setWikiSuggestions] = useState([])
 
-  const [councilDone, setCouncilDone] = useState(
-    () => localStorage.getItem('dicoCaroConseil') === TODAY
-  )
+  const [councilDone, setCouncilDone] = useState(() => {
+    try { return localStorage.getItem('dicoCaroConseil') === TODAY }
+    catch { return false }
+  })
 
   // ─ Input local DÉCOUPLÉ du state machine — jamais bloqué
   const [searchInput, setSearchInput] = useState(() => readLS('cherche', ''))
@@ -188,7 +189,7 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
       text = await getPredictiveWords()
     } else if (tab === 'conseil') {
       text = await getDiscovery()
-      localStorage.setItem('dicoCaroConseil', TODAY)
+      try { localStorage.setItem('dicoCaroConseil', TODAY) } catch { /* mode prive / quota */ }
       setCouncilDone(true)
     }
     if (text) setResult(text)
@@ -321,7 +322,7 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
                       placeholder="Décris l'émotion, l'image, la nuance…"
                       autoFocus
                       onKeyDown={e => {
-                        if (e.key === 'Enter' && searchInput.trim().length >= 2) {
+                        if (e.key === 'Enter' && searchInput.trim().length >= 2 && !dicoSearch.state.isLoading) {
                           dicoSearch.submitQuery()
                         }
                       }}
@@ -376,7 +377,7 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
                 {!hasKey && (
                   <p style={S.noKey}>Configure ta clé API Anthropic dans les réglages pour activer Léa.</p>
                 )}
-                {hasKey && searchInput.trim().length >= 2 && dicoSearch.state.phase !== 'suggesting' && (
+                {hasKey && searchInput.trim().length >= 2 && dicoSearch.state.phase !== 'suggesting' && !showLeaCta && (
                   <button
                     style={{ ...S.sendBtn, marginTop: 4 }}
                     onClick={() => dicoSearch.submitQuery()}
@@ -425,8 +426,8 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
               ) : null
             })()}
 
-            {/* Phase isLoading (entre phases) */}
-            {dicoSearch.state.isLoading && (dicoSearch.state.phase === 'guessing') && (
+            {/* Phase isLoading (entre phases) — spinner uniquement si pas de guess actif à afficher */}
+            {dicoSearch.state.isLoading && dicoSearch.state.phase === 'guessing' && !dicoSearch.state.guesses[dicoSearch.state.activeGuessIndex] && (
               <div style={S.akinatorCard}>
                 <div style={S.akinatorIcon}>💭</div>
                 <p style={S.akinatorText}>Léa cherche…</p>
