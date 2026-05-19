@@ -1,71 +1,15 @@
-import { useMemo } from 'react'
-
+import { useState, useMemo } from 'react'
 import Modal from '../ui/Modal'
 import { X, CalendarDays, Flame } from 'lucide-react'
+import { DayPicker } from 'react-day-picker'
+import { fr } from 'react-day-picker/locale'
+import 'react-day-picker/style.css'
 
-// T11b — Date ISO 'YYYY-MM-DD' depuis une instance Date (local).
-function toIso(d) {
-  const yyyy = d.getFullYear()
-  const mm   = String(d.getMonth() + 1).padStart(2, '0')
-  const dd   = String(d.getDate()).padStart(2, '0')
-  return `${yyyy}-${mm}-${dd}`
-}
-
-// T11b — Construit la grille 7×53 alignée lundi pour les ~365 derniers jours.
-// Retourne :
-//   { weeks: Array<Array<Cell>>, firstMonday: Date, today: Date }
-//   Cell = { date, iso, isVisited, isFuture }
-function buildGrid(sessionDatesSet, todayDate) {
-  const today = new Date(todayDate)
-  today.setHours(0, 0, 0, 0)
-
-  // Reculer de 364 jours
-  const start = new Date(today)
-  start.setDate(today.getDate() - 364)
-
-  // Aligner start sur le lundi qui le précède (ou lui-même si déjà lundi)
-  const startDay = start.getDay()              // 0=dim, 1=lun, …, 6=sam
-  const daysToMonday = startDay === 0 ? 6 : startDay - 1
-  start.setDate(start.getDate() - daysToMonday)
-
-  const weeks = []
-  const cur = new Date(start)
-  // 53 colonnes suffisent à couvrir 365 jours alignés au lundi
-  for (let w = 0; w < 53; w++) {
-    const week = []
-    for (let d = 0; d < 7; d++) {
-      const iso = toIso(cur)
-      week.push({
-        date: new Date(cur),
-        iso,
-        isVisited: sessionDatesSet.has(iso),
-        isFuture:  cur > today,
-      })
-      cur.setDate(cur.getDate() + 1)
-    }
-    weeks.push(week)
-  }
-
-  return { weeks, firstMonday: start, today }
-}
-
-// T11b — Ticks de mois affichés au-dessus de la grille.
-// Renvoie [{ label: 'janv.', colIdx: 4 }, …] : pour chaque mois traversé,
-// l'index de la première colonne où il apparaît.
-function monthTicks(weeks) {
-  const ticks = []
-  let lastMonth = -1
-  weeks.forEach((week, colIdx) => {
-    // On regarde le premier jour de la semaine (lundi)
-    const m = week[0].date.getMonth()
-    if (m !== lastMonth) {
-      const label = week[0].date.toLocaleDateString('fr-FR', { month: 'short' })
-      ticks.push({ label, colIdx })
-      lastMonth = m
-    }
-  })
-  return ticks
-}
+// ProgressModal — calendrier mensuel react-day-picker v9.
+// Remplace l'ancienne heatmap 53x7 (illisible sur mobile <400px de large).
+// Navigation par fleches mois precedent/suivant, jours d'ecriture en dore,
+// jours futurs grises. Pas de selection interactive (pas de prop mode -> v9
+// rend un calendrier de consultation, pas un date picker).
 
 export default function ProgressModal({
   sessionDates = [],
@@ -74,27 +18,41 @@ export default function ProgressModal({
   name = '',
   onClose,
 }) {
-  const today = new Date()
-  const todayKey = today.toDateString()
+  // Mois actuellement affiche (defaut : mois en cours)
+  const [displayMonth, setDisplayMonth] = useState(() => new Date())
 
-  // Set pour lookup O(1) dans la grille
-  const sessionSet = useMemo(() => new Set(sessionDates), [sessionDates])
+  // Convertir 'YYYY-MM-DD' -> Date locale pour DayPicker modifiers
+  // (eviter new Date(string) qui parse en UTC et decale d'un jour selon le fuseau)
+  const writtenDays = useMemo(
+    () => sessionDates
+      .filter(s => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s))
+      .map(s => {
+        const [y, m, d] = s.split('-').map(Number)
+        return new Date(y, m - 1, d)
+      }),
+    [sessionDates]
+  )
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const { weeks } = useMemo(() => buildGrid(sessionSet, today), [sessionSet, todayKey])
-  const ticks     = useMemo(() => monthTicks(weeks), [weeks])
-
-  // Première date de session (= début de la pratique de Caroline)
+  // Premiere date d'ecriture pour le sous-titre
   const firstSessionDate = useMemo(() => {
     if (!sessionDates.length) return null
-    // Sort copie défensive — sessionDates non muté
-    const sorted = [...sessionDates].sort()
-    return sorted[0]
+    return [...sessionDates].sort()[0]
   }, [sessionDates])
 
   const firstSessionLabel = firstSessionDate
-    ? new Date(firstSessionDate).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })
+    ? (() => {
+        const [y, m, d] = firstSessionDate.split('-').map(Number)
+        return new Date(y, m - 1, d).toLocaleDateString('fr-FR', {
+          day: 'numeric', month: 'long', year: 'numeric',
+        })
+      })()
     : null
+
+  const today = useMemo(() => {
+    const d = new Date()
+    d.setHours(0, 0, 0, 0)
+    return d
+  }, [])
 
   return (
     <Modal
@@ -103,6 +61,30 @@ export default function ProgressModal({
       overlayStyle={S.overlay}
       modalStyle={S.modal}
     >
+      {/* Override CSS variables + selecteurs react-day-picker v9 pour palette Caroline.
+          v9 : .rdp-root pour les vars, .rdp-caption_label pour le label mois/annee,
+          .rdp-day_button pour les boutons jour. */}
+      <style>{`
+        .rdp-root {
+          --rdp-accent-color: #C4956A;
+          --rdp-accent-background-color: #F5F0E8;
+          --rdp-font-family: 'Nunito', sans-serif;
+          --rdp-today-color: #C4956A;
+          --rdp-disabled-opacity: 0.3;
+          --rdp-outside-opacity: 0.3;
+        }
+        .rdp-root .rdp-caption_label {
+          font-family: 'Cormorant Garamond', serif;
+          font-size: 1.05rem;
+          font-weight: 700;
+          color: #2A1A0E;
+          text-transform: capitalize;
+        }
+        .rdp-root .rdp-day_button:hover:not(:disabled) {
+          background-color: #F5F0E8;
+        }
+      `}</style>
+
       {/* Header */}
       <div style={S.hdr}>
         <div style={S.hdrLeft}>
@@ -136,55 +118,34 @@ export default function ProgressModal({
         </div>
       </div>
 
-      {/* Heatmap */}
-      <div style={S.heatmapWrap}>
-        {/* Ticks de mois */}
-        <div style={S.monthRow}>
-          {ticks.map((t, i) => (
-            <span
-              key={`${t.label}-${i}`}
-              style={{
-                ...S.monthLabel,
-                left: `${t.colIdx * (CELL + GAP)}px`,
-              }}
-            >
-              {t.label}
-            </span>
-          ))}
-        </div>
-
-        <div style={S.grid}>
-          {weeks.map((week, colIdx) => (
-            <div key={colIdx} style={S.col}>
-              {week.map((cell) => (
-                <span
-                  key={cell.iso}
-                  style={{
-                    ...S.cell,
-                    background: cell.isFuture
-                      ? 'transparent'
-                      : (cell.isVisited ? S.cellVisited.background : S.cellEmpty.background),
-                    boxShadow: cell.isVisited ? S.cellVisited.boxShadow : 'none',
-                  }}
-                  title={
-                    cell.isFuture
-                      ? ''
-                      : `${cell.date.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })} — ${cell.isVisited ? 'visité ✓' : 'jour vide'}`
-                  }
-                  aria-hidden="true"
-                />
-              ))}
-            </div>
-          ))}
-        </div>
+      {/* Calendrier mensuel — react-day-picker v9, pas de prop "mode" pour
+          desactiver la selection interactive (consultation pure). */}
+      <div style={S.calendarWrap}>
+        <DayPicker
+          locale={fr}
+          month={displayMonth}
+          onMonthChange={setDisplayMonth}
+          weekStartsOn={1}
+          showOutsideDays={false}
+          disabled={{ after: today }}
+          modifiers={{ written: writtenDays }}
+          modifiersStyles={{
+            written: {
+              backgroundColor: '#C4956A',
+              color: '#FFFEFB',
+              borderRadius: '50%',
+              fontWeight: 700,
+            },
+          }}
+        />
 
         {/* Légende */}
         <div style={S.legend}>
           <span style={S.legendItem}>
-            <span style={{ ...S.legendDot, background: S.cellEmpty.background }} /> jour vide
+            <span style={{ ...S.legendDot, background: '#C4956A' }} /> jour visité
           </span>
           <span style={S.legendItem}>
-            <span style={{ ...S.legendDot, background: S.cellVisited.background }} /> jour visité
+            <span style={{ ...S.legendDot, background: '#F5F0E8', border: '1px solid #E7D6BF' }} /> jour vide
           </span>
         </div>
       </div>
@@ -201,9 +162,6 @@ export default function ProgressModal({
 }
 
 // ─── Style ────────────────────────────────────────────────────
-const CELL = 11   // taille des cells en px
-const GAP  = 3    // gap entre cells
-
 const S = {
   overlay: {
     position: 'fixed', inset: 0,
@@ -214,7 +172,7 @@ const S = {
   modal: {
     background: 'var(--paper)',
     borderRadius: 18,
-    width: '100%', maxWidth: 760,
+    width: '100%', maxWidth: 460,
     maxHeight: '90vh',
     display: 'flex', flexDirection: 'column',
     boxShadow: '0 24px 60px rgba(42,26,14,.25)',
@@ -249,52 +207,21 @@ const S = {
   },
   statNum: { fontWeight: 800, fontSize: '1rem' },
   statLbl: { fontWeight: 600, opacity: 0.85 },
-  heatmapWrap: {
-    padding: '18px 20px 8px',
-    overflowX: 'auto',
-  },
-  monthRow: {
-    position: 'relative',
-    height: 16,
-    marginBottom: 4,
-  },
-  monthLabel: {
-    position: 'absolute',
-    top: 0,
-    fontSize: '.62rem',
-    fontFamily: "'Nunito', sans-serif",
-    color: 'var(--ink-ll)',
-    textTransform: 'capitalize',
-    whiteSpace: 'nowrap',
-  },
-  grid: {
+  calendarWrap: {
+    padding: '14px 16px 8px',
     display: 'flex',
-    gap: GAP,
-  },
-  col: {
-    display: 'flex', flexDirection: 'column',
-    gap: GAP,
-  },
-  cell: {
-    width: CELL, height: CELL,
-    borderRadius: 2,
-    transition: 'background .12s',
-    flexShrink: 0,
-  },
-  cellEmpty: {
-    background: 'var(--border-l)',
-  },
-  cellVisited: {
-    background: 'var(--gold-l)',
-    boxShadow: '0 0 0 1px rgba(196,149,106,.35)',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: 10,
+    overflowY: 'auto',
   },
   legend: {
-    display: 'flex', gap: 14, marginTop: 12,
-    fontSize: '.7rem', color: 'var(--ink-ll)',
+    display: 'flex', gap: 14, marginTop: 4,
+    fontSize: '.72rem', color: 'var(--ink-ll)',
     fontFamily: "'Nunito', sans-serif",
   },
   legendItem: { display: 'flex', alignItems: 'center', gap: 5 },
-  legendDot:  { width: 9, height: 9, borderRadius: 2 },
+  legendDot:  { width: 11, height: 11, borderRadius: '50%' },
   footer: {
     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
     padding: '12px 20px',
