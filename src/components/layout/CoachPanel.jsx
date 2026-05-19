@@ -17,7 +17,7 @@ export default function CoachPanel({
     findThread, expressDoubt, removeMessage,
     digPassage,
     ttsState, ttsPlay, ttsPause, ttsStop, ttsSetSpeed,
-    speakMessage,  // UX-Voix : lecture a la demande d'une bulle Lea (independant du voiceOn global)
+    speakMessage,  // UX-Voix : lecture a la demande, voix OpenAI premium
   } = coach
 
   useEffect(() => {
@@ -134,16 +134,21 @@ export default function CoachPanel({
             >
               {msg.content}
             </div>
-            {/* UX-Voix : bouton ecouter sur bulle Lea (independant du flag voiceOn) */}
+            {/* UX-Voix : bouton ecouter / arreter sur bulle Lea, voix OpenAI premium */}
             {msg.role === 'assistant' && typeof speakMessage === 'function' && (
               <button
                 type="button"
-                onClick={() => speakMessage(msg.content)}
+                onClick={() => {
+                  if (ttsState?.playing) ttsStop?.()
+                  else speakMessage(msg.content)
+                }}
                 style={styles.msgListenBtn}
-                aria-label="Écouter ce message"
-                title="Écouter ce message"
+                aria-label={ttsState?.playing ? "Arrêter la lecture" : "Écouter ce message"}
+                title={ttsState?.playing ? "Arrêter" : "Écouter avec la voix de Léa"}
               >
-                <Volume2 size={11} />
+                {ttsState?.playing
+                  ? <Square size={14} fill="currentColor" />
+                  : <Volume2 size={16} />}
               </button>
             )}
 
@@ -376,13 +381,17 @@ const styles = {
     lineHeight: 1.6, color: 'var(--ink)',
     whiteSpace: 'pre-wrap',
   },
-  // UX-Voix : bouton ecouter discret a cote de la bulle Lea
+  // UX-Voix : bouton ecouter / arreter visible (HP dore, taille 30x30)
   msgListenBtn: {
-    width: 22, height: 22, borderRadius: 6,
-    background: 'transparent', border: 'none',
-    color: 'var(--ink-ll)', cursor: 'pointer',
+    width: 30, height: 30, borderRadius: 8,
+    background: 'var(--cream)',
+    border: '1.5px solid var(--gold-l, #E0B584)',
+    color: '#C4956A',
+    cursor: 'pointer',
     display: 'flex', alignItems: 'center', justifyContent: 'center',
-    opacity: 0.55, marginLeft: 2,
+    marginLeft: 4,
+    flexShrink: 0,
+    transition: 'all .15s',
   },
   leaAvatar: {
     width: 26, height: 26,
