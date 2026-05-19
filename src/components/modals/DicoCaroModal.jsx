@@ -1,3 +1,4 @@
+// src/components/modals/DicoCaroModal.jsx
 import { useState, useRef, useEffect, useCallback } from 'react'
 import Modal from '../ui/Modal'
 import { X, BookOpen, Search, Lightbulb, Globe, Wand2, Mic, MicOff } from 'lucide-react'
@@ -38,8 +39,11 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
     () => localStorage.getItem('dicoCaroConseil') === TODAY
   )
 
+  // ─ Input local DÉCOUPLÉ du state machine — jamais bloqué
+  const [searchInput, setSearchInput] = useState('')
+
   // ─ Hook recherche lexicale (onglet "Je cherche")
-  const dicoSearch = useDicoSearch({ apiKey: coach?.apiKey, openAiKey: null })
+  const dicoSearch = useDicoSearch({ apiKey: coach?.apiKey, openAiKey: coach?.openAiKey })
 
   const { loading, getSynonyms, searchWord: legacySearchWord, defineWord, getPredictiveWords, getDiscovery } = coach
   const hasChapterContent = !!(currentChapter?.content?.trim())
@@ -67,6 +71,19 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
   }, [tab])
 
   const switchTab = (id) => { setTab(id); setResult(null) }
+
+  // ─ Synchroniser searchInput → dicoSearch (debounce géré dans useDicoSearch)
+  const handleSearchInputChange = (e) => {
+    const val = e.target.value
+    setSearchInput(val)          // mise à jour immédiate, jamais bloquée
+    dicoSearch.setQuery(val)     // déclenche suggestions en arrière-plan
+  }
+
+  // ─ Reset cherche — remet aussi l'input local
+  const handleDicoReset = () => {
+    setSearchInput('')
+    dicoSearch.reset()
+  }
 
   // ─ Wiki
   const handleWikiSearch = async (overrideTerm) => {
@@ -160,16 +177,6 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
     && tab !== 'cherche'
     && !(tab === 'conseil' && councilDone && !result)
 
-  // ─ Phase label pour l'onglet "Je cherche"
-  const phaseLabel = {
-    idle:       null,
-    suggesting: 'Suggestions',
-    guessing:   'Léa devine…',
-    confirming: 'Est-ce le bon mot ?',
-    explaining: 'Mot trouvé !',
-    error:      'Erreur',
-  }[dicoSearch.state.phase]
-
   return (
     <Modal onClose={onClose} ariaLabel="Dictionnaire DicoCaro" overlayStyle={S.overlay} modalStyle={S.modal}>
 
@@ -249,12 +256,12 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
           </div>
         )}
 
-        {/* ─ Onglet Je cherche — nouvelle UX */}
+        {/* ─ Onglet Je cherche — input LOCAL découplé */}
         {tab === 'cherche' && (
           <div style={S.form}>
 
-            {/* Phase idle */}
-            {dicoSearch.state.phase === 'idle' && (
+            {/* Phases idle + suggesting → même input visible */}
+            {(dicoSearch.state.phase === 'idle' || dicoSearch.state.phase === 'suggesting') && (
               <>
                 <label style={S.label}>Décris ce que tu veux dire — Léa trouve le mot</label>
                 <div style={S.hint}>
@@ -264,28 +271,55 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
                 <div style={S.searchRow}>
                   <input
                     style={{ ...S.input, flex: 1 }}
-                    value={dicoSearch.state.query}
-                    onChange={e => dicoSearch.setQuery(e.target.value)}
+                    value={searchInput}
+                    onChange={handleSearchInputChange}
                     placeholder="Décris l'émotion, l'image, la nuance…"
                     autoFocus
                     onKeyDown={e => {
-                      if (e.key === 'Enter' && dicoSearch.state.query.trim().length >= 2) {
+                      if (e.key === 'Enter' && searchInput.trim().length >= 2) {
                         dicoSearch.submitQuery()
                       }
                     }}
                   />
                   {hasKey && (
                     <VoiceSearchButton
-                      onTranscript={text => dicoSearch.setQuery(text)}
+                      onTranscript={text => {
+                        setSearchInput(text)
+                        dicoSearch.setQuery(text)
+                      }}
                       openAiKey={coach?.openAiKey}
                       maxDuration={10000}
                     />
                   )}
                 </div>
+
+                {/* Suggestions autocomplete */}
+                {dicoSearch.state.phase === 'suggesting' && dicoSearch.state.suggestions.length > 0 && (
+                  <div style={S.suggestWrap}>
+                    <div style={S.hint}>Clique sur un mot pour voir sa définition directement :</div>
+                    <div style={S.suggestList}>
+                      {dicoSearch.state.suggestions.map(s => (
+                        <button
+                          key={s.word}
+                          style={S.suggestChip}
+                          onClick={() => dicoSearch.selectSuggestion(s.word)}
+                        >
+                          {s.word}
+                        </button>
+                      ))}
+                    </div>
+                    <div style={S.akinFooterActions}>
+                      <button style={S.akinSecondary} onClick={() => dicoSearch.submitQuery()}>
+                        Ou lancer la recherche complète avec Léa →
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 {!hasKey && (
                   <p style={S.noKey}>Configure ta clé API Anthropic dans les réglages pour activer Léa.</p>
                 )}
-                {hasKey && dicoSearch.state.query.trim().length >= 2 && (
+                {hasKey && searchInput.trim().length >= 2 && dicoSearch.state.phase !== 'suggesting' && (
                   <button
                     style={{ ...S.sendBtn, marginTop: 4 }}
                     onClick={() => dicoSearch.submitQuery()}
@@ -297,30 +331,7 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
               </>
             )}
 
-            {/* Suggestions autocomplete */}
-            {dicoSearch.state.phase === 'suggesting' && dicoSearch.state.suggestions.length > 0 && (
-              <div style={S.suggestWrap}>
-                <div style={S.hint}>Clique sur un mot pour voir sa définition directement :</div>
-                <div style={S.suggestList}>
-                  {dicoSearch.state.suggestions.map(s => (
-                    <button
-                      key={s.word}
-                      style={S.suggestChip}
-                      onClick={() => dicoSearch.selectSuggestion(s.word)}
-                    >
-                      {s.word}
-                    </button>
-                  ))}
-                </div>
-                <div style={S.akinFooterActions}>
-                  <button style={S.akinSecondary} onClick={() => dicoSearch.submitQuery()}>
-                    Ou lancer la recherche complète avec Léa →
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Phase guessing — Léa devine */}
+            {/* Phase guessing / confirming — Léa devine */}
             {(dicoSearch.state.phase === 'guessing' || dicoSearch.state.phase === 'confirming') && (() => {
               const guess = dicoSearch.state.guesses[dicoSearch.state.activeGuessIndex]
               return guess ? (
@@ -351,14 +362,14 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
                     <div style={S.hint}>Déjà rejeté : {dicoSearch.state.rejectedWords.join(', ')}</div>
                   )}
                   <div style={S.akinFooterActions}>
-                    <button style={S.akinSecondary} onClick={() => dicoSearch.reset()}>Recommencer</button>
+                    <button style={S.akinSecondary} onClick={handleDicoReset}>Recommencer</button>
                   </div>
                 </div>
               ) : null
             })()}
 
-            {/* Phase isLoading */}
-            {dicoSearch.state.isLoading && (
+            {/* Phase isLoading (entre phases) */}
+            {dicoSearch.state.isLoading && (dicoSearch.state.phase === 'guessing') && (
               <div style={S.akinatorCard}>
                 <div style={S.akinatorIcon}>💭</div>
                 <p style={S.akinatorText}>Léa cherche…</p>
@@ -389,7 +400,7 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
                     <button style={S.akinAction} onClick={() => handleExplain(dicoSearch.state.confirmedWord)}>
                       📖 Définition complète
                     </button>
-                    <button style={S.akinSecondary} onClick={() => dicoSearch.reset()}>🔄 Nouvelle recherche</button>
+                    <button style={S.akinSecondary} onClick={handleDicoReset}>🔄 Nouvelle recherche</button>
                   </div>
                 </div>
               </div>
@@ -400,7 +411,7 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
               <div style={S.akinatorCard}>
                 <div style={S.akinatorIcon}>⚠️</div>
                 <p style={S.akinatorText}>{dicoSearch.state.error || 'Une erreur est survenue.'}</p>
-                <button style={S.startBtn} onClick={() => dicoSearch.reset()}>Réessayer</button>
+                <button style={S.startBtn} onClick={handleDicoReset}>Réessayer</button>
               </div>
             )}
 
@@ -608,7 +619,6 @@ const S = {
     fontSize: '.84rem', fontWeight: 700,
     fontFamily: "'Nunito', sans-serif", cursor: 'pointer', marginTop: 4,
   },
-  // Résultat (synonymes/predictif/conseil)
   resultWrap: { display: 'flex', flexDirection: 'column', gap: 12 },
   resultHdr:  { display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
   resultLea:  { fontSize: '.8rem', fontWeight: 700, color: '#6B8F71', fontFamily: "'Nunito', sans-serif" },
@@ -622,9 +632,7 @@ const S = {
     fontSize: '.84rem', color: '#2D261E', lineHeight: 1.65,
     fontFamily: "'Nunito', sans-serif", whiteSpace: 'pre-wrap',
   },
-  // Onglet cherche — recherche row
   searchRow: { display: 'flex', gap: 8, alignItems: 'center' },
-  // Suggestions autocomplete
   suggestWrap: { display: 'flex', flexDirection: 'column', gap: 8 },
   suggestList: { display: 'flex', flexWrap: 'wrap', gap: 6 },
   suggestChip: {
@@ -634,7 +642,6 @@ const S = {
     fontFamily: "'Nunito', sans-serif", cursor: 'pointer',
     transition: 'all .15s',
   },
-  // Guess card
   akinatorCard: {
     background: '#F5F0E8', borderRadius: 12, padding: '20px',
     textAlign: 'center', display: 'flex', flexDirection: 'column',
@@ -673,7 +680,6 @@ const S = {
     fontSize: '.82rem', fontWeight: 700,
     fontFamily: "'Nunito', sans-serif", cursor: 'pointer',
   },
-  // Explain card
   explainCard: {
     background: '#F5F0E8', borderRadius: 12, padding: 20,
     display: 'flex', flexDirection: 'column', gap: 10,
@@ -694,7 +700,6 @@ const S = {
   },
   explainTriviaIcon: { flexShrink: 0, fontSize: '1rem', marginTop: 1 },
   explainActions: { display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 4 },
-  // Actions shared
   akinFooterActions: { display: 'flex', justifyContent: 'flex-end', marginTop: 4 },
   akinSecondary: {
     background: 'none', border: 'none',
@@ -709,7 +714,6 @@ const S = {
     fontFamily: "'Nunito', sans-serif", cursor: 'pointer',
   },
   akinActionDone: { background: '#E8DDC9', borderColor: '#C4956A', color: '#5C4A32' },
-  // Wiki
   wikiCard: { background: '#F5F0E8', borderRadius: 10, padding: 16, display: 'flex', flexDirection: 'column', gap: 8 },
   wikiThumb: { width: '100%', maxHeight: 140, objectFit: 'cover', borderRadius: 7 },
   wikiTitle: { fontSize: '.9rem', fontWeight: 700, color: '#2D261E', fontFamily: "'Nunito', sans-serif" },
