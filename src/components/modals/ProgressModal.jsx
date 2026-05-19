@@ -1,6 +1,10 @@
 import { useState, useMemo } from 'react'
 import Modal from '../ui/Modal'
-import { X, CalendarDays, Flame } from 'lucide-react'
+import {
+  X,
+  CalendarDots as CalendarDays,
+  Fire as Flame,
+} from '@phosphor-icons/react'
 import { DayPicker } from 'react-day-picker'
 import { fr } from 'react-day-picker/locale'
 import 'react-day-picker/style.css'
