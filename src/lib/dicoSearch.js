@@ -74,7 +74,7 @@ export async function transitionGuess(state, callLLM) {
   })
 
   try {
-    const raw = await callLLM(prompt, 600)
+    const raw = await callLLM(prompt)
     const { guesses } = parseGuessResponse(raw)
     if (!guesses.length) {
       return {
@@ -99,7 +99,7 @@ export async function transitionConfirm(state, callLLM) {
   if (!word || !callLLM) return state
 
   try {
-    const raw = await callLLM(buildDicoExplainPrompt(word), 400)
+    const raw = await callLLM(buildDicoExplainPrompt(word), 200)
     const explanation = parseExplainResponse(raw)
     return { ...state, phase: 'explaining', confirmedWord: word, explanation, isLoading: false, error: null }
   } catch (err) {
