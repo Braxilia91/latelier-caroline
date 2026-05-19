@@ -1,6 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import Modal from '../ui/Modal'
-import { X, ImagePlus, Sparkles } from 'lucide-react'
+import {
+  X,
+  ImageSquare as ImagePlus,
+  Sparkle as Sparkles,
+} from '@phosphor-icons/react'
 import { compressImage } from '../../lib/imageCompress'
 import { runOCR, OCR_CONFIDENCE_THRESHOLD } from '../../lib/ocrWorker'
 import { runVisionOCR } from '../../lib/visionOCR'
