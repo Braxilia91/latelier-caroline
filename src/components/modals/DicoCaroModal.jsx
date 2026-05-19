@@ -1,7 +1,16 @@
 // src/components/modals/DicoCaroModal.jsx
 import { useState, useRef, useEffect, useCallback } from 'react'
 import Modal from '../ui/Modal'
-import { X, BookOpen, Search, Lightbulb, Globe, Wand2, Mic, MicOff } from 'lucide-react'
+import {
+  X,
+  BookOpen,
+  MagnifyingGlass as Search,
+  Lightbulb,
+  Globe,
+  MagicWand as Wand2,
+  Microphone as Mic,
+  MicrophoneSlash as MicOff,
+} from '@phosphor-icons/react'
 import { useDicoSearch } from '../../hooks/useDicoSearch'
 import { VoiceSearchButton } from '../../lib/voiceSearch'
 
