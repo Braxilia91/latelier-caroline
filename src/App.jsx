@@ -4,6 +4,7 @@ import { useAppState } from './hooks/useDB'
 import { useCoach } from './hooks/useCoach'
 import { useMediaQuery } from './hooks/useMediaQuery'
 import { ToastProvider, useToast } from './components/ui/Toast'
+import { IconContext } from '@phosphor-icons/react'
 import { buildWelcomeMessage } from './lib/prompts'
 import { putTraceBlob } from './lib/db'
 // T11/#4 — Surveillance expiration token Drive
@@ -685,8 +686,10 @@ function AppInner() {
 
 export default function App() {
   return (
-    <ToastProvider>
-      <AppInner />
-    </ToastProvider>
+    <IconContext.Provider value={{ weight: 'light', size: 16, color: 'currentColor' }}>
+      <ToastProvider>
+        <AppInner />
+      </ToastProvider>
+    </IconContext.Provider>
   )
 }
