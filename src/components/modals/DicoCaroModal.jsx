@@ -32,6 +32,47 @@ const writeLS = (key, value) => {
   } catch { /* quota / privé — silencieux */ }
 }
 
+// Récupère les définitions Wiktionnaire FR via l'API MediaWiki action=parse.
+// L'API REST /api/rest_v1/page/summary Wiktionnaire renvoie 501 sur beaucoup
+// de mots FR -> on parse directement le HTML wiki rendu. Robuste et 100% FR natif.
+async function fetchWiktionnaireDefinitions(term, maxDefs = 7) {
+  try {
+    const res = await fetch(
+      `https://fr.wiktionary.org/w/api.php?action=parse&page=${encodeURIComponent(term)}&prop=text&format=json&origin=*`
+    )
+    if (!res.ok) return []
+    const data = await res.json()
+    const html = data?.parse?.text?.['*']
+    if (!html || typeof html !== 'string') return []
+
+    // Extraire la section "Français" (h2 contenant Français)
+    // jusqu'au prochain h2 (autre langue) ou la fin du HTML.
+    const sectionMatch = html.match(/<h2[^>]*>[^<]*Fran[çc]ais[^<]*<\/h2>([\s\S]*?)(?=<h2|$)/i)
+    const section = sectionMatch ? sectionMatch[1] : html
+
+    // Les définitions Wiktionnaire sont dans des <li> directs.
+    const liMatches = section.match(/<li[^>]*>([\s\S]*?)<\/li>/g) || []
+    const defs = liMatches
+      .slice(0, maxDefs)
+      .map(li => li
+        .replace(/<[^>]+>/g, '')
+        .replace(/&#160;/g, ' ')
+        .replace(/&nbsp;/g, ' ')
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+        .replace(/\s+/g, ' ')
+        .trim()
+      )
+      .filter(d => d.length > 15 && d.length < 400)
+    return defs
+  } catch {
+    return []
+  }
+}
+
 export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }) {
   const [tab, setTab] = useState(() => {
     const saved = readLS('tab', 'synonymes')
@@ -141,7 +182,26 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
     try {
       const res = await fetch(`https://fr.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(term)}`)
       if (!res.ok) throw new Error('not_found')
-      setWikiResult(await res.json())
+      const data = await res.json()
+
+      // Si Wikipedia retourne une page d'homonymie (ex: "basse" -> "Basse peut faire référence à..."),
+      // basculer sur Wiktionnaire FR qui contient les VRAIES définitions de mots.
+      // L'API REST /page/summary Wiktionnaire renvoie souvent 501 -> on utilise
+      // l'API MediaWiki action=parse qui retourne le HTML wiki rendu, dont on extrait
+      // les <li> de la section "Français" = les définitions.
+      if (data.type === 'disambiguation') {
+        const wikDefs = await fetchWiktionnaireDefinitions(term)
+        if (wikDefs && wikDefs.length > 0) {
+          setWikiResult({
+            title: term,
+            description: 'Définitions (Wiktionnaire)',
+            extract: wikDefs.map(d => '• ' + d).join('\n\n'),
+          })
+          return
+        }
+      }
+
+      setWikiResult(data)
     } catch {
       try {
         const sugRes = await fetch(`https://fr.wikipedia.org/w/api.php?action=opensearch&search=${encodeURIComponent(term)}&limit=6&namespace=0&format=json&origin=*`)
