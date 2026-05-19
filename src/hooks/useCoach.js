@@ -1,3 +1,4 @@
+// ─── Client Léa (via Cloudflare Pages Functions proxy) ──────────
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { askClaude, speakWithOpenAI, normalizeForNarrationFR } from '../lib/claude'
 import { pickAmorce, pickPatience } from '../lib/amorces'
@@ -181,7 +182,16 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
     if (!hideAssistantMessage) setChatLoading(true)
     setStreaming('')
 
-    const history = [...chatHistory.map(({ role, content }) => ({ role, content })), { role: 'user', content: userText }]
+    // Fix C — Isolation chatHistory pour les traces.
+    // Quand type === 'trace', on n'envoie PAS l'historique du chat courant à Claude :
+    // chaque trace est un contexte indépendant. Sans cet isolement, les réponses
+    // de traces précédentes ("machine à laver", "plat du déjeuner") polluent
+    // la lecture de la trace actuelle.
+    const historyForRequest = type === 'trace'
+      ? []
+      : chatHistory.map(({ role, content }) => ({ role, content }))
+
+    const history = [...historyForRequest, { role: 'user', content: userText }]
     if (!hideUserMessage) {
       addMessage({ role: 'user', content: uiMessage })
     }
@@ -636,31 +646,31 @@ async function extractKeyPointInBackground({ apiKey, userText, assistantText, up
     const summary = await askClaude({
       apiKey,
       systemPrompt: MEMORY_SYSTEM_PROMPT,
-      messages: [{ role: 'user', content: buildMemoryExtractPrompt({ userText, assistantText }) }],
-      maxTokens: 80,
+      messages: [
+        { role: 'user', content: `Caroline : ${userText}\n\nLéa : ${assistantText}` }
+      ],
+      maxTokens: 60,
     })
-    const point = (summary || '').trim()
-    if (!point || point === 'RIEN' || point.length < 6 || point.length > 200) return
-    updateLeaMemory((prev) => {
-      const existing = (prev?.keyPoints || []).filter(p => p !== point)
-      return { keyPoints: [...existing, point].slice(-10) }
-    })
-  } catch (_) {}
+    const clean = (summary || '').trim()
+    if (clean && clean !== 'RIEN') {
+      updateLeaMemory({ keyPoints: clean })
+    }
+  } catch (_) {
+    // Extraction silencieuse — jamais bloquante
+  }
 }
 
+// ─── Mapping erreurs Claude → messages utilisateur ──────────────
 function mapCoachError(err) {
-  const msg = (err?.message || '').toLowerCase()
-  if (!navigator.onLine || msg.includes('failed to fetch') || msg.includes('networkerror') || msg.includes('load failed')) {
-    return "Léa est hors ligne — tu peux continuer à écrire, elle reviendra bientôt 🌿"
+  const type = err?.message || ''
+  if (type.includes('overloaded') || type.includes('529')) {
+    return "Léa est très sollicitée en ce moment… Réessaie dans quelques instants. 💙"
   }
-  if (msg.includes('401') || msg.includes('invalid') || msg.includes('authentication') || msg.includes('unauthorized') || msg.includes('x-api-key')) {
-    return "La clé API semble incorrecte — vérifie tes réglages ⚙️"
+  if (type.includes('authentication') || type.includes('401')) {
+    return "Le mot de passe Léa semble invalide. Vérifie-le dans Réglages."
   }
-  if (msg.includes('429') || msg.includes('rate_limit') || msg.includes('quota') || msg.includes('too many')) {
-    return "Léa a besoin d'un petit souffle — réessaie dans quelques instants ⏳"
+  if (type.includes('rate_limit') || type.includes('429')) {
+    return "Trop de requêtes d'un coup. Attends un petit moment avant de réessayer."
   }
-  if (msg.includes('500') || msg.includes('overloaded') || msg.includes('503') || msg.includes('service unavailable')) {
-    return "Le service est momentanément surchargé — réessaie dans un moment 🌿"
-  }
-  return "Léa n'a pas pu répondre — tu peux continuer à écrire, on réessaiera 🌿"
+  return "Léa n'a pas pu répondre. Vérifie ta connexion et réessaie."
 }

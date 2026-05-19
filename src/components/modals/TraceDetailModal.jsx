@@ -16,6 +16,7 @@ import {
 import useClickAway from '../../hooks/useClickAway'
 import { runVisionOCR } from '../../lib/visionOCR'
 import { runVisionInspire } from '../../lib/visionInspire'
+import { inspireFromImage, fileToBase64, detectMediaType } from '../../lib/vision'
 import { buildTraceContinuationPrompt } from '../../lib/prompts'
 import { transcribeAudio } from '../../lib/claude'
 import { S } from './TraceDetailModal.styles'
@@ -520,7 +521,7 @@ export default function TraceDetailModal({
       }
     } catch (err) {
       setInspireStatus('error')
-      setInspireErr(err?.message || 'Erreur lors de la lecture sensible de l’image.')
+      setInspireErr(err?.message || 'Erreur lors de la lecture sensible de l\'image.')
     }
   }
 
@@ -557,6 +558,9 @@ export default function TraceDetailModal({
   const handleDelete = () => { if (typeof onDelete === 'function') onDelete(localTrace) }
 
   // FEAT-E — "Continuer avec Léa" depuis cette trace
+  // Mode B : si traceBlob dispo et pas d'inspireText déjà calculé,
+  // on appelle inspireFromImage (Claude Vision natif) pour enrichir le brief.
+  // Léa voit vraiment la photo au lieu d'opérer à l'aveugle.
   const handleContinueWithLea = async () => {
     if (continuing) return
     if (typeof onContinueWithLea !== 'function') return
@@ -568,10 +572,25 @@ export default function TraceDetailModal({
     }
     setContinuing(true)
     try {
+      // Mode B — enrichissement visuel via Claude Vision si blob dispo et pas d'inspire déjà prêt
+      let visionContext = inspireStatus === 'done' ? inspireText : ''
+      if (!visionContext && traceBlob) {
+        try {
+          const mediaType = detectMediaType(traceBlob)
+          const base64 = await fileToBase64(traceBlob)
+          const chapterContext = (currentChapter?.content || '').slice(-500)
+          visionContext = await inspireFromImage({ apiKey, imageBase64: base64, mediaType, chapterContext })
+        } catch (visionErr) {
+          // Echec silencieux : on continue sans contexte visuel
+          console.warn('[Mode B] inspireFromImage échoué, brief sans vision', visionErr?.message)
+          visionContext = ''
+        }
+      }
+
       const briefText = buildTraceContinuationPrompt({
         trace: localTrace,
         ocrText: localTrace.ocrText || '',
-        inspireText: inspireStatus === 'done' ? inspireText : '',
+        inspireText: visionContext,
         chapterTitle: currentChapter?.title || '',
       })
       const uiMessage = "J'aimerais creuser cette trace avec toi."
@@ -723,7 +742,7 @@ export default function TraceDetailModal({
                 <div>
                   <p style={S.inspireTitle}>Faire parler cette trace</p>
                   <p style={S.inspireHint}>
-                    L’IA part des mots de Caroline, puis de l’image, pour proposer des pistes sans écrire à sa place.
+                    L'IA part des mots de Caroline, puis de l'image, pour proposer des pistes sans écrire à sa place.
                   </p>
                 </div>
                 <button
@@ -739,13 +758,13 @@ export default function TraceDetailModal({
             {inspireStatus === 'running' && (
               <div style={S.inspireRunning}>
                 <Sparkles size={14} style={{ opacity: 0.6 }} />
-                <span>La trace cherche ce qu’elle peut suggérer…</span>
+                <span>La trace cherche ce qu'elle peut suggérer…</span>
               </div>
             )}
 
             {inspireStatus === 'done' && (
               <div style={S.inspireResult}>
-                <p style={S.inspireResultLabel}>Pistes proposées par l’IA</p>
+                <p style={S.inspireResultLabel}>Pistes proposées par l'IA</p>
                 <p style={S.inspireResultText}>{inspireText}</p>
                 <div style={S.inspireActions}>
                   <button type="button" onClick={handleDiscardInspiration} style={S.cancelBtn}>
@@ -992,7 +1011,7 @@ export default function TraceDetailModal({
             }}
             aria-label="Continuer cette trace avec Léa"
           >
-            <Sparkles size={14} /> {continuing ? 'En route…' : 'Continuer avec Léa'}
+            <Sparkles size={14} /> {continuing ? 'Léa regarde la photo…' : 'Continuer avec Léa'}
           </button>
         )}
 
