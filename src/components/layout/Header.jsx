@@ -1,5 +1,18 @@
 import { useRef, useEffect } from 'react'
-import { Feather, Mic, BookOpen, Download, Settings, Lightbulb, Search, Music, Menu, Leaf, Archive, CalendarDays } from 'lucide-react'
+import {
+  Feather,
+  Microphone as Mic,
+  BookOpen,
+  DownloadSimple as Download,
+  GearSix as Settings,
+  Lightbulb,
+  MagnifyingGlass as Search,
+  MusicNote as Music,
+  List as Menu,
+  Leaf,
+  Archive,
+  CalendarDots as CalendarDays,
+} from '@phosphor-icons/react'
 import useClickAway from '../../hooks/useClickAway'
 
 const MOODS = [
