@@ -529,6 +529,8 @@ Réponds en français, dans le ton habituel de Léa.`
 }
 
 // ─── DicoCaro — Devinage lexical (remplace Akinator) ────────────
+// D-Semantic : prompt enrichi pour tolérance fautes + syntaxe télégraphique + descriptions émotionnelles.
+// La robustesse vient AVANT TOUT du prompt — Claude est entraîné pour ça, il faut juste l'autoriser.
 export function buildDicoGuessPrompt({ query, rejectedWords = [] }) {
   const rejectedSection = rejectedWords.length
     ? `\nMots déjà proposés et rejetés par Caroline : ${rejectedWords.join(', ')}. Ne les repropose PAS.`
@@ -540,16 +542,30 @@ Sa description : "${query}"${rejectedSection}
 
 Contexte : autobiographie, récit personnel. Caroline écrit son histoire de vie.
 
+IMPORTANT — Robustesse de saisie :
+Caroline peut taper avec des imperfections. Tolère et déchiffre l'intention :
+- Fautes d'orthographe ou de frappe : "ornytorinque" -> ornithorynque, "mélocolie" -> mélancolie
+- Syntaxe télégraphique : "blanc tombe ciel" -> neige, "rouge brule peau" -> coup de soleil
+- Charabia avec abréviations : "qand on perd kk1" -> deuil, "tt seul ds le noir" -> solitude
+- Description émotionnelle/sensorielle : "la tristesse douce devant la beauté qui s'efface" -> mélancolie / saudade
+- Mots-clés épars sans verbe : "vent automne feuilles" -> bise, vrombissement, susurrement
+Ne corrige PAS la phrase de Caroline. Comprends l'intention et propose les mots.
+
+Priorité : mots français précis, nuancés, adaptés à un roman autobiographique. Évite les mots trop génériques quand un mot littéraire conviendrait mieux.
+
 Propose 1 à 3 mots qui correspondent le mieux. Pour chacun :
 - le mot exact
-- un score de confiance entre 0.0 et 1.0
+- un score de confiance entre 0.0 et 1.0 (sois honnête : 0.9 si tu es sûr, 0.4 si tu hésites)
 - une phrase courte expliquant POURQUOI ce mot correspond
+
+Si la description est TRÈS floue, propose quand même 3 candidats avec confidence modérée plutôt que de renvoyer rien.
 
 Réponds UNIQUEMENT en JSON strict, sans markdown, sans préambule :
 {
   "guesses": [
-    {"word": "Stradivarius", "confidence": 0.92, "why": "Violon célèbre de la famille luthière Stradivari, XVIIe siècle"},
-    {"word": "Guarneri", "confidence": 0.45, "why": "Autre grand luthier italien, moins connu du grand public"}
+    {"word": "neige", "confidence": 0.95, "why": "Cristaux blancs qui tombent du ciel en hiver"},
+    {"word": "flocon", "confidence": 0.78, "why": "Unité visuelle de neige, plus poétique"},
+    {"word": "givre", "confidence": 0.55, "why": "Forme cristalline mais reste au sol, pas du ciel"}
   ]
 }`
 }
