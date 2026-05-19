@@ -1,6 +1,18 @@
 import { useState, useEffect, useRef } from 'react'
 import Modal from '../ui/Modal'
-import { X, Edit3, Check, Trash2, Archive, Tag, BookOpen, Sparkles, Mic, Square, FileText } from 'lucide-react'
+import {
+  X,
+  PencilSimple as Edit3,
+  Check,
+  Trash as Trash2,
+  Archive,
+  Tag,
+  BookOpen,
+  Sparkle as Sparkles,
+  Microphone as Mic,
+  Stop as Square,
+  FileText,
+} from '@phosphor-icons/react'
 import useClickAway from '../../hooks/useClickAway'
 import { runVisionOCR } from '../../lib/visionOCR'
 import { runVisionInspire } from '../../lib/visionInspire'
