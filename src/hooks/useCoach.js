@@ -581,6 +581,10 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
     correctText, defineWord, findThread, expressDoubt, digPassage, injectVrac,
     getDiscovery, getSynonyms, searchWord, getPredictiveWords,
     ttsState, ttsPlay, ttsPause, ttsStop, ttsSetSpeed,
+    // Clés exposées pour DicoCaroModal → useDicoSearch (callLLM) + VoiceSearchButton (Whisper).
+    // Le hook les reçoit déjà en params (ligne 64) ; on les rend visibles aux consumers
+    // qui n'utilisent pas db directement (ex : DicoCaroModal passe par coach.apiKey).
+    apiKey, openAiKey,
   }
 }
 
