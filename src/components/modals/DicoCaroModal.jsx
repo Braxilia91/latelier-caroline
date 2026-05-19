@@ -69,6 +69,14 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
   // ─ Hook recherche lexicale (onglet "Je cherche")
   const dicoSearch = useDicoSearch({ apiKey: coach?.apiKey, openAiKey: coach?.openAiKey })
 
+  // D-Detect : détection auto phrase ou mot inconnu long → CTA Léa proéminent.
+  // Sans ça, Caroline tape une description, voit "aucune suggestion" et ignore
+  // le bouton "Demander à Léa" en bas. Le bandeau l'amène directement au mode devinage.
+  const trimmed       = searchInput.trim()
+  const isPhrase      = trimmed.includes(' ')
+  const isLongUnknown = !isPhrase && trimmed.length > 18 && dicoSearch.state.suggestions.length === 0
+  const showLeaCta    = (isPhrase || isLongUnknown) && trimmed.length >= 2 && dicoSearch.state.phase !== 'guessing' && dicoSearch.state.phase !== 'confirming' && dicoSearch.state.phase !== 'explaining'
+
   const { loading, getSynonyms, searchWord: legacySearchWord, defineWord, getPredictiveWords, getDiscovery } = coach
   const hasChapterContent = !!(currentChapter?.content?.trim())
   const wikiUrl = wikiResult?.content_urls?.desktop?.page
@@ -351,8 +359,32 @@ export default function DicoCaroModal({ onClose, coach, hasKey, currentChapter }
                   )}
                 </div>
 
-                {/* Suggestions autocomplete */}
-                {dicoSearch.state.phase === 'suggesting' && dicoSearch.state.suggestions.length > 0 && (
+                {/* D-Detect — Bandeau Léa CTA si phrase ou mot long inconnu */}
+                {showLeaCta && (
+                  <div style={S.leaCta}>
+                    <span style={S.leaCtaIcon} aria-hidden="true">✨</span>
+                    <div style={S.leaCtaTextWrap}>
+                      <p style={S.leaCtaText}>
+                        Léa peut deviner ce mot à partir de ta description
+                      </p>
+                      <button
+                        type="button"
+                        style={{
+                          ...S.leaCtaBtn,
+                          opacity: dicoSearch.state.isLoading ? 0.6 : 1,
+                          cursor: dicoSearch.state.isLoading ? 'wait' : 'pointer',
+                        }}
+                        onClick={() => dicoSearch.submitQuery()}
+                        disabled={dicoSearch.state.isLoading}
+                      >
+                        {dicoSearch.state.isLoading ? '…' : 'Demander à Léa →'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Suggestions autocomplete — masquées si phrase (les préfixes Datamuse n'ont aucun sens sur une phrase) */}
+                {dicoSearch.state.phase === 'suggesting' && dicoSearch.state.suggestions.length > 0 && !isPhrase && (
                   <div style={S.suggestWrap}>
                     <div style={S.hint}>Clique sur un mot pour voir sa définition directement :</div>
                     <div style={S.suggestList}>
@@ -725,6 +757,39 @@ const S = {
     fontFamily: "'Nunito', sans-serif", whiteSpace: 'pre-wrap',
   },
   searchRow: { display: 'flex', gap: 8, alignItems: 'center' },
+  // D-Detect — Bandeau CTA Léa quand description / phrase / mot long inconnu
+  leaCta: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 12,
+    padding: '12px 14px',
+    background: 'linear-gradient(135deg, #FFF3E8 0%, #FFEAD5 100%)',
+    border: '1.5px solid #E0B584',
+    borderRadius: 10,
+    marginBottom: 4,
+  },
+  leaCtaIcon: { fontSize: 22, flexShrink: 0 },
+  leaCtaTextWrap: { display: 'flex', flexDirection: 'column', gap: 6, flex: 1 },
+  leaCtaText: {
+    margin: 0,
+    fontSize: '.82rem',
+    fontWeight: 600,
+    color: '#6B4D2E',
+    fontFamily: "'Nunito', sans-serif",
+    lineHeight: 1.4,
+  },
+  leaCtaBtn: {
+    alignSelf: 'flex-start',
+    background: '#C4956A',
+    color: '#fff',
+    border: 'none',
+    borderRadius: 7,
+    padding: '7px 16px',
+    fontSize: '.8rem',
+    fontWeight: 700,
+    fontFamily: "'Nunito', sans-serif",
+    cursor: 'pointer',
+  },
   suggestWrap: { display: 'flex', flexDirection: 'column', gap: 8 },
   suggestList: { display: 'flex', flexWrap: 'wrap', gap: 6 },
   suggestChip: {
