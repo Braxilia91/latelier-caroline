@@ -1,7 +1,13 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 
 import Modal from '../ui/Modal'
-import { Mic, MicOff, Check, X, RotateCcw } from 'lucide-react'
+import {
+  Microphone as Mic,
+  MicrophoneSlash as MicOff,
+  Check,
+  X,
+  ArrowCounterClockwise as RotateCcw,
+} from '@phosphor-icons/react'
 import { useVoice } from '../../hooks/useVoice'
 // LOT 4D.1 — auto-save dictée dans IndexedDB (KV store) pour résister aux crashs/veille tueuse
 import { getKV, setKV } from '../../lib/db'
