@@ -66,7 +66,7 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
   const [chatLoading,  setChatLoading]  = useState(false)
   const [streaming,    setStreaming]    = useState('')
   // UX-Voix : default OFF. Caroline doit cliquer 🔊 sur une bulle pour ecouter,
-  // ou activer la lecture auto via le toggle voix dans le header CoachPanel.
+  // ou activer la lecture auto via le toggle voix du header CoachPanel.
   // Evite la consommation tokens TTS OpenAI a chaque message non desire.
   const [voiceOn,      setVoiceOn]      = useState(false)
   const [ttsState,     setTtsState]     = useState({ playing: false, paused: false, speed: 1.0, mode: null })
@@ -579,22 +579,48 @@ export function useCoach({ apiKey, openAiKey, name, moodToday, currentChapter, l
     setVoiceOn(v => !v)
   }, [voiceOn, stopAllTts])
 
-  // UX-Voix : speakMessage est l'alias public de speakBrowserManaged.
-  // Permet de declencher la lecture TTS d'un message a la demande (bouton 🔊
-  // par bulle dans CoachPanel) independamment du flag voiceOn global.
-  // Si une lecture est en cours, elle est arretee avant de demarrer la nouvelle.
-  const speakMessage = useCallback((text) => {
+  // UX-Voix : speakMessage lit UN message a la demande, independant de voiceOn.
+  // Utilise speakWithOpenAI (voix Nova/Shimmer premium configuree par Caroline)
+  // si openAiKey dispo, sinon fallback speakBrowserManaged (web speech navigateur).
+  // L'audio est stocke dans audioRef pour permettre stopAllTts de l'arreter.
+  const speakMessage = useCallback(async (text) => {
     if (typeof text !== 'string' || !text.trim()) return
     stopAllTts()
-    speakBrowserManaged(text)
-  }, [speakBrowserManaged, stopAllTts])
+
+    if (openAiKey) {
+      try {
+        const audio = await speakWithOpenAI({
+          openAiKey,
+          text,
+          voice: leaVoice || 'nova',
+          speed: speedRef.current,
+          hd: true,
+        })
+        audioRef.current = audio
+        setTtsState({ playing: true, paused: false, speed: speedRef.current, mode: 'openai' })
+        const cleanup = () => {
+          if (audioRef.current === audio) {
+            audioRef.current = null
+            setTtsState(s => ({ playing: false, paused: false, speed: s.speed, mode: null }))
+          }
+        }
+        audio.addEventListener('ended', cleanup, { once: true })
+        audio.addEventListener('error', cleanup, { once: true })
+      } catch (e) {
+        console.warn('[speakMessage] OpenAI échec, fallback web speech', e?.message)
+        speakBrowserManaged(text)
+      }
+    } else {
+      speakBrowserManaged(text)
+    }
+  }, [openAiKey, leaVoice, speakBrowserManaged, stopAllTts])
 
   return {
     loading, chatLoading, streaming, voiceOn, toggleVoice, sendMessage,
     correctText, defineWord, findThread, expressDoubt, digPassage, injectVrac,
     getDiscovery, getSynonyms, searchWord, getPredictiveWords,
     ttsState, ttsPlay, ttsPause, ttsStop, ttsSetSpeed,
-    // UX-Voix : lecture a la demande d'une bulle Lea (independant de voiceOn).
+    // UX-Voix : lecture a la demande d'une bulle Lea, voix OpenAI premium.
     speakMessage,
     // Clés exposées pour DicoCaroModal → useDicoSearch (callLLM) + VoiceSearchButton (Whisper).
     // Le hook les reçoit déjà en params (ligne 64) ; on les rend visibles aux consumers
