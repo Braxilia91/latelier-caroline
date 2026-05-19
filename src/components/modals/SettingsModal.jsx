@@ -1,7 +1,21 @@
 import { useState, useRef, useEffect } from 'react'
 import Modal from '../ui/Modal'
 import { useToast } from '../ui/Toast'
-import { X, Save, AlertTriangle, RefreshCw, Wifi, Download, Upload, Lock, Eye, EyeOff, Copy, Check, HardDrive } from 'lucide-react'
+import {
+  X,
+  FloppyDisk as Save,
+  Warning as AlertTriangle,
+  ArrowsClockwise as RefreshCw,
+  WifiHigh as Wifi,
+  DownloadSimple as Download,
+  UploadSimple as Upload,
+  Lock,
+  Eye,
+  EyeSlash as EyeOff,
+  Copy,
+  Check,
+  HardDrive,
+} from '@phosphor-icons/react'
 import * as googleDrive from '../../lib/googleDrive'
 
 const VOICES = [
