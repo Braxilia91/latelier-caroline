@@ -529,44 +529,56 @@ Réponds en français, dans le ton habituel de Léa.`
 }
 
 // ─── DicoCaro — Devinage lexical (remplace Akinator) ────────────
-// D-Semantic : prompt enrichi pour tolérance fautes + syntaxe télégraphique + descriptions émotionnelles.
-// La robustesse vient AVANT TOUT du prompt — Claude est entraîné pour ça, il faut juste l'autoriser.
+// D-Semantic v2 : forçage de DIVERSITÉ des 3 candidats sur 3 angles distincts
+// (concept / état / littéraire) pour éviter que Léa s'enferme dans un seul
+// champ sémantique. Résout le cas "qand on perd kk1 et on pense plu a rien"
+// qui retournait 6 mots de l'état mental (stupeur/hébétude/...) sans jamais
+// proposer le concept central (deuil). Méthode inspirée de OneLook Reverse
+// Dictionary qui force "Associated / Describe / Complete" comme angles.
 export function buildDicoGuessPrompt({ query, rejectedWords = [] }) {
   const rejectedSection = rejectedWords.length
     ? `\nMots déjà proposés et rejetés par Caroline : ${rejectedWords.join(', ')}. Ne les repropose PAS.`
     : ''
 
-  return `Tu es Léa, l'assistante d'écriture de Caroline. Elle cherche un mot précis mais ne se souvient plus du nom exact, ou ne le connaît pas.
-
-Sa description : "${query}"${rejectedSection}
+  return `Tu es Léa, l'assistante d'écriture de Caroline. Elle cherche un mot précis qu'elle n'arrive pas à nommer.
 
 Contexte : autobiographie, récit personnel. Caroline écrit son histoire de vie.
 
-IMPORTANT — Robustesse de saisie :
-Caroline peut taper avec des imperfections. Tolère et déchiffre l'intention :
-- Fautes d'orthographe ou de frappe : "ornytorinque" -> ornithorynque, "mélocolie" -> mélancolie
-- Syntaxe télégraphique : "blanc tombe ciel" -> neige, "rouge brule peau" -> coup de soleil
-- Charabia avec abréviations : "qand on perd kk1" -> deuil, "tt seul ds le noir" -> solitude
-- Description émotionnelle/sensorielle : "la tristesse douce devant la beauté qui s'efface" -> mélancolie / saudade
-- Mots-clés épars sans verbe : "vent automne feuilles" -> bise, vrombissement, susurrement
-Ne corrige PAS la phrase de Caroline. Comprends l'intention et propose les mots.
+TOLÉRANCE OBLIGATOIRE — ne corrige jamais, déchiffre l'intention :
+- Fautes d'orthographe : "ornytorinque" → ornithorynque, "melocolie" → mélancolie
+- Frappe télégraphique : "blanc tombe ciel" → neige, "oiseau chante nuit" → rossignol
+- Syntaxe SMS / charabia : "qand on perd kk1 et on pense plu a rien" → deuil, sidération, désarroi
+- Description émotionnelle/sensorielle : "tristesse douce devant la beauté qui s'efface" → mélancolie, saudade
+- Mots-clés épars : "vent automne feuilles" → bise, susurrement
 
-Priorité : mots français précis, nuancés, adaptés à un roman autobiographique. Évite les mots trop génériques quand un mot littéraire conviendrait mieux.
+MÉTHODE INTERNE EN 3 ÉTAPES (ne pas l'afficher, juste la suivre) :
+1. Identifie le CONCEPT CENTRAL de la description (situation, objet, émotion, sensation, action).
+   Exemple : "qand on perd kk1 et on pense plu a rien" → concept central = PERDRE UN ÊTRE CHER (situation), pas "ne plus penser à rien" (état accessoire).
+2. Liste les angles possibles : (a) situation/objet → (b) état mental résultant → (c) mot littéraire ou métaphorique
+3. Propose UN mot par angle. JAMAIS 3 mots du même champ sémantique.
 
-Propose 1 à 3 mots qui correspondent le mieux. Pour chacun :
-- le mot exact
-- un score de confiance entre 0.0 et 1.0 (sois honnête : 0.9 si tu es sûr, 0.4 si tu hésites)
-- une phrase courte expliquant POURQUOI ce mot correspond
+RÈGLE DES 3 CANDIDATS — diversité obligatoire :
+- Candidat 1 : le mot CONCEPT (la situation ou l'objet central). Exemple : "deuil"
+- Candidat 2 : le mot ÉTAT (ce que ça provoque, l'effet). Exemple : "sidération"
+- Candidat 3 : le mot LITTÉRAIRE (registre roman autobiographique, nuancé). Exemple : "désarroi"
 
-Si la description est TRÈS floue, propose quand même 3 candidats avec confidence modérée plutôt que de renvoyer rien.
+Pour chaque candidat :
+- le mot exact en français
+- un score de confiance entre 0.0 et 1.0 (honnête : 0.9 si sûr, 0.4 si tu hésites)
+- une phrase courte expliquant l'angle (concept/état/littéraire) et POURQUOI ce mot
+
+Si la description est très floue, propose quand même 3 candidats avec confidence modérée plutôt que rien.
+
+Sa description : "${query}"${rejectedSection}
 
 Réponds UNIQUEMENT en JSON strict, sans markdown, sans préambule :
 {
   "guesses": [
-    {"word": "neige", "confidence": 0.95, "why": "Cristaux blancs qui tombent du ciel en hiver"},
-    {"word": "flocon", "confidence": 0.78, "why": "Unité visuelle de neige, plus poétique"},
-    {"word": "givre", "confidence": 0.55, "why": "Forme cristalline mais reste au sol, pas du ciel"}
+    {"word": "deuil", "confidence": 0.95, "why": "Concept central — perdre un être cher"},
+    {"word": "sidération", "confidence": 0.80, "why": "État mental — ne plus penser à rien"},
+    {"word": "désarroi", "confidence": 0.70, "why": "Registre littéraire — désorientation profonde après une perte"}
   ]
+}`
 }`
 }
 
