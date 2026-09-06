@@ -63,9 +63,14 @@ async function handleUser(req, env) {
     return json({ error: 'Token manquant ou trop court (20 caractères min)' }, 401)
   }
 
+  // Fail closed : sans secret configuré côté Cloudflare, on refuse plutôt
+  // que de retomber sur un sel public (connu de tout le monde, ce repo
+  // étant public sur GitHub).
+  if (!env.SYNC_SECRET) {
+    return json({ error: 'Synchronisation non configurée (SYNC_SECRET manquant côté serveur)' }, 503)
+  }
   // Clé KV = HMAC-SHA256(token, sel secret) — résistant à dictionnaire
-  const secret = env.SYNC_SECRET || 'atelier-caroline-default-salt-change-me'
-  const kvKey  = `snapshot_${await hmacSha256(token, secret)}`
+  const kvKey = `snapshot_${await hmacSha256(token, env.SYNC_SECRET)}`
 
   // GET — récupérer le snapshot distant
   if (req.method === 'GET') {
@@ -125,7 +130,11 @@ async function handleAdmin(req, env, path, url) {
     return json({ error: 'Admin secret invalide' }, 401)
   }
 
-  const secret = env.SYNC_SECRET || 'atelier-caroline-default-salt-change-me'
+  // Fail closed — même garde-fou que handleUser (pas de sel public en repli).
+  if (!env.SYNC_SECRET) {
+    return json({ error: 'Synchronisation non configurée (SYNC_SECRET manquant côté serveur)' }, 503)
+  }
+  const secret = env.SYNC_SECRET
 
   // GET /admin/list — lister tous les snapshots existants (debug, recovery)
   if (path === '/admin/list' && req.method === 'GET') {

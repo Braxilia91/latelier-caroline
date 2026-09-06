@@ -226,8 +226,13 @@ export default {
         return json({ error: 'Token manquant ou trop court (20 caracteres min)' }, 401, headers)
       }
 
-      const secret = env.SYNC_SECRET || 'atelier-caroline-default-salt-change-me'
-      const kvKey  = `snapshot_${await hmacSha256(token, secret)}`
+      // Fail closed : sans secret configuré côté Cloudflare, on refuse plutôt
+      // que de retomber sur un sel public (connu de tout le monde, ce repo
+      // étant public sur GitHub).
+      if (!env.SYNC_SECRET) {
+        return json({ error: 'Synchronisation non configurée (SYNC_SECRET manquant côté serveur)' }, 503, headers)
+      }
+      const kvKey = `snapshot_${await hmacSha256(token, env.SYNC_SECRET)}`
 
       // GET — pull snapshot distant
       if (request.method === 'GET') {
