@@ -102,7 +102,7 @@ export async function transitionConfirm(state, callLLM) {
     // Sonnet 4 pour la définition + trivia : qualité littéraire supérieure
     // (Haiku tend à over-engineer et produire des trivias génériques sur les mots rares).
     // Latence acceptée ~1.5s : Caroline attend volontiers le résultat final.
-    const raw = await callLLM(buildDicoExplainPrompt(word), 250, 'claude-sonnet-4-20250514')
+    const raw = await callLLM(buildDicoExplainPrompt(word), 250, 'claude-sonnet-4-6')
     const explanation = parseExplainResponse(raw)
     return { ...state, phase: 'explaining', confirmedWord: word, explanation, isLoading: false, error: null }
   } catch (err) {

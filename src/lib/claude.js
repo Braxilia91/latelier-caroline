@@ -3,7 +3,7 @@ const CLAUDE_PROXY = '/api/claude'
 const TTS_PROXY = '/api/openai-tts'
 const WHISPER_PROXY = '/api/openai-whisper'
 
-const MODEL = 'claude-sonnet-4-20250514'
+const MODEL = 'claude-sonnet-4-6'
 
 // ─── Nettoyage du texte avant TTS ────────────────────────────
 // Strip markdown (astérisques, headers, code, links), emojis, bullets
