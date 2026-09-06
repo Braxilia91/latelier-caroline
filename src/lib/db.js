@@ -102,11 +102,13 @@ export async function saveChapter(chapter) {
 
 export async function deleteChapter(id) {
   await openDB()
-  return new Promise((resolve, reject) => {
+  await new Promise((resolve, reject) => {
     const req = tx('chapters', 'readwrite').delete(id)
     req.onsuccess = () => resolve()
     req.onerror   = (e) => reject(e.target.error)
   })
+  // Anti-résurrection sync — voir recordTombstone plus bas.
+  await recordTombstone('deletedChapterIds', id)
 }
 
 export async function restoreChapter(chapter) {
@@ -210,7 +212,7 @@ export async function updateVrac(id, fields) {
     getReq.onsuccess = () => {
       const item = getReq.result
       if (!item) { txn.abort(); return reject(new Error('Vrac item not found')) }
-      store.put({ ...item, ...fields })
+      store.put({ ...item, ...fields, updatedAt: new Date().toISOString() })
     }
     getReq.onerror   = (e) => reject(e.target.error)
     txn.oncomplete   = () => resolve()
@@ -221,11 +223,29 @@ export async function updateVrac(id, fields) {
 
 export async function deleteVrac(id) {
   await openDB()
-  return new Promise((resolve, reject) => {
+  await new Promise((resolve, reject) => {
     const req = tx('vrac', 'readwrite').delete(id)
     req.onsuccess = () => resolve()
     req.onerror   = (e) => reject(e.target.error)
   })
+  // Anti-résurrection sync — voir recordTombstone plus bas.
+  await recordTombstone('deletedVracIds', id)
+}
+
+// ─── Tombstones de suppression (anti-résurrection en sync multi-appareil) ──
+// Liste bornée { id, deletedAt } stockée en kv — aucun nouveau store IDB,
+// pas de bump DB_VERSION. Consommé par sync.js (mergeChapters / mergeById)
+// pour qu'une suppression sur un appareil ne revive pas depuis un autre
+// appareil qui n'a pas encore vu la suppression.
+const TOMBSTONE_CAP = 300
+
+async function recordTombstone(kvKey, id) {
+  const list = await getKV(kvKey, [])
+  const next = [
+    ...(Array.isArray(list) ? list : []).filter(t => t?.id !== id),
+    { id, deletedAt: new Date().toISOString() },
+  ]
+  await setKV(kvKey, next.slice(-TOMBSTONE_CAP))
 }
 
 // ─── Traces — tiroir mémoire photo ─────────────────────────────
@@ -416,7 +436,7 @@ function base64ToBlob(b64, mimeType) {
 }
 
 // ─── Import snapshot (sync inter-appareils) ────────────────────
-const KV_KEYS_SYNC = ['name','leaVoice','streak','sessions','lastSession','moodToday','moodValue','caroline_profile','lea_memory']
+const KV_KEYS_SYNC = ['name','leaVoice','streak','sessions','lastSession','moodToday','moodValue','caroline_profile','lea_memory','deletedChapterIds','deletedVracIds']
 
 export function isValidSnapshot(data) {
   if (!data || typeof data !== 'object')              return false

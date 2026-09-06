@@ -8,7 +8,7 @@ import {
   saveVoiceMemo, getVoiceMemo, deleteVoiceMemo,
   exportAllData, resetAllData, importSnapshot, buildLocalBackup, getStorageEstimate,
 } from '../lib/db'
-import { pushSnapshot, pullSnapshot, buildSnapshot, whoWins } from '../lib/sync'
+import { pushSnapshot, pullSnapshot, buildSnapshot, whoWins, mergeChapters, mergeById, mergeTombstones } from '../lib/sync'
 import { uploadAllBlobs, downloadAllBlobs } from '../lib/driveSync'
 // T8.4b — Check session Drive pour décider download blobs vs toast offline
 import { getCurrentUser } from '../lib/googleDrive'
@@ -97,6 +97,8 @@ export function useAppState() {
   // ── Lock anti-race recordSession ────────────────────────────
   const recordSessionLockRef = useRef(false)
   const lastSessionRef = useRef('')
+  // ── Lock anti-race syncNow (évite deux sync concurrentes sur le même appareil)
+  const syncInProgressRef = useRef(false)
 
   // ─── Chargement initial ──────────────────────────────────────
   useEffect(() => {
@@ -262,25 +264,39 @@ export function useAppState() {
     await setKV('syncToken', v)
   }, [])
 
-  // ─── Sync inter-appareils (last-write-wins) ──────────────────
+  // ─── Sync inter-appareils (fusion locale, anti-résurrection) ──
+  // Un seul sync actif à la fois par appareil (syncInProgressRef) : un
+  // second appel pendant qu'un sync tourne déjà est ignoré plutôt que de
+  // laisser deux push/pull se chevaucher (race concurrente).
   const syncNow = useCallback(async () => {
+    if (syncInProgressRef.current) {
+      console.info('[Sync] Sync déjà en cours — appel ignoré')
+      return
+    }
+    syncInProgressRef.current = true
     const token = await getKV('syncToken', '')
-    if (!token) { setSyncMessage('Configure un token dans Réglages'); setSyncStatus('error'); return }
+    if (!token) {
+      setSyncMessage('Configure un token dans Réglages'); setSyncStatus('error')
+      syncInProgressRef.current = false
+      return
+    }
 
     setSyncStatus('syncing'); setSyncMessage('')
     try {
       // 1. Construire snapshot local
       const kvData = {
-        name:              await getKV('name',             ''),
-        leaVoice:          await getKV('leaVoice',         'nova'),
-        streak:            await getKV('streak',           0),
-        sessions:          await getKV('sessions',         0),
-        lastSession:       await getKV('lastSession',      ''),
-        moodToday:         await getKV('moodToday',        ''),
-        moodValue:         await getKV('moodValue',        ''),
-        caroline_profile:  await getKV('caroline_profile', null),
-        lea_memory:        await getKV('lea_memory',       null),
-        lastSyncedAt:      await getKV('lastSyncedAt',     null),
+        name:               await getKV('name',               ''),
+        leaVoice:           await getKV('leaVoice',           'nova'),
+        streak:             await getKV('streak',             0),
+        sessions:           await getKV('sessions',          0),
+        lastSession:        await getKV('lastSession',        ''),
+        moodToday:          await getKV('moodToday',          ''),
+        moodValue:          await getKV('moodValue',          ''),
+        caroline_profile:   await getKV('caroline_profile',   null),
+        lea_memory:         await getKV('lea_memory',         null),
+        lastSyncedAt:       await getKV('lastSyncedAt',       null),
+        deletedChapterIds:  await getKV('deletedChapterIds',  []),
+        deletedVracIds:     await getKV('deletedVracIds',     []),
       }
       const [chapters, vrac, chat, currentTraces] = await Promise.all([
         getChapters(),
@@ -293,59 +309,102 @@ export function useAppState() {
       // 2. Tirer le snapshot distant
       const remote = await pullSnapshot({ token })
 
-      // 3. Comparer les timestamps
-      const winner = whoWins(local.syncedAt, remote.syncedAt)
-
-      if (winner === 'remote' && !remote.empty) {
-        // Le distant est plus récent → valider et importer
-        const ok = await importSnapshot(remote)
-        if (!ok) {
-          setSyncStatus('error')
-          setSyncMessage('Snapshot distant corrompu — import annulé, données locales préservées')
-          return
-        }
-
-        // T8.4b — Restaurer les blobs depuis Drive pour les traces inbound.
-        const importedTraces = Array.isArray(remote.traces) ? remote.traces : []
-        if (importedTraces.length > 0) {
-          const driveUser = getCurrentUser()
-          if (driveUser) {
-            downloadAllBlobs(importedTraces).catch(err =>
-              console.warn('[Sync] downloadAllBlobs partiel:', err?.message)
-            )
-          } else {
-            setPendingBlobsMessage('Reconnecte Google Drive depuis Réglages pour télécharger tes photos.')
-          }
-        }
-
-        // Rafraîchir l'état React depuis IndexedDB (traces + chapters + vrac + chat)
-        const [chs, v, ch, freshTraces] = await Promise.all([
-          getChapters(),
-          getVrac(),
-          getChatHistoryRecent(200),
-          getTraces(),
-        ])
-        setChapters(chs)
-        if (chs.length > 0) setCurrentId(chs[0].id)
-        setVracIdeas(v)
-        setChatHistory(ch)
-        setTraces(freshTraces.length > TRACES_RAM_CAP ? freshTraces.slice(0, TRACES_RAM_CAP) : freshTraces)
-        setLastSyncedAt(remote.syncedAt)
-        setSyncStatus('ok'); setSyncMessage(`Données mises à jour depuis le cloud ✓`)
-      } else if (winner === 'local' || remote.empty) {
+      if (remote.empty) {
         await pushSnapshot({ token, snapshot: local })
         await setKV('lastSyncedAt', local.syncedAt)
         setLastSyncedAt(local.syncedAt)
         uploadAllBlobs(currentTraces).catch(err =>
           console.warn('[Sync] uploadAllBlobs partiel:', err?.message)
         )
-        setSyncStatus('ok'); setSyncMessage(`Sauvegardé dans le cloud ✓`)
-      } else {
-        setSyncStatus('ok'); setSyncMessage(`Déjà synchronisé ✓`)
+        setSyncStatus('ok'); setSyncMessage('Sauvegardé dans le cloud ✓')
+        return
       }
+
+      // 3. Fusion anti-écrasement — élément par élément, jamais de perte,
+      //    jamais de résurrection d'un élément supprimé sur l'autre appareil.
+      const remoteKv = remote.kv || {}
+      const mergedChapters = mergeChapters({
+        local: chapters, remote: remote.chapters || [],
+        localDeleted: kvData.deletedChapterIds || [],
+        remoteDeleted: remoteKv.deletedChapterIds || [],
+      })
+      const mergedVrac = mergeById({
+        local: vrac, remote: remote.vrac || [],
+        localDeleted: kvData.deletedVracIds || [],
+        remoteDeleted: remoteKv.deletedVracIds || [],
+        contentKeys: ['text'],
+      })
+      const mergedDeletedChapterIds = mergeTombstones(kvData.deletedChapterIds || [], remoteKv.deletedChapterIds || [])
+      const mergedDeletedVracIds    = mergeTombstones(kvData.deletedVracIds    || [], remoteKv.deletedVracIds    || [])
+
+      // Réglages (nom, voix, mémoire Léa...) : le plus récent gagne en bloc.
+      // Un seul utilisateur derrière ces réglages — risque de conflit réel
+      // négligeable, pas besoin de la même fusion élément par élément.
+      const winner  = whoWins(local.syncedAt, remote.syncedAt)
+      const kvWinner = winner === 'remote' ? remoteKv : kvData
+      const remoteHasTraces = Array.isArray(remote.traces)
+
+      const merged = {
+        version:  2,
+        syncedAt: new Date().toISOString(),
+        chapters: mergedChapters,
+        vrac:     mergedVrac,
+        kv:       { ...kvWinner, deletedChapterIds: mergedDeletedChapterIds, deletedVracIds: mergedDeletedVracIds },
+        chat:     winner === 'remote' && Array.isArray(remote.chat) ? remote.chat : chat,
+        traces:   winner === 'remote' && remoteHasTraces ? remote.traces : currentTraces,
+      }
+
+      // 4. Persister la fusion en local (transaction atomique existante),
+      //    puis la pousser au Worker — les deux appareils convergent vers
+      //    le même état fusionné au prochain sync.
+      const ok = await importSnapshot(merged)
+      if (!ok) {
+        setSyncStatus('error')
+        setSyncMessage('Fusion invalide — import annulé, données locales préservées')
+        return
+      }
+      await pushSnapshot({ token, snapshot: merged })
+
+      // T8.4b — Restaurer les blobs Drive pour les traces qui viennent du distant.
+      if (winner === 'remote' && remoteHasTraces && remote.traces.length > 0) {
+        const driveUser = getCurrentUser()
+        if (driveUser) {
+          downloadAllBlobs(remote.traces).catch(err =>
+            console.warn('[Sync] downloadAllBlobs partiel:', err?.message)
+          )
+        } else {
+          setPendingBlobsMessage('Reconnecte Google Drive depuis Réglages pour télécharger tes photos.')
+        }
+      } else {
+        uploadAllBlobs(merged.traces).catch(err =>
+          console.warn('[Sync] uploadAllBlobs partiel:', err?.message)
+        )
+      }
+
+      // Rafraîchir l'état React depuis IndexedDB (source de vérité après fusion).
+      const [chs, v, ch, freshTraces] = await Promise.all([
+        getChapters(),
+        getVrac(),
+        getChatHistoryRecent(200),
+        getTraces(),
+      ])
+      setChapters(chs)
+      if (chs.length > 0 && !chs.some(c => c.id === currentIdRef.current)) setCurrentId(chs[0].id)
+      setVracIdeas(v)
+      setChatHistory(ch)
+      setTraces(freshTraces.length > TRACES_RAM_CAP ? freshTraces.slice(0, TRACES_RAM_CAP) : freshTraces)
+      setLastSyncedAt(merged.syncedAt)
+      setSyncStatus('ok')
+      setSyncMessage(
+        mergedChapters.length !== chapters.length || mergedVrac.length !== vrac.length
+          ? 'Synchronisé — éléments des deux appareils fusionnés ✓'
+          : 'Synchronisé ✓'
+      )
     } catch (err) {
       setSyncStatus('error')
       setSyncMessage(err.message || 'Erreur de synchronisation')
+    } finally {
+      syncInProgressRef.current = false
     }
   }, [])
 

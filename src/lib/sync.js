@@ -126,6 +126,88 @@ export function whoWins(localSyncedAt, remoteSyncedAt, localChapters = [], remot
   return 'equal'
 }
 
+// ── Fusion anti-écrasement (chapitres / vrac) ─────────────────────
+//
+// Objectif : deux appareils qui modifient des éléments différents ne
+// doivent jamais s'écraser l'un l'autre, et une suppression ne doit
+// jamais ressusciter depuis un appareil qui ne l'a pas encore vue.
+// Pas de merge de contenu ligne à ligne : en cas de vrai conflit sur le
+// MÊME id (contenu différent des deux côtés), les deux versions sont
+// conservées — la plus récente garde l'id, l'autre devient une copie
+// clairement nommée. Volontairement simple (pas de CRDT).
+
+/**
+ * Fusionne deux listes de chapitres par id.
+ * @param {{local: Array, remote: Array, localDeleted: Array, remoteDeleted: Array}} args
+ *   localDeleted / remoteDeleted : tombstones [{ id, deletedAt }]
+ */
+export function mergeChapters({ local = [], remote = [], localDeleted = [], remoteDeleted = [] }) {
+  return mergeById({ local, remote, localDeleted, remoteDeleted, contentKeys: ['content', 'title'] })
+}
+
+/**
+ * Fusion générique par id, tombstone-aware. Utilisée pour chapters et vrac.
+ * `contentKeys` : champs à comparer pour détecter un vrai conflit de contenu
+ * (sinon la version la plus récente est gardée sans dupliquer).
+ */
+export function mergeById({ local = [], remote = [], localDeleted = [], remoteDeleted = [], contentKeys = [] }) {
+  const localMap  = new Map(local.map(item => [item.id, item]))
+  const remoteMap = new Map(remote.map(item => [item.id, item]))
+  const localDel  = new Map(localDeleted.map(t => [t.id, t.deletedAt]))
+  const remoteDel = new Map(remoteDeleted.map(t => [t.id, t.deletedAt]))
+  const allIds    = new Set([...localMap.keys(), ...remoteMap.keys()])
+  const stamp     = (item) => new Date(item?.updatedAt || item?.createdAt || 0).getTime()
+
+  const result = []
+  for (const id of allIds) {
+    const l = localMap.get(id)
+    const r = remoteMap.get(id)
+    const lDel = localDel.get(id)
+    const rDel = remoteDel.get(id)
+
+    // Supprimé localement, absent du distant sous cette forme : on ne
+    // ressuscite QUE si le distant a une édition postérieure à la suppression.
+    if (lDel && !l) {
+      if (r && stamp(r) > new Date(lDel).getTime()) result.push(r)
+      continue
+    }
+    if (rDel && !r) {
+      if (l && stamp(l) > new Date(rDel).getTime()) result.push(l)
+      continue
+    }
+
+    if (l && r) {
+      const sameContent = contentKeys.length === 0 || contentKeys.every(k => l[k] === r[k])
+      if (sameContent) {
+        result.push(stamp(l) >= stamp(r) ? l : r)
+      } else {
+        const [newer, older] = stamp(l) >= stamp(r) ? [l, r] : [r, l]
+        result.push(newer)
+        result.push({
+          ...older,
+          id:    `${id}-copie-${Date.now()}`,
+          title: older.title ? `${older.title} — copie à vérifier` : undefined,
+          text:  older.text  ? `${older.text} — copie à vérifier`  : older.text,
+        })
+      }
+    } else {
+      result.push(l || r)
+    }
+  }
+  return result
+}
+
+/** Fusionne deux listes de tombstones [{id, deletedAt}], le plus récent gagne par id. */
+export function mergeTombstones(a = [], b = []) {
+  const map = new Map()
+  for (const t of [...a, ...b]) {
+    if (!t?.id) continue
+    const existing = map.get(t.id)
+    if (!existing || new Date(t.deletedAt) > new Date(existing.deletedAt)) map.set(t.id, t)
+  }
+  return [...map.values()]
+}
+
 // ── Helpers ──────────────────────────────────────────────────────
 
 function assertWorkerUrl() {
