@@ -8,13 +8,11 @@ import {
   ArrowsClockwise as RefreshCw,
   WifiHigh as Wifi,
   DownloadSimple as Download,
-  UploadSimple as Upload,
   Lock,
   Eye,
   EyeSlash as EyeOff,
   Copy,
   Check,
-  HardDrive,
 } from '@phosphor-icons/react'
 import * as googleDrive from '../../lib/googleDrive'
 
@@ -184,17 +182,6 @@ export default function SettingsModal({
   const handleCoachWidthChange = (v) => {
     setCoachWidthLocal(v)
     document.documentElement.style.setProperty('--coach-w', v + 'px')
-  }
-
-  // LOT 4F.2.4 — Formate l'âge de la dernière sauvegarde Drive en texte FR.
-  const formatDriveSyncAge = (ts) => {
-    if (!ts) return 'Aucune sauvegarde Drive enregistrée pour l\'instant'
-    const ageMin = Math.floor((Date.now() - ts) / 60000)
-    if (ageMin < 1) return 'Dernière sauvegarde Drive : à l\'instant'
-    if (ageMin < 60) return `Dernière sauvegarde Drive : il y a ${ageMin} min`
-    if (ageMin < 60 * 24) return `Dernière sauvegarde Drive : il y a ${Math.floor(ageMin / 60)} h`
-    const d = Math.floor(ageMin / (60 * 24))
-    return `Dernière sauvegarde Drive : il y a ${d} jour${d > 1 ? 's' : ''}`
   }
 
   const handleSave = async (closeAfter = true) => {
@@ -427,6 +414,24 @@ export default function SettingsModal({
     }
   }
 
+  // ── Sauvegarde simplifiée ──────────────────────────────────────
+  // Une seule action visible qui déclenche les deux mécanismes réels
+  // (sync Worker pour les textes, Drive pour les photos) sans exposer
+  // ce détail — Caroline voit "sauvegardé" ou "pas encore", pas les rouages.
+  const savingNow   = syncBusy || driveBusy
+  const isOffline   = typeof navigator !== 'undefined' && navigator.onLine === false
+  const syncPending = state.syncStatus === 'error' && isOffline
+  const lastSavedAt = [state.lastSyncedAt, state.lastDriveSyncedAt]
+    .filter(Boolean)
+    .map(v => (typeof v === 'number' ? v : new Date(v).getTime()))
+    .sort((a, b) => b - a)[0] || null
+
+  const handleSaveNow = async () => {
+    if (savingNow) return
+    await handleSyncNow()
+    if (googleUser) await handleUploadDrive()
+  }
+
   return (
     <Modal
       onClose={onClose}
@@ -469,8 +474,6 @@ export default function SettingsModal({
                   {showApiKey ? <EyeOff size={16} /> : <Eye size={16} />}
                 </button>
               </div>
-              <p style={S.hint}>🔒 Stocké sur cet appareil uniquement. Ce mot de passe active les réponses de Léa et sa voix via un serveur sécurisé — les vraies clés API ne transitent jamais sur ton appareil.</p>
-
               {/* Fix trompe-l'œil — indicateur dynamique + bouton de test live */}
               <div style={S.coachTestRow}>
                 {!apiKey && (
@@ -515,232 +518,11 @@ export default function SettingsModal({
                 </select>
               </div>
             )}
-          </Section>
 
-          <Section title="Écriture" icon={<span style={S.secIcon}>✍️</span>}>
-            <div style={S.row}>
-              <div style={S.fg}>
-                <label style={S.label}>Taille du texte</label>
-                <ToggleGroup options={FONT_SIZES} value={editorFont} onChange={setEditorFont} />
-              </div>
-              <div style={S.fg}>
-                <label style={S.label}>Largeur de l'éditeur</label>
-                <ToggleGroup options={WIDTHS} value={editorWidth} onChange={setEditorWidth} />
-              </div>
-            </div>
-            <div style={S.fg}>
-              <label style={S.label}>Thème visuel</label>
-              <ToggleGroup options={THEMES} value={editorTheme} onChange={setEditorTheme} />
-            </div>
-            <div style={S.fg}>
-              <label style={S.label}>Taille du chat avec Léa</label>
-              <ToggleGroup options={CHAT_SCALES} value={chatScale} onChange={setChatScale} />
-            </div>
-            <div style={S.fg}>
-              <label style={S.label}>Échelle de l'interface</label>
-              <ToggleGroup options={UI_SCALES} value={uiScale} onChange={setUiScale} />
-            </div>
-          </Section>
-
-          <Section title="Mise en page" icon={<span style={S.secIcon}>🖥️</span>}>
-            {isMobile ? (
-              <p style={S.hint}>Ces réglages sont disponibles uniquement sur grand écran.</p>
-            ) : (
-              <>
-                <div style={S.fg}>
-                  <label style={S.label}>
-                    Échelle des éléments de navigation
-                    <span style={S.badgeOpt}> {Math.round(layoutScale * 100)} %</span>
-                  </label>
-                  <input
-                    type="range"
-                    min={0.9} max={1.5} step={0.05}
-                    value={layoutScale}
-                    onChange={e => handleLayoutScaleChange(parseFloat(e.target.value))}
-                    style={S.rangeSlider}
-                    aria-label="Échelle des éléments de navigation"
-                  />
-                  <div style={S.rangeHints}>
-                    <span>90 %</span><span>Normal (100 %)</span><span>150 %</span>
-                  </div>
-                </div>
-                <div style={S.fg}>
-                  <label style={S.label}>
-                    Largeur de la colonne chapitres
-                    <span style={S.badgeOpt}> {sidebarWidth} px</span>
-                  </label>
-                  <input
-                    type="range"
-                    min={160} max={480} step={10}
-                    value={sidebarWidth}
-                    onChange={e => handleSidebarWidthChange(parseInt(e.target.value, 10))}
-                    style={S.rangeSlider}
-                    aria-label="Largeur de la colonne chapitres"
-                  />
-                  <div style={S.rangeHints}>
-                    <span>160 px</span><span>Normal (220 px)</span><span>480 px</span>
-                  </div>
-                </div>
-                <div style={S.fg}>
-                  <label style={S.label}>
-                    Largeur panneau Léa
-                    <span style={S.badgeOpt}> {coachWidth} px</span>
-                  </label>
-                  <input
-                    type="range"
-                    min={220} max={480} step={10}
-                    value={coachWidth}
-                    onChange={e => handleCoachWidthChange(parseInt(e.target.value, 10))}
-                    style={S.rangeSlider}
-                    aria-label="Largeur du panneau Léa"
-                  />
-                  <div style={S.rangeHints}>
-                    <span>220 px</span><span>Normal (270 px)</span><span>480 px</span>
-                  </div>
-                </div>
-              </>
-            )}
-          </Section>
-
-          <Section title="Sauvegarde en ligne" icon={<Wifi size={13} color="#8B6445" />}>
-            <p style={S.syncTxt}>
-              Sauvegarde tous tes textes (chapitres, boîte à idées, chat Léa) dans un cloud sécurisé.
-              Restaurable si tu changes d'appareil ou si ton navigateur est nettoyé.
-              Choisis un mot secret <strong>(20+ caractères)</strong> — le même sur tous tes appareils. Ne le partage pas.
-            </p>
-            <div style={S.inputWrap}>
-              <input
-                style={{
-                  ...S.input,
-                  paddingRight: 76,
-                  borderColor: !tokenValid ? '#E87070' : undefined,
-                }}
-                type={showSyncTok ? 'text' : 'password'}
-                value={syncTok}
-                onChange={e => setSyncTok(e.target.value)}
-                placeholder="Mon-mot-secret-très-long-2024"
-                aria-label="Mot secret de sauvegarde"
-              />
-              <button
-                type="button"
-                style={{ ...S.iconBtn, right: 42 }}
-                onClick={() => setShowSyncTok(s => !s)}
-                aria-label={showSyncTok ? 'Masquer le mot secret' : 'Afficher le mot secret'}
-                title={showSyncTok ? 'Masquer' : 'Afficher'}
-              >
-                {showSyncTok ? <EyeOff size={16} /> : <Eye size={16} />}
-              </button>
-              <button
-                type="button"
-                style={{
-                  ...S.iconBtn,
-                  color: copiedSync ? '#3D6B45' : '#9C8878',
-                  opacity: syncTok ? 1 : .35,
-                  cursor: syncTok ? 'pointer' : 'not-allowed',
-                }}
-                onClick={handleCopySync}
-                disabled={!syncTok}
-                aria-label={copiedSync ? 'Mot secret copié' : 'Copier le mot secret'}
-                title={copiedSync ? 'Copié ✓' : 'Copier'}
-              >
-                {copiedSync ? <Check size={16} /> : <Copy size={16} />}
-              </button>
-            </div>
-            {syncTok.length > 0 && syncTok.length < 20 && (
-              <p style={S.errMsg}>⚠ Minimum 20 caractères ({syncTok.length}/20)</p>
-            )}
-            {tokenChanged && (
-              <div style={S.warnBox}>
-                ⚠️ Changer le mot secret déconnecte la sauvegarde existante. Tes données locales sont conservées,
-                mais la sauvegarde en ligne repartira de zéro avec le nouveau mot secret.
-              </div>
-            )}
-            {state.syncStatus === 'ok' && state.lastSyncedAt && (
-              <p style={S.okMsg}>✓ Dernière sauvegarde : {new Date(state.lastSyncedAt).toLocaleString('fr-FR')}</p>
-            )}
-            <button
-              type="button"
-              style={{ ...S.syncBtn, opacity: tokenValid && !syncBusy ? 1 : .45 }}
-              disabled={syncBusy || !tokenValid}
-              onClick={handleSyncNow}
-            >
-              <RefreshCw size={13} />
-              {syncBusy ? 'Sauvegarde…' : 'Sauvegarder maintenant'}
-            </button>
-          </Section>
-
-          <Section title="Sauvegarde Google Drive" icon={<HardDrive size={13} color="#8B6445" />}>
-            <p style={S.syncTxt}>
-              Sauvegarde tes photos du Tiroir dans ton Google Drive personnel (dossier invisible, accessible uniquement par l'app).
-              Complémentaire à la Sauvegarde en ligne ci-dessus qui couvre tes textes —
-              Drive couvre tes photos. Les deux ensemble constituent ton filet de sécurité complet.
-            </p>
-            {googleUser ? (
-              <>
-                <p style={S.okMsg}>✓ Connecté à : {googleUser.email ? maskEmail(googleUser.email) : 'Google Drive'}</p>
-                <p style={S.hint}>{formatDriveSyncAge(state.lastDriveSyncedAt)}</p>
-                {state.lastDriveError && (
-                  <p style={S.driveWarnMsg}>⚠ Erreur sauvegarde auto Drive : {state.lastDriveError}</p>
-                )}
-                <button
-                  type="button"
-                  style={{ ...S.syncBtn, opacity: driveBusy ? 0.5 : 1 }}
-                  onClick={handleUploadDrive}
-                  disabled={driveBusy || googleBusy}
-                >
-                  <Upload size={13} />
-                  {driveBusy ? 'Opération Drive en cours…' : 'Sauvegarder sur Drive maintenant'}
-                </button>
-                <button
-                  type="button"
-                  style={{ ...S.actionBtn, opacity: driveBusy || googleBusy ? 0.5 : 1, marginTop: 8 }}
-                  onClick={handleRestoreDrive}
-                  disabled={driveBusy || googleBusy}
-                >
-                  <Download size={13} />
-                  {driveBusy ? 'Opération Drive en cours…' : 'Restaurer depuis Drive'}
-                </button>
-                {confirmDrive && (
-                  <div style={S.warnBox}>
-                    ⚠️ Cela va remplacer tes données actuelles par celles de Drive. Irréversible.
-                    <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                      <button type="button" style={S.actionBtn} onClick={() => setConfirmDrive(false)}>Annuler</button>
-                      <button type="button" style={{ ...S.syncBtn, flex: 1 }} onClick={executeRestoreDrive} disabled={driveBusy}>Confirmer la restauration</button>
-                    </div>
-                  </div>
-                )}
-                <button
-                  type="button"
-                  style={{ ...S.actionBtn, opacity: googleBusy ? 0.5 : 1, marginTop: 8 }}
-                  onClick={handleGoogleSignOut}
-                  disabled={googleBusy || driveBusy}
-                >
-                  {googleBusy ? 'Déconnexion…' : 'Déconnecter'}
-                </button>
-              </>
-            ) : (
-              <button
-                type="button"
-                style={{ ...S.syncBtn, opacity: googleBusy ? 0.5 : 1 }}
-                onClick={handleGoogleSignIn}
-                disabled={googleBusy}
-              >
-                <HardDrive size={13} />
-                {googleBusy ? 'Connexion…' : 'Connecter Google Drive'}
-              </button>
-            )}
-            <p style={{ ...S.hint, marginTop: 8 }}>
-              🔒 La connexion reste active jusqu'à la fermeture de l'app. Aucun jeton n'est stocké.
-            </p>
-          </Section>
-
-          <Section title="Mémoire de Léa" icon={<span style={S.secIcon}>🧠</span>}>
-            <div style={S.actionRow}>
+            <div style={{ ...S.actionRow, marginBottom: 0 }}>
               <div>
-                <div style={S.actionTitle}>Ce que Léa se rappelle</div>
-                <div style={S.actionDesc}>
-                  Voir, supprimer ou effacer les souvenirs que Léa retient de vos échanges.
-                </div>
+                <div style={S.actionTitle}>Mémoire de Léa</div>
+                <div style={S.actionDesc}>Ce dont Léa se souvient de vos échanges.</div>
               </div>
               <button
                 type="button"
@@ -756,26 +538,224 @@ export default function SettingsModal({
             </div>
           </Section>
 
-          <Section title="Sécurité et données" icon={<Lock size={13} color="#8B6445" />}>
+          <Section title="Apparence" icon={<span style={S.secIcon}>✍️</span>}>
+            <div style={S.fg}>
+              <label style={S.label}>Taille du texte</label>
+              <ToggleGroup options={FONT_SIZES} value={editorFont} onChange={setEditorFont} />
+            </div>
+            <div style={S.fg}>
+              <label style={S.label}>Thème visuel</label>
+              <ToggleGroup options={THEMES} value={editorTheme} onChange={setEditorTheme} />
+            </div>
+
+            <details style={S.details}>
+              <summary style={S.detailsSummary}>Réglages d'affichage avancés</summary>
+              <div style={{ paddingTop: 10 }}>
+                <div style={S.fg}>
+                  <label style={S.label}>Largeur de l'éditeur</label>
+                  <ToggleGroup options={WIDTHS} value={editorWidth} onChange={setEditorWidth} />
+                </div>
+                <div style={S.fg}>
+                  <label style={S.label}>Taille du chat avec Léa</label>
+                  <ToggleGroup options={CHAT_SCALES} value={chatScale} onChange={setChatScale} />
+                </div>
+                <div style={S.fg}>
+                  <label style={S.label}>Échelle de l'interface</label>
+                  <ToggleGroup options={UI_SCALES} value={uiScale} onChange={setUiScale} />
+                </div>
+                {!isMobile && (
+                  <>
+                    <div style={S.fg}>
+                      <label style={S.label}>
+                        Échelle des éléments de navigation
+                        <span style={S.badgeOpt}> {Math.round(layoutScale * 100)} %</span>
+                      </label>
+                      <input
+                        type="range"
+                        min={0.9} max={1.5} step={0.05}
+                        value={layoutScale}
+                        onChange={e => handleLayoutScaleChange(parseFloat(e.target.value))}
+                        style={S.rangeSlider}
+                        aria-label="Échelle des éléments de navigation"
+                      />
+                    </div>
+                    <div style={S.fg}>
+                      <label style={S.label}>
+                        Largeur de la colonne chapitres
+                        <span style={S.badgeOpt}> {sidebarWidth} px</span>
+                      </label>
+                      <input
+                        type="range"
+                        min={160} max={480} step={10}
+                        value={sidebarWidth}
+                        onChange={e => handleSidebarWidthChange(parseInt(e.target.value, 10))}
+                        style={S.rangeSlider}
+                        aria-label="Largeur de la colonne chapitres"
+                      />
+                    </div>
+                    <div style={S.fg}>
+                      <label style={S.label}>
+                        Largeur panneau Léa
+                        <span style={S.badgeOpt}> {coachWidth} px</span>
+                      </label>
+                      <input
+                        type="range"
+                        min={220} max={480} step={10}
+                        value={coachWidth}
+                        onChange={e => handleCoachWidthChange(parseInt(e.target.value, 10))}
+                        style={S.rangeSlider}
+                        aria-label="Largeur du panneau Léa"
+                      />
+                    </div>
+                  </>
+                )}
+              </div>
+            </details>
+          </Section>
+
+          <Section title="Sauvegarde" icon={<Wifi size={13} color="#8B6445" />}>
+            {!state.syncToken && !syncTok ? (
+              // Premier réglage — relier cet appareil aux autres (PC + smartphone).
+              <>
+                <p style={S.syncTxt}>
+                  Pour que tes textes se retrouvent sur ton PC <strong>et</strong> ton téléphone,
+                  utilise la même phrase de connexion sur les deux appareils.
+                </p>
+                <div style={S.inputWrap}>
+                  <input
+                    style={{ ...S.input, paddingRight: 40, borderColor: !tokenValid ? '#E87070' : undefined }}
+                    type={showSyncTok ? 'text' : 'password'}
+                    value={syncTok}
+                    onChange={e => setSyncTok(e.target.value)}
+                    placeholder="Une phrase longue, la même partout…"
+                    aria-label="Phrase de connexion entre tes appareils"
+                  />
+                  <button
+                    type="button"
+                    style={S.iconBtn}
+                    onClick={() => setShowSyncTok(s => !s)}
+                    aria-label={showSyncTok ? 'Masquer' : 'Afficher'}
+                  >
+                    {showSyncTok ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+                {syncTok.length > 0 && syncTok.length < 20 && (
+                  <p style={S.errMsg}>⚠ Minimum 20 caractères ({syncTok.length}/20)</p>
+                )}
+              </>
+            ) : (
+              <>
+                <div style={S.statusLine}>
+                  <span style={S.statusOk}>✓ Cet appareil : sauvegarde automatique</span>
+                </div>
+                <div style={S.statusLine}>
+                  {googleUser ? (
+                    <span style={S.statusOk}>✓ Google : synchronisé</span>
+                  ) : (
+                    <>
+                      <span style={S.statusWarn}>Google : à reconnecter</span>
+                      <button type="button" style={S.linkBtn} onClick={handleGoogleSignIn} disabled={googleBusy}>
+                        {googleBusy ? '…' : 'Reconnecter'}
+                      </button>
+                    </>
+                  )}
+                </div>
+                <p style={S.hint}>
+                  {lastSavedAt
+                    ? `Dernière sauvegarde : ${new Date(lastSavedAt).toLocaleString('fr-FR')}`
+                    : 'Aucune sauvegarde en ligne pour l\'instant.'}
+                </p>
+                {state.lastDriveError && (
+                  <p style={S.driveWarnMsg}>⚠ Erreur sauvegarde auto Google : {state.lastDriveError}</p>
+                )}
+
+                {syncPending && (
+                  <div style={S.warnBox}>
+                    Sauvegarde en attente. Elle reprendra automatiquement dès que la connexion revient.
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  style={{ ...S.syncBtn, opacity: savingNow ? 0.5 : 1 }}
+                  disabled={savingNow || !tokenValid}
+                  onClick={handleSaveNow}
+                >
+                  <RefreshCw size={13} />
+                  {savingNow ? 'Sauvegarde…' : 'Sauvegarder maintenant'}
+                </button>
+
+                {confirmDrive && (
+                  <div style={S.warnBox}>
+                    ⚠️ Cela va remplacer tes données actuelles par celles de Google. Irréversible.
+                    <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                      <button type="button" style={S.actionBtn} onClick={() => setConfirmDrive(false)}>Annuler</button>
+                      <button type="button" style={{ ...S.syncBtn, flex: 1 }} onClick={executeRestoreDrive} disabled={driveBusy}>Confirmer</button>
+                    </div>
+                  </div>
+                )}
+
+                <details style={S.details}>
+                  <summary style={S.detailsSummary}>Options avancées</summary>
+                  <div style={{ paddingTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {googleUser && (
+                      <>
+                        <button type="button" style={S.actionBtn} onClick={handleRestoreDrive} disabled={driveBusy || googleBusy}>
+                          Restaurer depuis Google
+                        </button>
+                        <button type="button" style={S.actionBtn} onClick={handleGoogleSignOut} disabled={googleBusy || driveBusy}>
+                          Déconnecter Google
+                        </button>
+                      </>
+                    )}
+                    <div>
+                      <label style={S.label}>Phrase de connexion entre tes appareils</label>
+                      <div style={S.inputWrap}>
+                        <input
+                          style={{ ...S.input, paddingRight: 76, borderColor: !tokenValid ? '#E87070' : undefined }}
+                          type={showSyncTok ? 'text' : 'password'}
+                          value={syncTok}
+                          onChange={e => setSyncTok(e.target.value)}
+                          aria-label="Phrase de connexion entre tes appareils"
+                        />
+                        <button type="button" style={{ ...S.iconBtn, right: 42 }} onClick={() => setShowSyncTok(s => !s)}>
+                          {showSyncTok ? <EyeOff size={16} /> : <Eye size={16} />}
+                        </button>
+                        <button
+                          type="button"
+                          style={{ ...S.iconBtn, right: 6, color: copiedSync ? '#3D6B45' : '#9C8878', opacity: syncTok ? 1 : .35 }}
+                          onClick={handleCopySync}
+                          disabled={!syncTok}
+                        >
+                          {copiedSync ? <Check size={16} /> : <Copy size={16} />}
+                        </button>
+                      </div>
+                      {tokenChanged && (
+                        <p style={S.hint}>⚠️ Changer cette phrase déconnecte la sauvegarde existante sur les autres appareils.</p>
+                      )}
+                    </div>
+                  </div>
+                </details>
+              </>
+            )}
+          </Section>
+
+          <Section title="Données" icon={<Lock size={13} color="#8B6445" />}>
 
             <div style={S.actionRow}>
               <div>
-                <div style={S.actionTitle}>Importer une sauvegarde</div>
-                <div style={S.actionDesc}>
-                  Restaure tes données depuis un fichier JSON exporté précédemment.
-                  Remplace les données actuelles.
-                </div>
+                <div style={S.actionTitle}>Exporter une copie</div>
+                <div style={S.actionDesc}>Télécharge tes chapitres et idées en un fichier.</div>
               </div>
-              <button
-                type="button"
-                style={S.actionBtn}
-                onClick={handleImportClick}
-                disabled={importing || !onImport}
-              >
-                <Upload size={13} />
-                {importing ? 'Import…' : 'Importer'}
+              <button type="button" style={{ ...S.actionBtn, ...(exportDone ? S.actionBtnOk : {}) }} onClick={handleExport}>
+                <Download size={13} />
+                {exportDone ? 'Téléchargé ✓' : 'Exporter'}
               </button>
             </div>
+
+            <button type="button" style={S.linkBtn} onClick={handleImportClick} disabled={importing || !onImport}>
+              {importing ? 'Import…' : 'Restaurer depuis un fichier exporté'}
+            </button>
             {pendingFile && (() => {
               // FEAT-I — Warning gradué : alerte renforcée si des données locales existent.
               // chapters.length > 0 = Caroline a deja ecrit quelque chose qui sera ecrase.
@@ -807,19 +787,6 @@ export default function SettingsModal({
               style={{ display: 'none' }}
               aria-hidden="true"
             />
-
-            <div style={S.actionRow}>
-              <div>
-                <div style={S.actionTitle}>Exporter une sauvegarde</div>
-                <div style={S.actionDesc}>
-                  Télécharge tes chapitres, idées, chat et profil en JSON horodaté.
-                </div>
-              </div>
-              <button type="button" style={{ ...S.actionBtn, ...(exportDone ? S.actionBtnOk : {}) }} onClick={handleExport}>
-                <Download size={13} />
-                {exportDone ? 'Téléchargé ✓' : 'Exporter'}
-              </button>
-            </div>
 
             {/* BUG-04 — Zone danger avec confirmation par saisie "SUPPRIMER" */}
             <div style={S.dangerZone}>
@@ -910,6 +877,12 @@ const S = {
   errMsg: { fontSize: '.72rem', color: '#C0392B', margin: '4px 0 0', fontFamily: "'Nunito', sans-serif" },
   driveWarnMsg: { fontSize: '.72rem', color: '#92400E', margin: '6px 0 0', fontFamily: "'Nunito', sans-serif" },
   warnBox: { fontSize: '.72rem', color: '#92400E', background: '#FEF3C7', border: '1px solid #FCD34D', borderRadius: 8, padding: '8px 10px', marginTop: 6, lineHeight: 1.5, fontFamily: "'Nunito', sans-serif" },
+  statusLine: { display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 },
+  statusOk:   { fontSize: '.82rem', fontWeight: 700, color: '#1E7C42', fontFamily: "'Nunito', sans-serif" },
+  statusWarn: { fontSize: '.82rem', fontWeight: 700, color: '#B8860B', fontFamily: "'Nunito', sans-serif" },
+  linkBtn: { background: 'transparent', border: 'none', padding: 0, fontSize: '.78rem', fontWeight: 700, color: '#8B6445', textDecoration: 'underline', cursor: 'pointer', fontFamily: "'Nunito', sans-serif" },
+  details: { marginTop: 10, borderTop: '1px solid #EDE7DE', paddingTop: 8 },
+  detailsSummary: { fontSize: '.75rem', fontWeight: 700, color: '#8B6445', cursor: 'pointer', fontFamily: "'Nunito', sans-serif", userSelect: 'none' },
   actionRow: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 12, padding: '10px 12px', background: '#FFFEFB', border: '1px solid #EDE7DE', borderRadius: 10 },
   actionTitle: { fontSize: '.82rem', fontWeight: 700, color: '#2A1A0E', fontFamily: "'Nunito', sans-serif" },
   actionDesc: { fontSize: '.72rem', color: '#9C8878', fontFamily: "'Nunito', sans-serif", marginTop: 2 },
