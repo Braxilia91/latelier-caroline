@@ -15,6 +15,7 @@ import {
   Check,
 } from '@phosphor-icons/react'
 import * as googleDrive from '../../lib/googleDrive'
+import { speakWithOpenAI } from '../../lib/claude'
 
 const VOICES = [
   { value: 'nova', label: 'Nova — Douce et claire' },
@@ -124,6 +125,8 @@ export default function SettingsModal({
   // Fix trompe-l'œil "active le coach" — vrai indicateur de validation.
   // States possibles : null (pas testé) | 'testing' | 'ok' | 'bad' | 'unreachable'
   const [coachTest, setCoachTest] = useState(() => state.apiKey ? 'ok' : null)
+  // Aperçu de la voix sélectionnée — verrou réentrance pendant la lecture.
+  const [previewBusy, setPreviewBusy] = useState(false)
   const [showSyncTok, setShowSyncTok]   = useState(false)
   const [copiedSync, setCopiedSync]     = useState(false)
 
@@ -414,6 +417,29 @@ export default function SettingsModal({
     }
   }
 
+  // Écoute la voix actuellement sélectionnée — pas de fallback silencieux :
+  // toute erreur (mot de passe invalide, TTS indisponible) remonte en toast.
+  const handlePreviewVoice = async () => {
+    if (previewBusy || !apiKey) return
+    setPreviewBusy(true)
+    try {
+      const audio = await speakWithOpenAI({
+        openAiKey: apiKey,
+        text: 'Bonjour Caroline, voici ma voix.',
+        voice,
+        speed: 1,
+      })
+      audio.addEventListener('ended', () => setPreviewBusy(false), { once: true })
+      audio.addEventListener('error', () => {
+        setPreviewBusy(false)
+        toast('Erreur de lecture de la voix', 'error')
+      }, { once: true })
+    } catch (err) {
+      setPreviewBusy(false)
+      toast(err?.message || 'Impossible de lire la voix', 'error')
+    }
+  }
+
   // ── Sauvegarde simplifiée ──────────────────────────────────────
   // Une seule action visible qui déclenche les deux mécanismes réels
   // (sync Worker pour les textes, Drive pour les photos) sans exposer
@@ -503,9 +529,9 @@ export default function SettingsModal({
                   }}
                   onClick={handleTestCoach}
                   disabled={!apiKey || coachTest === 'testing'}
-                  aria-label="Tester la connexion au coach Léa"
+                  aria-label="Vérifier le mot de passe Léa"
                 >
-                  {coachTest === 'testing' ? '…' : 'Tester'}
+                  {coachTest === 'testing' ? '…' : 'Vérifier le mot de passe'}
                 </button>
               </div>
             </div>
@@ -513,9 +539,20 @@ export default function SettingsModal({
             {apiKey && (
               <div style={S.fg}>
                 <label htmlFor="settings-voice" style={S.label}>Voix de Léa</label>
-                <select id="settings-voice" style={S.select} value={voice} onChange={e => setVoice(e.target.value)}>
-                  {VOICES.map(v => <option key={v.value} value={v.value}>{v.label}</option>)}
-                </select>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <select id="settings-voice" style={S.select} value={voice} onChange={e => setVoice(e.target.value)}>
+                    {VOICES.map(v => <option key={v.value} value={v.value}>{v.label}</option>)}
+                  </select>
+                  <button
+                    type="button"
+                    style={{ ...S.testBtn, flexShrink: 0, opacity: previewBusy ? 0.5 : 1 }}
+                    onClick={handlePreviewVoice}
+                    disabled={previewBusy}
+                    aria-label="Écouter un aperçu de la voix sélectionnée"
+                  >
+                    {previewBusy ? '… Lecture' : '▶ Écouter'}
+                  </button>
+                </div>
               </div>
             )}
 
@@ -614,6 +651,33 @@ export default function SettingsModal({
           </Section>
 
           <Section title="Sauvegarde" icon={<Wifi size={13} color="#8B6445" />}>
+            {/* Statut toujours visible — jamais caché derrière l'onboarding ou le token. */}
+            <div style={S.statusLine}>
+              <span style={S.statusTitle}>Sauvegarde automatique</span>
+            </div>
+            <div style={S.statusLine}>
+              <span style={S.statusOk}>✓ Cet appareil</span>
+            </div>
+            <div style={S.statusLine}>
+              {(state.syncToken || syncTok) ? (
+                <span style={S.statusOk}>✓ PC ↔ téléphone</span>
+              ) : (
+                <span style={S.statusWarn}>PC ↔ téléphone — non relié</span>
+              )}
+            </div>
+            <div style={S.statusLine}>
+              {googleUser ? (
+                <span style={S.statusOk}>✓ Google Drive — {maskEmail(googleUser.email)}</span>
+              ) : (
+                <>
+                  <span style={S.statusWarn}>Google Drive — non connecté</span>
+                  <button type="button" style={S.linkBtn} onClick={handleGoogleSignIn} disabled={googleBusy}>
+                    {googleBusy ? '…' : 'Reconnecter'}
+                  </button>
+                </>
+              )}
+            </div>
+
             {!state.syncToken && !syncTok ? (
               // Premier réglage — relier cet appareil aux autres (PC + smartphone).
               <>
@@ -645,21 +709,6 @@ export default function SettingsModal({
               </>
             ) : (
               <>
-                <div style={S.statusLine}>
-                  <span style={S.statusOk}>✓ Cet appareil : sauvegarde automatique</span>
-                </div>
-                <div style={S.statusLine}>
-                  {googleUser ? (
-                    <span style={S.statusOk}>✓ Google : synchronisé</span>
-                  ) : (
-                    <>
-                      <span style={S.statusWarn}>Google : à reconnecter</span>
-                      <button type="button" style={S.linkBtn} onClick={handleGoogleSignIn} disabled={googleBusy}>
-                        {googleBusy ? '…' : 'Reconnecter'}
-                      </button>
-                    </>
-                  )}
-                </div>
                 <p style={S.hint}>
                   {lastSavedAt
                     ? `Dernière sauvegarde : ${new Date(lastSavedAt).toLocaleString('fr-FR')}`
@@ -675,16 +724,6 @@ export default function SettingsModal({
                   </div>
                 )}
 
-                <button
-                  type="button"
-                  style={{ ...S.syncBtn, opacity: savingNow ? 0.5 : 1 }}
-                  disabled={savingNow || !tokenValid}
-                  onClick={handleSaveNow}
-                >
-                  <RefreshCw size={13} />
-                  {savingNow ? 'Sauvegarde…' : 'Sauvegarder maintenant'}
-                </button>
-
                 {confirmDrive && (
                   <div style={S.warnBox}>
                     ⚠️ Cela va remplacer tes données actuelles par celles de Google. Irréversible.
@@ -698,6 +737,15 @@ export default function SettingsModal({
                 <details style={S.details}>
                   <summary style={S.detailsSummary}>Options avancées</summary>
                   <div style={{ paddingTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <button
+                      type="button"
+                      style={{ ...S.syncBtn, opacity: savingNow ? 0.5 : 1, marginTop: 0 }}
+                      disabled={savingNow || !tokenValid}
+                      onClick={handleSaveNow}
+                    >
+                      <RefreshCw size={13} />
+                      {savingNow ? 'Sauvegarde…' : 'Sauvegarder maintenant'}
+                    </button>
                     {googleUser && (
                       <>
                         <button type="button" style={S.actionBtn} onClick={handleRestoreDrive} disabled={driveBusy || googleBusy}>
@@ -877,7 +925,8 @@ const S = {
   errMsg: { fontSize: '.72rem', color: '#C0392B', margin: '4px 0 0', fontFamily: "'Nunito', sans-serif" },
   driveWarnMsg: { fontSize: '.72rem', color: '#92400E', margin: '6px 0 0', fontFamily: "'Nunito', sans-serif" },
   warnBox: { fontSize: '.72rem', color: '#92400E', background: '#FEF3C7', border: '1px solid #FCD34D', borderRadius: 8, padding: '8px 10px', marginTop: 6, lineHeight: 1.5, fontFamily: "'Nunito', sans-serif" },
-  statusLine: { display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 },
+  statusLine:  { display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 },
+  statusTitle: { fontSize: '.72rem', fontWeight: 800, color: '#8B6445', textTransform: 'uppercase', letterSpacing: '.5px', fontFamily: "'Nunito', sans-serif" },
   statusOk:   { fontSize: '.82rem', fontWeight: 700, color: '#1E7C42', fontFamily: "'Nunito', sans-serif" },
   statusWarn: { fontSize: '.82rem', fontWeight: 700, color: '#B8860B', fontFamily: "'Nunito', sans-serif" },
   linkBtn: { background: 'transparent', border: 'none', padding: 0, fontSize: '.78rem', fontWeight: 700, color: '#8B6445', textDecoration: 'underline', cursor: 'pointer', fontFamily: "'Nunito', sans-serif" },
