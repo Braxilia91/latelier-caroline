@@ -3,12 +3,20 @@
 // Requires : binding AI nommé "AI" dans Cloudflare Pages → Settings → Functions → Bindings.
 // Auth via header X-Lea-Pass (même pattern que openai-whisper.js et openai-tts.js).
 
+// Comparaison à temps constant — même pattern que api-worker/worker.js (OTP).
+function safeEqual(a, b) {
+  if (a.length !== b.length) return false
+  let diff = 0
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i)
+  return diff === 0
+}
+
 export async function onRequestPost(context) {
   const { request, env } = context
 
   // ── Auth ────────────────────────────────────────────────────────
   const password = request.headers.get('X-Lea-Pass') || ''
-  if (!env.LEA_PASSWORD || password !== env.LEA_PASSWORD) {
+  if (!env.LEA_PASSWORD || !safeEqual(password, env.LEA_PASSWORD)) {
     return new Response(JSON.stringify({ error: 'Mot de passe Léa invalide' }), {
       status: 401,
       headers: { 'Content-Type': 'application/json' },
